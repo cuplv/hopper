@@ -1,0 +1,9 @@
+#!/bin/bash
+
+LIB=$(pwd)/lib
+ARGS="run $@"
+
+export LD_LIBRARY_PATH=$LIB:$LD_LIBRARY_PATH
+export DYLD_FALLBACK_LIBRARY_PATH=$LIB:$DYLD_FALLBACK_LIBRARY_PATH
+
+sbt "$ARGS"
