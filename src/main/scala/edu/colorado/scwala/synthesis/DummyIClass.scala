@@ -62,7 +62,7 @@ private class DummyIClassImpl(clazz : IClass, cha : IClassHierarchy) extends Dum
   override def isAbstract() : Boolean = false
   override def getSuperclass() : IClass = clazz
   override def getSourceFileName() : String = null
-  override def getSource() : InputStream = null
+  override def getSource() = null
   override def getDirectInterfaces() : java.util.Collection[_ <: IClass] = java.util.Collections.singleton(clazz)
   override def getAllImplementedInterfaces : java.util.Collection[IClass] = {
     val l = new java.util.LinkedList(clazz.getAllImplementedInterfaces())

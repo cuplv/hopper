@@ -630,7 +630,7 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
       if (index % 2 == 0 && casesAndLabels(index + 1) != switchInstr.getDefault()) {
         val (_case, target) = (casesAndLabels(index), cfg.getBlockForInstruction(casesAndLabels(index + 1)).getNumber())
         // check for blocks we've already translated so we can group cases
-        val cond = new SSAConditionalBranchInstruction(EQ, TypeReference.Int, matched, tbl.getConstant(_case))
+        val cond = new SSAConditionalBranchInstruction(EQ, TypeReference.Int, matched, tbl.getConstant(_case), -1)
         map + (target -> (cond :: map.getOrElse(target, List.empty[SSAConditionalBranchInstruction])))
       } else map
     )
