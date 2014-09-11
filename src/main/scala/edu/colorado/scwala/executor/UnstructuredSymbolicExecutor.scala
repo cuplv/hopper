@@ -42,10 +42,10 @@ import edu.colorado.thresher.core.Options
 import com.ibm.wala.classLoader.IMethod
 
 object UnstructuredSymbolicExecutor {
-  protected[executor] def DEBUG = Options.SCALA_DEBUG
+  protected[executor] def DEBUG = true//Options.SCALA_DEBUG
   protected[executor] def MIN_DEBUG = DEBUG || false // can change to enable
   private[executor] val TRACE = false
-  private[executor] val PRINT_IR = false
+  private[executor] val PRINT_IR = true
   // save invariant maps that lead to refutations
   private val SAVE_INVARIANT_MAPS = false
   
@@ -266,9 +266,8 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
              val recursive = caller.equals(callee)
              val callerIR = caller.getIR()
              val callerCFG = callerIR.getControlFlowGraph()
-             val callerInstrs = callerIR.getInstructions()
-             
-             // get alll call instructions in caller that might call callee
+
+             // get all call instructions in caller that might call callee
              caller.getIR().getInstructions().zipWithIndex.collect({ 
                case (i : SSAInvokeInstruction, index) if cg.getPossibleTargets(caller, i.getCallSite()).contains(callee) => (i, index)
              })
@@ -523,18 +522,7 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
   def executeToJoin(node : ISSABasicBlock, worklist : List[ISSABasicBlock], pathMap : Map[ISSABasicBlock,List[Path]], 
                     domInfo : Dominators[ISSABasicBlock], initCallStackSize : Int, cfg : SSACFG) : List[Path] = {
     if (TRACE) logMethodAndTime("executeToJoin")
-    /*val cfg = ir.getControlFlowGraph()
-    val prunedCFG = ExceptionPrunedCFG.make(cfg)  
-     // this is a weird case that arises with explicitly infinite loops. refute; since there's no way out, we never could have gotten here
-    if (prunedCFG.getNumberOfNodes() == 0) return List.empty[Path]
-    val domInfo = getDominators(prunedCFG)*/
     val domGraph = domInfo.getGraph()
-    assert(domGraph.containsNode(node))
-    //if (!domGraph.containsNode(node)) {
-      //if (DEBUG) println("Refuted by refusing to consider exceptional control flow: unreachable node BB" + node.getNumber())
-      // this happens when eliminating exceptional control flow makes a node unreachable. see discussion below
-      //return List.empty[Path]
-    //}
     val filteredWorklist = worklist.filter(node => domGraph.containsNode(node))
     val goal = domInfo.getIdom(node)
     
