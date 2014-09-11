@@ -58,6 +58,9 @@ public class Options {
                                                        // only; don't do
                                                        // symbolic execution
 
+  @boolOpt(description = "handle exceptions soundly", _default = false)
+  public static boolean SOUND_EXCEPTIONS = false;
+
   @boolOpt(description = "use piecewise symbolic executor. WARNING - under development", _default = false)
   public static boolean PIECEWISE_EXECUTION = false;
 

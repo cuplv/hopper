@@ -16,13 +16,9 @@ import com.ibm.wala.types.ClassLoaderReference
 import edu.colorado.scwala.state.ObjVar
 import edu.colorado.scwala.state.PtEdge
 import edu.colorado.scwala.state.Qry
-import edu.colorado.scwala.util.ClassUtil
-import edu.colorado.scwala.util.LoopUtil
-import edu.colorado.scwala.util.Timer
-import edu.colorado.scwala.util.Util
+import edu.colorado.scwala.util._
 import edu.colorado.thresher.core.Options
 import com.ibm.wala.classLoader.ShrikeBTMethod
-import edu.colorado.scwala.util.IRUtil
 import com.ibm.wala.ipa.callgraph.CallGraph
 import com.ibm.wala.classLoader.IMethod
 import com.ibm.wala.types.TypeReference
@@ -172,10 +168,17 @@ class DowncastCheckingClient(appPath : String, libPath : Option[String], mainCla
                       //if (!checkSet.contains(total)) {
                       if (badKeys.isEmpty ||
                           proveSet.contains(castId)) {
-                          //!pwMinusTh.contains(castId)) {
-                          //proveSet.contains(castId) || total < 1178) { // TMP! 
+                        //!pwMinusTh.contains(castId)) {
+                        //proveSet.contains(castId) || total < 1178) { // TMP!
                         println("Points-to analysis proved cast #" + total + " safe.")
                         println("CAST_ID: " + castId)
+                        (numSafe + 1, numMightFail, numThresherProvedSafe, total + 1)
+                      } else if (Options.SOUND_EXCEPTIONS && {
+                          val startBlk = ir.getBasicBlockForInstruction(castInstr)
+                          CFGUtil.isProtectedByCatchBlockInterprocedural(startBlk, node,
+                                                                         TypeReference.JavaLangClassCastException, cg)
+                        }) {
+                        println("Exception analysis proved cast safe.")
                         (numSafe + 1, numMightFail, numThresherProvedSafe, total + 1)
                       } else {                        
                         println("According to point-to analysis, cast #" + total + " may fail.")
@@ -194,16 +197,14 @@ class DowncastCheckingClient(appPath : String, libPath : Option[String], mainCla
                           // invoke Thresher, try to show that failure can't happen
                           // query (informally): when cast occurs, local var cast doesn't point to a bad key
                           // for instr v0 = checkcast v1 T, query is v1 -> a && (a from badKeys)
-                          
-                          // TODO: testing out new queries
                           val localEdge = PtEdge.make(castPk, ObjVar(badKeys.toSet))
                           val qry = Qry.make(List(localEdge), castInstr, node, hm, startBeforeI = true)
                           
                           //println("starting in " + node.getIR())
                           val singleCastTimer = new Timer
                           singleCastTimer.start
-                          val (foundWitness, fail) = 
-                            try {   
+                          val (foundWitness, fail) =
+                            try {
                               checked.add(castId)
                               // start at line BEFORE cast statement
                               (exec.executeBackward(qry), false)

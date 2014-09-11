@@ -23,6 +23,7 @@ import com.ibm.wala.ssa.SSAInstruction;
 import com.ibm.wala.ssa.SSAInvokeInstruction;
 import com.ibm.wala.ssa.SSAThrowInstruction;
 import com.ibm.wala.types.MethodReference;
+import com.ibm.wala.types.TypeReference;
 import com.ibm.wala.util.collections.HashMapFactory;
 import com.ibm.wala.util.collections.HashSetFactory;
 import com.ibm.wala.util.collections.Pair;
@@ -89,7 +90,7 @@ public class WALACFGUtil {
    *          for block containing suspected loop head
    * @return true if suspsectedHead is a loop head, false otherwise
    */
-  public static boolean isLoopHead(SSACFG.BasicBlock suspectedHead, IR ir) {
+  public static boolean isLoopHead(ISSABasicBlock suspectedHead, IR ir) {
     MutableIntSet loopHeaders = getLoopHeaders(ir);
     SSACFG cfg = ir.getControlFlowGraph();
     //Util.Print("Is " + suspectedHead + " a loop head in " + ir + " " + loopHeaders.contains(cfg.getNumber(suspectedHead)));
@@ -796,5 +797,16 @@ public class WALACFGUtil {
     }
     
     return null;
+  }
+
+  public static boolean isProtectedByCatchBlock(ISSABasicBlock blk, SSACFG cfg, TypeReference exc) {
+    for (ISSABasicBlock b : cfg.getExceptionalSuccessors(blk)) {
+      if (b.isCatchBlock()) {
+          for (Iterator<TypeReference> iter = b.getCaughtExceptionTypes(); iter.hasNext();) {
+            if (iter.next().equals(exc)) return true;
+          }
+      }
+    }
+    return false;
   }
 }

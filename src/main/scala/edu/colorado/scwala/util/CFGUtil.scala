@@ -1,9 +1,11 @@
 package edu.colorado.scwala.util
 
+import com.ibm.wala.types.TypeReference
+
 import scala.collection.JavaConversions._
 import scala.collection.JavaConversions.collectionAsScalaIterable
 import scala.collection.JavaConversions.iterableAsScalaIterable
-import com.ibm.wala.ipa.callgraph.CGNode
+import com.ibm.wala.ipa.callgraph.{CallGraph, CGNode}
 import com.ibm.wala.ssa.IR
 import com.ibm.wala.ssa.ISSABasicBlock
 import com.ibm.wala.ssa.SSACFG
@@ -186,6 +188,51 @@ object CFGUtil {
       catchBlocks.foldLeft (Set.empty[WalaBlock]) ((set, blk) => set ++ getSuccsWhile(new WalaBlock(blk), cfg))
       .contains(snk)
     }
+
+    /** @return true if @param block is protected by a catch block when it throws exception @exc */
+    def isProtectedByCatchBlockIntraprocedural(blk : ISSABasicBlock, cfg : SSACFG, exc : TypeReference) : Boolean =
+      edu.colorado.thresher.core.WALACFGUtil.isProtectedByCatchBlock(blk, cfg, exc)
+
+    def isProtectedByCatchBlockInterprocedural(blk : ISSABasicBlock, node : CGNode, exc : TypeReference,
+                                               cg : CallGraph) : Boolean =
+      // protected if it is protected intraprocedurally...
+      isProtectedByCatchBlockIntraprocedural(blk, node.getIR.getControlFlowGraph, exc) || {
+        // ...or interprocedurally in callers
+        def extendWorklistWithPreds(node : CGNode, worklist : List[(CGNode,CGNode)]) : List[(CGNode,CGNode)] =
+          cg.getPredNodes(node).foldLeft (worklist) ((worklist, caller) => (caller, node) :: worklist)
+
+        @annotation.tailrec
+        def isProtectedByCatchBlockInterproceduralRec(worklist : List[(CGNode,CGNode)],
+                                                      seen : Set[(CGNode,CGNode)]) : Boolean =
+          worklist match {
+            case Nil => false
+            case pair :: worklist =>
+              !seen.contains(pair) && {
+                val (caller, callee) = pair
+                val ir = caller.getIR
+                val cfg = ir.getControlFlowGraph
+                // true if caller has at least one catch block
+                val hasCatchBlk = !cfg.getCatchBlocks.isZero
+                // true if for all calls to callee in caller, there exists a catch block that protects the call site
+                def protectedAtAllCallSites(): Boolean = {
+                  val siteBlks =
+                    cg.getPossibleSites(caller, callee).foldLeft(Set.empty[ISSABasicBlock])((siteBlks, site) =>
+                      siteBlks ++ ir.getBasicBlocksForCall(site))
+                  siteBlks.forall(blk => isProtectedByCatchBlockIntraprocedural(blk, cfg, exc))
+                }
+
+                if (hasCatchBlk && protectedAtAllCallSites())
+                  // callee was protected, we can recurse to checking the rest of the list
+                  worklist.isEmpty || isProtectedByCatchBlockInterproceduralRec(worklist, seen)
+                else
+                  // callee wasn't protected; can only be protected if all of its callers are too
+                  isProtectedByCatchBlockInterproceduralRec(extendWorklistWithPreds(caller, worklist), seen + pair)
+              }
+          }
+
+        isProtectedByCatchBlockInterproceduralRec(extendWorklistWithPreds(node, Nil), Set.empty[(CGNode,CGNode)])
+      }
+
     /*
     // TODO: some Scala wizard who understands TypeTags could probably rewrite this in a nicer way
     def endsWithInstr[T <: SSAInstruction](blk : WalaBlock) (implicit tag : WeakTypeTag[T]) : Boolean = 
