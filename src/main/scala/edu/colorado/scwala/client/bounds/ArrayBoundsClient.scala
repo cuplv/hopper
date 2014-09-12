@@ -10,12 +10,12 @@ import edu.colorado.thresher.core.Options
 import edu.colorado.scwala.piecewise.RelevanceRelation
 import com.ibm.wala.ipa.callgraph.CGNode
 import com.ibm.wala.ssa.SSAArrayReferenceInstruction
-import edu.colorado.droidel.util.ClassUtil
+import edu.colorado.scwala.util.ClassUtil
 import edu.colorado.scwala.state.Pure
 import edu.colorado.scwala.state.Qry
 import edu.colorado.scwala.state.ObjVar
 import edu.colorado.scwala.util.PtUtil
-import edu.colorado.droidel.util.IRUtil
+import edu.colorado.scwala.util.IRUtil
 import edu.colorado.scwala.state.Var
 import edu.colorado.scwala.state.PtEdge
 import edu.colorado.scwala.state.IntVal
@@ -130,13 +130,12 @@ class ArrayBoundsClient(appPath : String, libPath : Option[String], mainClass : 
                 // assert the conditions under which the array index is out of bounds
                 // p0 >= p1; that is, i >= arr.length
                 val overflow = Pure.makeGeConstraint(indexPure, lengthPure)
+                qry.addPureConstraint(overflow)
+                // TODO: currently only checking overflow--uncomment to check underflow as well
                 // p0 < 0; that is, i < 0
-                val underflow = Pure.makeLtConstraint(indexPure, zero)   
-                qry.addPureConstraint(Pure.makePureDisjunctiveConstraint(Set(overflow, underflow)))
-                // TODO: this only expresses the overflow condition -- we could add a conjunct for the underflow if we wished
-                //qry.addPureConstraint(overflow)
-                //qry.addPureConstraint(underflow)
-                
+                //val underflow = Pure.makeLtConstraint(indexPure, zero)
+                //qry.addPureConstraint(Pure.makePureDisjunctiveConstraint(Set(overflow, underflow)))
+
                 // invoke Thresher and check it
                 try {
                   exec.executeBackward(qry)

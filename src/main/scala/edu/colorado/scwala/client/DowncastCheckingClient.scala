@@ -31,6 +31,9 @@ class CastCheckingResults(val numSafe : Int, val numMightFail : Int, val numThre
       this.numSafe == results.numSafe && this.numMightFail == results.numMightFail && this.numThresherProvedSafe == results.numThresherProvedSafe
     case _ => false
   }
+
+  override def toString() : String =
+    s"Num safe: $numSafe Num might fail: $numMightFail Thresher proved safe: $numThresherProvedSafe"
 }
 
 class DowncastCheckingClient(appPath : String, libPath : Option[String], mainClass : String, mainMethod : String, 
@@ -264,7 +267,8 @@ object DowncastCheckingClientTests extends ClientTests {
     Options.MAX_CALLSTACK_DEPTH = 4
     val J25 = "1.7.0_25"
     val J51 = "1.7.0_51"          
-    val J55 = "1.7.0_55"    
+    val J55 = "1.7.0_55"
+    val J67 = "1.7.0_67"
     val testedPlatforms = Set(J25, J51)
     val javaVersion = getJVMVersion
     if (!testedPlatforms.contains(javaVersion)) 
@@ -275,11 +279,11 @@ object DowncastCheckingClientTests extends ClientTests {
                      "ArrayListRefute",
                      "ArrayListNoRefute", 
                      //"IteratorRefute", // already refuted by pt-analysis with correct context-sensitivity policy; don't need Thresher                        
-                     "IteratorNoRefute", // get different results with different Java version 
+                     "IteratorNoRefute", // get different results with different Java version s
                      "SwitchRefute", "SwitchNoRefute", "InfiniteLoopReturnRefute", "ListContainmentNoRefute", 
                      "SwitchReturnNoRefute", 
-                     "HashtableEnumeratorNoRefute",
-                     "HashtableEnumeratorRefute",
+                     //"HashtableEnumeratorNoRefute", // these don't work without using the WALA version with Manu's context hack
+                     //"HashtableEnumeratorRefute",
                      "InstrOpcodeIndexSensitivePiecewiseRefute", "InstrOpcodeIndexSensitivePiecewiseNoRefute")
                         //"CallTypeRefute", "CallTypeNoRefute") // will fix these later; results are sound, but not precise
   
@@ -289,10 +293,11 @@ object DowncastCheckingClientTests extends ClientTests {
       // Thresher can't recover the lost precision, so this is now just a soundness test
     resultsMap.put("ArrayListRefute", if (javaVersion == J51) new CastCheckingResults(0, 1, 0) else new CastCheckingResults(0, 1, 1))
     resultsMap.put("IteratorNoRefute", 
-        if (javaVersion == J51 || javaVersion == J55) new CastCheckingResults(2, 3, 0) else new CastCheckingResults(4, 1, 0))
+        if (javaVersion == J51 || javaVersion == J55 || javaVersion == J67)
+          new CastCheckingResults(2, 3, 0) else new CastCheckingResults(4, 1, 0))
     resultsMap.put("HashtableEnumeratorRefute", new CastCheckingResults(0, 2, 2))
-    resultsMap.put("HashtableEnumeratorNoRefute", new CastCheckingResults(0, 2, 1))        
-                        
+    resultsMap.put("HashtableEnumeratorNoRefute", new CastCheckingResults(0, 2, 1))
+
     val regressionDir = "../thresher/apps/tests/casts/"
     var testNum = 0
     val pwTimeoutOk = List("ArrayListRefute")     
