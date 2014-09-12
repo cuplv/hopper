@@ -1,5 +1,7 @@
 package edu.colorado.scwala.executor
 
+import com.ibm.wala.cfg.ControlFlowGraph
+
 import scala.collection.JavaConversions.asScalaBuffer
 import scala.collection.JavaConversions.asScalaIterator
 import scala.collection.JavaConversions.asScalaSet
@@ -12,14 +14,7 @@ import com.ibm.wala.ipa.cfg.ExceptionPrunedCFG
 import com.ibm.wala.ipa.cfg.PrunedCFG
 import com.ibm.wala.ipa.cha.IClassHierarchy
 import com.ibm.wala.shrikeBT.IConditionalBranchInstruction.Operator.EQ
-import com.ibm.wala.ssa.IR
-import com.ibm.wala.ssa.ISSABasicBlock
-import com.ibm.wala.ssa.SSACFG
-import com.ibm.wala.ssa.SSAConditionalBranchInstruction
-import com.ibm.wala.ssa.SSAInstruction
-import com.ibm.wala.ssa.SSAInvokeInstruction
-import com.ibm.wala.ssa.SSAPhiInstruction
-import com.ibm.wala.ssa.SSASwitchInstruction
+import com.ibm.wala.ssa._
 import com.ibm.wala.types.MethodReference
 import com.ibm.wala.types.TypeReference
 import com.ibm.wala.util.graph.dominators.Dominators
@@ -65,8 +60,8 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
   def cg : CallGraph = tf.cg
   def cha : IClassHierarchy = tf.cha
   
-  val domCache = new LruMap[PrunedCFG[SSAInstruction,ISSABasicBlock],Dominators[ISSABasicBlock]](25)
-  def getDominators(cfg : PrunedCFG[SSAInstruction,ISSABasicBlock]) : Dominators[ISSABasicBlock] =
+  val domCache = new LruMap[ControlFlowGraph[SSAInstruction,ISSABasicBlock],Dominators[ISSABasicBlock]](25)
+  def getDominators(cfg : ControlFlowGraph[SSAInstruction,ISSABasicBlock]) : Dominators[ISSABasicBlock] =
     domCache.getOrElseUpdate(cfg, Dominators.make(cfg, cfg.entry))
   
   def cleanup() : Unit = {
@@ -146,8 +141,8 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
           val (enterPaths, skipPaths) = pair
           
           // this checks if the callee is System.exit() or calls System.exit() directly. 
-          // TODO: for maximal precision, we might want to check if System.exit() can be called transitively. don't want to 
-          // try this wihtout evaluating it, though
+          // TODO: for maximal precision, we might want to check if System.exit() can be called transitively. don't want
+          // to try this wihtout evaluating it, though
           def mayDirectlyCallExitMethod() : Boolean = 
             (cg.getSuccNodes(callee).foldLeft (Set.empty[MethodReference]) ((s, n) => s + n.getMethod().getReference())).contains(Path.SYSTEM_EXIT)
           
@@ -156,12 +151,12 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
               calleePath.dropReturnValueConstraints(i, caller, tf)
               (enterPaths, if (skipPaths.contains(calleePath)) skipPaths else calleePath :: skipPaths)
             } else if (calleePath.callStackSize >= Path.MAX_CALLSTACK_DEPTH || callee.getIR() == null || callee.equals(caller)) {
-               if (DEBUG) println("skipping call to " + callee.getMethod.getName() + " due to " + 
+               if (DEBUG) println("skipping call to " + callee.getMethod.getName() + " due to " +
                    (if (calleePath.callStackSize >= Path.MAX_CALLSTACK_DEPTH) "depth-out" else "blacklist") + "; max depth is " + Path.MAX_CALLSTACK_DEPTH)
                 calleePath.dropConstraintsProduceableInCall(i, caller, callee, tf)
                 (enterPaths, if (skipPaths.contains(calleePath)) skipPaths else calleePath :: skipPaths)
               //} else if (callee == caller) { // max call stack depth handles this case for us; basically get limited to MAX_CALL_STACK_DEPTH iterations
-                // TODO: handle mutual recursion
+                // TODO: need special handling for mutual recursion? haven't really stress-tested this
                 //if (UnstructuredSymbolicExecutor.DEBUG) println("skipping recursive call " + callee.getMethod.getName())
                 //p.dropConstraintsProduceableInCall(i, caller, callee)
                 //(enterPaths, if (skipPaths.contains(p)) skipPaths else p :: skipPaths)
@@ -191,47 +186,71 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
       val cfg = node.getIR().getControlFlowGraph()
       val blk = p.blk.blk
       val instrs = blk.asInstanceOf[SSACFG#BasicBlock].getAllInstructions()
+
+      def executeInstr(paths : List[Path], instr : SSAInstruction) : List[Path] = instr match {
+        case instr : SSAInvokeInstruction =>
+          val initSize = p.callStackSize
+          val (enterPaths, skipPaths) = enterCallee(paths, instr)
+          if (!enterPaths.isEmpty) {
+            if (MIN_DEBUG)
+              println(s"Entering call ${ClassUtil.pretty(instr.getDeclaredTarget())} from ${ClassUtil.pretty(node)}; ${enterPaths.size} targets.")
+            if (DEBUG)
+              println(s"Entering call ${instr.getDeclaredTarget().getName()} from ${node.getMethod().getName()} full names ${ClassUtil.pretty(instr.getDeclaredTarget())} from ${ClassUtil.pretty(node)}")
+            val paths = executeBackwardWhile(enterPaths, p => p.callStackSize != initSize, skipPaths)
+
+            if (DEBUG)
+              println(s"Returning from call to ${ClassUtil.pretty(instr.getDeclaredTarget())} back to ${ClassUtil.pretty(node)}; have ${paths.size} paths.")
+            paths
+          }
+          else {
+            if (DEBUG) println(s"decided to skip call $instr; have ${skipPaths.size}")
+            skipPaths
+          }
+        case instr : SSAPhiInstruction => paths // skip phis here, we deal with them while branching to preds //sys.error("phi " + instr)
+        case instr : SSAConditionalBranchInstruction =>
+          paths.foldLeft (List.empty[Path]) ((paths, p) =>
+            // might add a constraint that we would prefer not to pick up here, but we can hopefully eliminate it at the join point
+            if (p.addConstraintFromConditional(instr, isThenBranch = p.lastBlk == CFGUtil.getThenBranch(blk, cfg), tf)) p :: paths
+            else paths
+          )
+        case instr : SSASwitchInstruction => handleSwitch(paths, instr, blk, cfg)
+        case instr =>
+          val thrownExceptions = if (Options.SOUND_EXCEPTIONS && instr.isPEI) instr.getExceptionTypes.toSet else Set.empty[TypeReference]
+          paths.foldLeft (List.empty[Path]) ((paths, p) => p.executeInstr(instr, tf) match {
+            case None => paths
+            case Some(newPaths) => newPaths ++ paths
+          })
+      }
+
       (instrs.view.zipWithIndex.reverse foldLeft List(p)) { case (paths : List[Path], (instr : SSAInstruction, index : Int)) =>
         if (index <= pathIndex) {
           if (MIN_DEBUG) { print("INSTR : "); ClassUtil.pp_instr(instr, node.getIR()); println }          
           if (DEBUG && paths.size > 1) println("Have " + paths.size + " paths")
           paths.foreach(p => p.setIndex(index - 1)) // update index on every path
-          instr match {
-            case instr : SSAInvokeInstruction =>
-              val initSize = p.callStackSize
-              val (enterPaths, skipPaths) = enterCallee(paths, instr)
-              if (!enterPaths.isEmpty) {
-                if (MIN_DEBUG)
-                  println(s"Entering call ${ClassUtil.pretty(instr.getDeclaredTarget())} from ${ClassUtil.pretty(node)}; ${enterPaths.size} targets.")
-                if (DEBUG) 
-                  println(s"Entering call ${instr.getDeclaredTarget().getName()} from ${node.getMethod().getName()} full names ${ClassUtil.pretty(instr.getDeclaredTarget())} from ${ClassUtil.pretty(node)}")
-                val paths = executeBackwardWhile(enterPaths, p => p.callStackSize != initSize, skipPaths)
-                
-                if (DEBUG) 
-                  println(s"Returning from call to ${ClassUtil.pretty(instr.getDeclaredTarget())} back to ${ClassUtil.pretty(node)}; have ${paths.size} paths.") 
-                paths
-              }
-              else {
-                if (DEBUG) println(s"decided to skip call $instr; have ${skipPaths.size}")
-                skipPaths
-              } 
-            case instr : SSAPhiInstruction => paths // skip phis here, we deal with them while branching to preds //sys.error("phi " + instr)
-            case instr : SSAConditionalBranchInstruction =>            
-              paths.foldLeft (List.empty[Path]) ((paths, p) => 
-                // might add a constraint that we would prefer not to pick up here, but we can hopefully eliminate it at the join point
-                if (p.addConstraintFromConditional(instr, isThenBranch = p.lastBlk == CFGUtil.getThenBranch(blk, cfg), tf)) p :: paths
-                else paths
-              )
-            case instr : SSASwitchInstruction => handleSwitch(paths, instr, blk, cfg)
-            case instr => paths.foldLeft (List.empty[Path]) ((paths, p) => p.executeInstr(instr, tf) match {
-              case None => paths
-              case Some(newPaths) =>
-                newPaths ++ paths
-                //assert(newPaths.size == 1, "expecting one path, got " + newPaths.size)
-                //println("path " + newPaths.head.newQuery.id + " ok.")
-                //newPaths.head :: paths
+          if (Options.SOUND_EXCEPTIONS && instr.isPEI) {
+            val thrownExceptions = instr.getExceptionTypes.map(typ => cha.lookupClass(typ))
+            // split paths into exceptional and non-exceptional ones. don't execute the exceptional ones. if the
+            // instruction can throw an exception that explains the exceptional path, mark the path as non-exceptional
+            // so that the previous instruction will be executed. this is safe to do because WALA places at most one PEI
+            // instruction in each block, and the CFG has an exceptional edge to every block containing a PEI
+            val (pathsNotToExecute, pathsToExecute) = paths.partition(p => {
+              if (p.couldCatchThrownExceptionType(thrownExceptions, cha)) p.clearExceptionTypes()
+              p.isExceptional
             })
-          }
+
+            instr match {
+              case i : SSAThrowInstruction => // throw e
+                // TODO: think we need a special case for throw as well since the WALA docs say that getExceptionTypes doesn't work for throw...
+                //i.getException // just do WALA type inference on e and check subclassing on the thrown exception types
+                sys.error("implement throw special case")
+              case i : SSAInvokeInstruction =>
+                // calls are a special case. we have to execute even pathsNotToExecute to account for the possibility
+                // that an exception was thrown inside of the call
+                val pathsNotToExecuteCopy = pathsNotToExecute.map(p => p.deepCopy)
+                executeInstr(paths, instr).union(pathsNotToExecuteCopy)
+              case _ => executeInstr(pathsToExecute, instr).union(pathsNotToExecute)
+            }
+          } else executeInstr(paths, instr)
         } else paths
       }
     }
@@ -353,6 +372,8 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
   
   def executeBackwardIntraproceduralWhile(p : Path, passPaths : List[Path], failPaths : List[Path], test : Path => Boolean) : (List[Path], List[Path]) = {
     if (TRACE) logMethodAndTime("executeBackwardIntraproceduralWhile")
+    if (p.isExceptional) println("on exceptional path")
+    else println("not on exceptional path")
     val startBlk = p.blk
     val ir = p.node.getIR()
         
@@ -381,8 +402,28 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
     else {
       // if single predecessor, go to pred
       // if multiple predecessors, identify join point and execute each side until join point is reached      
-      val cfg = ir.getControlFlowGraph()      
-      val preds = cfg.getNormalPredecessors(startBlk) 
+      val cfg = ir.getControlFlowGraph()
+      // TODO: need some way to propagate excpetional context to callees. doing this only when it's a catch block is unsound; we need to do it either
+      // (a) when it's a catch block or (b) when it's an exceptional context
+      // TODO: when it's a catch block, set each path that forks to a predecessor to be exceptional
+
+      // initial query
+      // if we are going backward from a catch block, mark all paths as exceptional. this is important because
+      // if any of these paths enter a callee, we need to enter the callee from an exceptional context--that
+      // is, fork from the exit block of the callee to all exceptional predecessors rather than to all normal
+      // predecessors. in addition, we need to reason about instructions and only execute them if they might have thrown
+      // the exception
+
+      if (Options.SOUND_EXCEPTIONS && startBlk.isCatchBlock) {
+        val caughtExceptionTypes = startBlk.getCaughtExceptionTypes.toSet
+        println(s"setting to exceptional; types are $caughtExceptionTypes")
+        instrPaths.foreach(p => p.setExceptionTypes(caughtExceptionTypes, cha))
+        instrPaths.foreach(p => assert(p.isExceptional))
+      }
+
+      val preds =
+        if (Options.SOUND_EXCEPTIONS && instrPaths.exists(p => p.isExceptional)) cfg.getPredNodes(startBlk).toList
+        else cfg.getNormalPredecessors(startBlk).toList
       if (DEBUG) println("done with " + startBlk + ", getting preds")
       
       // dropping constraints here ensures that we never carry on the loop condition. this is desirable for many clients
@@ -395,12 +436,12 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
         instrPaths.foreach(p => p.dropLoopProduceableConstraints(loopHeader, tf))
       }) 
     
-      preds.size() match {
+      preds.size match {
         case 0 =>
           if (DEBUG) println("0 preds, doing return")
           if (!cfg.getExceptionalPredecessors(startBlk).isEmpty()) {
-            // have no normal predecessors, but do have exceptional ones. refute
-            // based on thrown exception
+            // have no normal predecessors, but do have exceptional ones. refute based on thrown exception. note that
+            // this branch will never be entered in SOUND_EXCEPTIONS mode
             if (Options.PRINT_REFS) println("refuted by thrown exception!")
             (passPaths, failPaths)
           } else {
@@ -414,7 +455,7 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
           }
         case 1 => 
           assert (!instrPaths.head.blk.iteratePhis().hasNext(), "block " + instrPaths.head.blk + " has unexpected phis! " + p.node.getIR)
-          val pred = preds.iterator().next()
+          val pred = preds.head
           if (DEBUG) println("single pred BB" + pred.getNumber())
           instrPaths.foreach(p => p.setBlk(pred))
           filterFailPaths(instrPaths, passPaths, failPaths, test)          
@@ -426,8 +467,12 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
                   
           // push all paths up to the join
           val initCallStackSize = p.callStackSize
-          val prunedCFG = ExceptionPrunedCFG.make(cfg)
-          val predList = preds.toList.filter(blk => prunedCFG.containsNode(blk))            
+          val (prunedCFG, predList) =
+            if (Options.SOUND_EXCEPTIONS) (cfg, preds)
+            else {
+              val prunedCFG = ExceptionPrunedCFG.make(cfg)
+              (prunedCFG, preds.filter(blk => prunedCFG.containsNode(blk)))
+            }
           // this is a weird case that arises with explicitly infinite loops or ony exceptional predecessors
           // refute, since there's no way we ever could have gotten here
           if (predList.isEmpty || prunedCFG.getNumberOfNodes() == 0) (passPaths, failPaths)
@@ -437,7 +482,7 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
             //if (DEBUG && loopHeader.isDefined) println("At loop head BB" + startBlk.getNumber())
             val forkMap = getForkMap(blk, predList, instrPaths, phis, domInfo, ir, loopHeader)                    
             if (!forkMap.isEmpty) {
-              if (DEBUG) checkPathMap(forkMap)                                                                   
+              if (DEBUG) checkPathMap(forkMap)
               val paths = executeToJoin(blk, predList.reverse, forkMap, domInfo, initCallStackSize, cfg)
               filterFailPaths(paths, passPaths, failPaths, test)
             } else (passPaths, failPaths)

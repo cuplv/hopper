@@ -23,7 +23,7 @@ import edu.colorado.scwala.util.PtUtil
 import edu.colorado.scwala.util.Util
 import Path._
 import edu.colorado.thresher.core.Options
-import com.ibm.wala.classLoader.IMethod
+import com.ibm.wala.classLoader.{IClass, IMethod}
 import com.ibm.wala.types.MethodReference
 import com.ibm.wala.types.TypeReference
 import com.ibm.wala.types.ClassLoaderReference
@@ -160,7 +160,8 @@ object Path {
   
 }
 
-class Path(val qry : Qry, var lastBlk : WalaBlock = null) extends Concretizable {
+class Path(val qry : Qry, var lastBlk : WalaBlock = null,
+           private var exceptionTypes : Iterable[IClass] = Nil) extends Concretizable {
   val id : Int = newId
   // map from jump number to jump location
   private val jumpMap = Util.makeMap[Int,CallStackFrame] // piecewise only
@@ -168,14 +169,17 @@ class Path(val qry : Qry, var lastBlk : WalaBlock = null) extends Concretizable 
   // TODO: this is kind of a hack, but not sure how else to do it with piecewise (can't live in the symbolic executor...)
   // switch blocks for which we have already added the switch constraints
   val switchConstraintsAdded = Util.makeSet[ISSABasicBlock]
+  // if the path is currently exceptional, we need to know what kind of exception could have been thrown to get the path
+  // to where it is previosuly. it is the symbolic executor's path to tell each path when it becomes exceptional and
+  // what exception type(s) led to it being exceptional
 
-  def callStack = qry.callStack//new Stack[StackFrame2]
+  def callStack = qry.callStack
   def node : CGNode = callStack.top.node
   def blk : WalaBlock = callStack.top.blk
   def index : Int = callStack.top.index  
   
   def deepCopy(q : Qry) : Path = {    
-    val path = new Path(q, lastBlk)
+    val path = new Path(q, lastBlk, exceptionTypes)
     // copy call stack
     // copy jump map
     this.jumpMap.foreach(kvPair => path.jumpMap += kvPair)
@@ -308,7 +312,21 @@ class Path(val qry : Qry, var lastBlk : WalaBlock = null) extends Concretizable 
       qry.callStack.push(new CallStackFrame(node, Util.makeSet[LocalPtEdge], exitBlk, exitBlk.size - 1))
     }
   }
-  
+
+  def isExceptional : Boolean = !this.exceptionTypes.isEmpty
+
+  // check if this path has a caught exception type T_caught such that there exists T_thrown \in @param thrownTypes and
+  // T_thrown <: T_caught
+  def couldCatchThrownExceptionType(thrownTypes : Iterable[IClass], cha : IClassHierarchy) =
+    this.exceptionTypes.exists(caughtType =>
+      thrownTypes.exists(thrownType => cha.isAssignableFrom(caughtType, thrownType)))
+
+  def clearExceptionTypes() : Unit = this.exceptionTypes = Nil
+
+  def setExceptionTypes(exceptionTypeRefs : Iterable[TypeReference], cha : IClassHierarchy) = {
+    this.exceptionTypes = exceptionTypeRefs.map(typ => cha.lookupClass(typ))
+  }
+
   def setBlk(newBlk : WalaBlock) : Unit = {
     lastBlk = callStack.top.blk
     callStack.top.blk = newBlk
@@ -448,12 +466,11 @@ class Path(val qry : Qry, var lastBlk : WalaBlock = null) extends Concretizable 
    */
   override def |=(other : Concretizable) : Boolean = other match {
     case p : Path =>
-      val res0 = this.qry |= p.qry//this.qry.contains(other.qry) 
+      (this.qry |= p.qry) && (!Options.SOUND_EXCEPTIONS || this.exceptionTypes == p.exceptionTypes)
       //assert(Util.implies(res1, res0), 
           //"disagreement on |=: old says " + res1 + " new says " + res0 + " OLD: " + qry + "\n|=\n" + other.qry + " and NEW " + qry + "\n|=\n" + p.qry)
       //assert(res0 == res1, "disagreement on |=: old says " + res1 + " new says " + res0 + " OLD: " + qry + "|=" + other.qry + " and NEW " + qry + "|=" + p.qry)
       //if (res0 != res1) println("disagreement on |=: old says " + res1 + " new says " + res0 + " OLD: " + qry + "|=" + other.qry + " and NEW " + qry + "|=" + p.qry)
-      res0
   }
   
   /**
@@ -464,14 +481,12 @@ class Path(val qry : Qry, var lastBlk : WalaBlock = null) extends Concretizable 
   override def |=(set : MinSet[Concretizable]) : Boolean = set.exists(p => this |= p)
   
   override def equals(other : Any) = other match { 
-    case p : Path => 
-      val res0 = this.qry.equals(p.qry)//this.qry.equals(p.qry)
-      //val res1 = this.qry.equals(p.qry)
-      //assert(res0 == res1)
-      res0
+    case p : Path => this.qry.equals(p.qry) && (!Options.SOUND_EXCEPTIONS || this.exceptionTypes == p.exceptionTypes)
     case _ => false
   }
    
-  override def hashCode = qry.hashCode //qry.hashCode  
+  override def hashCode =
+    if (Options.SOUND_EXCEPTIONS && isExceptional) Util.makeHash(List(qry, exceptionTypes))
+    else qry.hashCode //qry.hashCode
   override def toString = id + "X: " + qry.toString//qry.toString()
 }
