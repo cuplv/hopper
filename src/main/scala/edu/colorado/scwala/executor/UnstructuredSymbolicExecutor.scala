@@ -393,8 +393,7 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
     if (TRACE) logMethodAndTime("executeBackwardIntraproceduralWhile")
     val startBlk = p.blk
     val ir = p.node.getIR()
-        
-    
+
     // loop header--see if the invariant says we can stop executing
     def invariantImpliesPath(p : Path) : Boolean = {
       val res = loopInvMap.pathEntailsInv(p.callStack.stack.map(f => (f.node, f.blk)), p)
@@ -411,7 +410,7 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
         if ((p.lastBlk != thenBranch || LoopUtil.isDoWhileLoop(loopHeader, ir)) && 
             invariantImpliesPath(p)) return (passPaths, failPaths)
       } else if (LoopUtil.isExplicitlyInfiniteLoop(loopHeader, ir) && // won't have any conditional branch instruction in this case
-                 invariantImpliesPath(p)) return (passPaths, failPaths)     
+                 invariantImpliesPath(p)) return (passPaths, failPaths)
     )
       
     val instrPaths = executeBlkInstrs(p)    
@@ -479,11 +478,12 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
             if (Options.SOUND_EXCEPTIONS) (cfg, preds)
             else {
               val prunedCFG = ExceptionPrunedCFG.make(cfg)
-              (prunedCFG, preds.filter(blk => prunedCFG.containsNode(blk)))
+              if (prunedCFG.getNumberOfNodes() == 0) (cfg, preds)
+              else (prunedCFG, preds.filter(blk => prunedCFG.containsNode(blk)))
             }
           // this is a weird case that arises with explicitly infinite loops or ony exceptional predecessors
           // refute, since there's no way we ever could have gotten here
-          if (predList.isEmpty || prunedCFG.getNumberOfNodes() == 0) (passPaths, failPaths)
+          if (predList.isEmpty) (passPaths, failPaths)
           else {
             val domInfo = getDominators(prunedCFG)          
             val loopHeader = None//LoopUtil.findRelatedLoopHeader(startBlk, ir)
