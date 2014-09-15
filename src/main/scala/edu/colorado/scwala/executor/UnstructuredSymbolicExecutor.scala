@@ -391,6 +391,8 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
   
   def executeBackwardIntraproceduralWhile(p : Path, passPaths : List[Path], failPaths : List[Path], test : Path => Boolean) : (List[Path], List[Path]) = {
     if (TRACE) logMethodAndTime("executeBackwardIntraproceduralWhile")
+    if (p.isExceptional) println("on exceptional path")
+    else println("not on exceptional path")
     val startBlk = p.blk
     val ir = p.node.getIR()
 
