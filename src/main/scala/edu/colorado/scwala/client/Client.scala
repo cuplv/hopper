@@ -1,62 +1,29 @@
 package edu.colorado.scwala.client
 
-import java.io.File
-import java.io.FileInputStream
+import java.io.{File, FileInputStream}
 import java.util.jar.JarFile
-import scala.collection.JavaConversions.asJavaCollection
-import scala.collection.JavaConversions.collectionAsScalaIterable
-import scala.collection.JavaConversions.iterableAsScalaIterable
+
 import com.ibm.wala.analysis.pointers.HeapGraph
-import com.ibm.wala.classLoader.BinaryDirectoryTreeModule
-import com.ibm.wala.classLoader.IClass
-import com.ibm.wala.classLoader.IMethod
-import com.ibm.wala.ipa.callgraph.AnalysisCache
-import com.ibm.wala.ipa.callgraph.AnalysisOptions
+import com.ibm.wala.classLoader.{BinaryDirectoryTreeModule, IClass, IMethod}
 import com.ibm.wala.ipa.callgraph.AnalysisOptions.ReflectionOptions
-import com.ibm.wala.ipa.callgraph.AnalysisScope
-import com.ibm.wala.ipa.callgraph.CGNode
-import com.ibm.wala.ipa.callgraph.CallGraph
-import com.ibm.wala.ipa.callgraph.CallGraphBuilder
-import com.ibm.wala.ipa.callgraph.CallGraphStats
-import com.ibm.wala.ipa.callgraph.ClassTargetSelector
-import com.ibm.wala.ipa.callgraph.ContextSelector
-import com.ibm.wala.ipa.callgraph.Entrypoint
-import com.ibm.wala.ipa.callgraph.MethodTargetSelector
-import com.ibm.wala.ipa.callgraph.impl.ArgumentTypeEntrypoint
-import com.ibm.wala.ipa.callgraph.impl.ClassHierarchyClassTargetSelector
-import com.ibm.wala.ipa.callgraph.impl.ClassHierarchyMethodTargetSelector
-import com.ibm.wala.ipa.callgraph.impl.DefaultEntrypoint
-import com.ibm.wala.ipa.callgraph.propagation.HeapModel
-import com.ibm.wala.ipa.callgraph.propagation.PointerAnalysis
-import com.ibm.wala.ipa.callgraph.propagation.PointerKey
-import com.ibm.wala.ipa.callgraph.propagation.SSAContextInterpreter
-import com.ibm.wala.ipa.callgraph.propagation.cfa.ZeroXContainerCFABuilder
+import com.ibm.wala.ipa.callgraph.{AnalysisCache, AnalysisOptions, AnalysisScope, CGNode, CallGraph, CallGraphBuilder, CallGraphStats, ClassTargetSelector, ContextSelector, Entrypoint, MethodTargetSelector}
+import com.ibm.wala.ipa.callgraph.impl.{ArgumentTypeEntrypoint, ClassHierarchyClassTargetSelector, ClassHierarchyMethodTargetSelector, DefaultEntrypoint}
+import com.ibm.wala.ipa.callgraph.propagation.{HeapModel, PointerAnalysis, PointerKey, SSAContextInterpreter}
 import com.ibm.wala.ipa.callgraph.propagation.cfa.ZeroXInstanceKeys
-import com.ibm.wala.ipa.cha.ClassHierarchy
-import com.ibm.wala.ipa.cha.IClassHierarchy
+import com.ibm.wala.ipa.cha.{ClassHierarchy, IClassHierarchy}
 import com.ibm.wala.ipa.modref.ModRef
-import com.ibm.wala.ssa.InstanceOfPiPolicy
-import com.ibm.wala.ssa.SSAOptions
+import com.ibm.wala.ssa.{InstanceOfPiPolicy, SSAOptions}
 import com.ibm.wala.types.ClassLoaderReference
 import com.ibm.wala.util.config.FileOfClasses
 import com.ibm.wala.util.intset.OrdinalSet
-import edu.colorado.scwala.piecewise.PiecewiseSymbolicExecutor
-import edu.colorado.scwala.executor.TransferFunctions
-import edu.colorado.scwala.executor.UnstructuredSymbolicExecutor
-import edu.colorado.scwala.piecewise.RelevanceRelation
-import edu.colorado.scwala.synthesis.SynthesisSymbolicExecutor
-import edu.colorado.scwala.synthesis.SynthesisTransferFunctions
-import edu.colorado.scwala.util.ClassUtil
-import edu.colorado.scwala.util.Timer
-import edu.colorado.scwala.util.Util
-import edu.colorado.thresher.core.HeapGraphWrapper
-import edu.colorado.thresher.core.Options
-import edu.colorado.thresher.core.SameReceiverEntrypoint
-import edu.colorado.thresher.core.SharedAllocationEntrypoint
-import Client._
-import edu.colorado.scwala.executor.SymbolicExecutor
-import edu.colorado.scwala.executor.DefaultSymbolicExecutor
-import edu.colorado.scwala.piecewise.DefaultPiecewiseSymbolicExecutor
+import edu.colorado.scwala.client.Client._
+import edu.colorado.scwala.executor.{DefaultSymbolicExecutor, SymbolicExecutor, TransferFunctions}
+import edu.colorado.scwala.piecewise.{DefaultPiecewiseSymbolicExecutor, RelevanceRelation}
+import edu.colorado.scwala.synthesis.{SynthesisSymbolicExecutor, SynthesisTransferFunctions}
+import edu.colorado.scwala.util.{ClassUtil, Timer, Util}
+import edu.colorado.thresher.core._
+
+import scala.collection.JavaConversions.{asJavaCollection, collectionAsScalaIterable, iterableAsScalaIterable}
 
 object Client {
   protected val DEBUG = true
@@ -135,7 +102,7 @@ abstract class Client(appPath : String, libPath : Option[String], mainClass : St
     addBypassLogic(options, analysisScope, cha)
     val defaultInstancePolicy = ZeroXInstanceKeys.ALLOCATIONS | ZeroXInstanceKeys.SMUSH_MANY | ZeroXInstanceKeys.SMUSH_STRINGS | ZeroXInstanceKeys.SMUSH_THROWABLES
     val instancePolicy = if (Options.PRIM_ARRAY_SENSITIVITY) defaultInstancePolicy else (defaultInstancePolicy | ZeroXInstanceKeys.SMUSH_PRIMITIVE_HOLDERS)
-    new ZeroXContainerCFABuilder(cha, options, cache, makeContextSelector(options, cha), makeContextInterpreter(options, cache), instancePolicy)
+    new ImprovedZeroXContainerCFABuilder(cha, options, cache, makeContextSelector(options, cha), makeContextInterpreter(options, cache), instancePolicy)
   }
   
   def makeOptions(analysisScope : AnalysisScope, entrypoints : Iterable[Entrypoint]) : AnalysisOptions = {

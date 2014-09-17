@@ -1,28 +1,18 @@
 package edu.colorado.scwala.client
 
 import java.io.File
-import java.util.LinkedList
-import scala.collection.JavaConversions.iterableAsScalaIterable
-import scala.io.Source
+
 import com.ibm.wala.classLoader.IBytecodeMethod
 import com.ibm.wala.demandpa.alg.BudgetExceededException
-import com.ibm.wala.ipa.callgraph.AnalysisOptions
-import com.ibm.wala.ipa.callgraph.AnalysisScope
-import com.ibm.wala.ipa.callgraph.Entrypoint
 import com.ibm.wala.ipa.callgraph.propagation.LocalPointerKey
-import com.ibm.wala.ipa.cha.ClassHierarchy
 import com.ibm.wala.ssa.SSACheckCastInstruction
-import com.ibm.wala.types.ClassLoaderReference
-import edu.colorado.scwala.state.ObjVar
-import edu.colorado.scwala.state.PtEdge
-import edu.colorado.scwala.state.Qry
+import com.ibm.wala.types.{ClassLoaderReference, MethodReference, TypeReference}
+import edu.colorado.scwala.state.{ObjVar, PtEdge, Qry}
 import edu.colorado.scwala.util._
 import edu.colorado.thresher.core.Options
-import com.ibm.wala.classLoader.ShrikeBTMethod
-import com.ibm.wala.ipa.callgraph.CallGraph
-import com.ibm.wala.classLoader.IMethod
-import com.ibm.wala.types.TypeReference
-import com.ibm.wala.types.MethodReference
+
+import scala.collection.JavaConversions.iterableAsScalaIterable
+import scala.io.Source
 
 class CastCheckingResults(val numSafe : Int, val numMightFail : Int, val numThresherProvedSafe : Int) {
   
@@ -292,9 +282,9 @@ object DowncastCheckingClientTests extends ClientTests {
       // more recent versions of Java use reflection that confuses the PT analysis and make it unable to prove the safety of some easy casts
       // Thresher can't recover the lost precision, so this is now just a soundness test
     resultsMap.put("ArrayListRefute", if (javaVersion == J51) new CastCheckingResults(0, 1, 0) else new CastCheckingResults(0, 1, 1))
-    resultsMap.put("IteratorNoRefute", 
-        if (javaVersion == J51 || javaVersion == J55 || javaVersion == J67)
-          new CastCheckingResults(2, 3, 0) else new CastCheckingResults(4, 1, 0))
+    resultsMap.put("IteratorNoRefute", new CastCheckingResults(4, 1, 0))
+        //if (javaVersion == J51 || javaVersion == J55 || javaVersion == J67)
+          //new CastCheckingResults(2, 3, 0) else new CastCheckingResults(4, 1, 0))
     resultsMap.put("HashtableEnumeratorRefute", new CastCheckingResults(0, 2, 2))
     resultsMap.put("HashtableEnumeratorNoRefute", new CastCheckingResults(0, 2, 1))
 
