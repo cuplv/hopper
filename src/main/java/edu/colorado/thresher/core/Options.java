@@ -41,16 +41,16 @@ public class Options {
   @boolOpt(description = "perform flow-insensitive points-to analysis only; don't do symbolic execution", _default = false)
   public static boolean FLOW_INSENSITIVE_ONLY = false;
 
-  @boolOpt(description = "handle exceptions soundly", _default = true)
+  @boolOpt(description = "handle exceptions soundly", _default = false)
   public static boolean SOUND_EXCEPTIONS = false;
 
-  @boolOpt(description = "use piecewise symbolic executor. WARNING - under development", _default = false)
+  @boolOpt(description = "use piecewise symbolic executor", _default = false)
   public static boolean PIECEWISE_EXECUTION = false;
   
   @boolOpt(description = "", _default = false)
   public static boolean SYNTHESIS = false;
   
-  @boolOpt(description = "verification for Android UI components (currently unsupported)", _default = false)
+  @boolOpt(description = "verification for Android UI components (currently under development)", _default = false)
   public static boolean ANDROID_UI = false;
   
   @boolOpt(description = " check for Android Activity leaks", _default = false)

@@ -38,10 +38,10 @@ import edu.colorado.thresher.core.Options
 import com.ibm.wala.classLoader.{IClass, IMethod}
 
 object UnstructuredSymbolicExecutor {
-  protected[executor] def DEBUG = true//Options.SCALA_DEBUG
-  protected[executor] def MIN_DEBUG = DEBUG || false // can change to enable
+  protected[executor] def DEBUG = Options.SCALA_DEBUG
+  protected[executor] def MIN_DEBUG = DEBUG
   private[executor] val TRACE = false
-  private[executor] val PRINT_IR = true
+  private[executor] val PRINT_IR = false
   // save invariant maps that lead to refutations
   private val SAVE_INVARIANT_MAPS = false
   
@@ -391,8 +391,6 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
   
   def executeBackwardIntraproceduralWhile(p : Path, passPaths : List[Path], failPaths : List[Path], test : Path => Boolean) : (List[Path], List[Path]) = {
     if (TRACE) logMethodAndTime("executeBackwardIntraproceduralWhile")
-    if (p.isExceptional) println("on exceptional path")
-    else println("not on exceptional path")
     val startBlk = p.blk
     val ir = p.node.getIR()
 
