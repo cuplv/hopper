@@ -264,7 +264,7 @@ object DowncastCheckingClientTests extends ClientTests {
     if (!testedPlatforms.contains(javaVersion)) 
       println(s"Warning: running analysis with untested Java library version $javaVersion. Some tests may fail.")    
       
-    val tests = List("BasicCastRefute", "BasicCastNoRefute", "InstanceOfRefute", "InstanceOfNoRefute", 
+    val standardTests = List("BasicCastRefute", "BasicCastNoRefute", "InstanceOfRefute", "InstanceOfNoRefute",
                      "NegatedInstanceOfRefute", "NegatedInstanceOfNoRefute", "FieldCastRefute", "FieldCastNoRefute",
                      "ArrayListRefute",
                      "ArrayListNoRefute", 
@@ -272,12 +272,18 @@ object DowncastCheckingClientTests extends ClientTests {
                      "IteratorNoRefute", // get different results with different Java version s
                      "SwitchRefute", "SwitchNoRefute", "InfiniteLoopReturnRefute", "ListContainmentNoRefute", 
                      "SwitchReturnNoRefute", 
-                     //"HashtableEnumeratorNoRefute", // these don't work without using the WALA version with Manu's context hack
+                     "HashtableEnumeratorNoRefute",
                      //"HashtableEnumeratorRefute",
                      "InstrOpcodeIndexSensitivePiecewiseRefute", "InstrOpcodeIndexSensitivePiecewiseNoRefute")
                         //"CallTypeRefute", "CallTypeNoRefute") // will fix these later; results are sound, but not precise
-  
-      // results for tests whose casts are not all safe or all unsafe, or platform-specific
+
+    val exceptionTests =
+      Set("CatchNoRefute", "CatchRefute", "CatchNoRefuteLocal", "CatchRefuteLocal", "CatchNoRefuteLocal2",
+          "CatchNoRefuteInterproc", "CatchRefuteInterproc", "CatchThrowNoRefute", "CatchThrowRefute")
+
+    val tests = standardTests ++ exceptionTests
+
+    // results for tests whose casts are not all safe or all unsafe, or platform-specific
     val resultsMap = Util.makeMap[String,CastCheckingResults]
       // more recent versions of Java use reflection that confuses the PT analysis and make it unable to prove the safety of some easy casts
       // Thresher can't recover the lost precision, so this is now just a soundness test
@@ -286,7 +292,9 @@ object DowncastCheckingClientTests extends ClientTests {
         //if (javaVersion == J51 || javaVersion == J55 || javaVersion == J67)
           //new CastCheckingResults(2, 3, 0) else new CastCheckingResults(4, 1, 0))
     resultsMap.put("HashtableEnumeratorRefute", new CastCheckingResults(0, 2, 2))
-    resultsMap.put("HashtableEnumeratorNoRefute", new CastCheckingResults(0, 2, 1))
+    resultsMap.put("HashtableEnumeratorNoRefute", new CastCheckingResults(0, 2, 0))
+    resultsMap.put("CatchNoRefute", new CastCheckingResults(0, 1, 0))
+    resultsMap.put("CatchRefute", new CastCheckingResults(1, 0, 0))
 
     val regressionDir = "../thresher/apps/tests/casts/"
     var testNum = 0
@@ -303,10 +311,12 @@ object DowncastCheckingClientTests extends ClientTests {
         Options.INDEX_SENSITIVITY = test.contains("IndexSensitive")
         if (!Options.PIECEWISE_EXECUTION && test.contains("Piecewise")) Options.PIECEWISE_EXECUTION = true
         if (Options.PIECEWISE_EXECUTION) Options.PRIM_ARRAY_SENSITIVITY = true
+        if (exceptionTests.contains(test)) Options.SOUND_EXCEPTIONS = true
+        else Options.SOUND_EXCEPTIONS = false
         new DowncastCheckingClient(path, Util.strToOption(Options.LIB), "Main", "main", isRegression = true).checkCasts
       } catch {
         case e : BudgetExceededException =>
-          println("exceeded budget. pw? " + Options.PIECEWISE_EXECUTION + " " + pwTimeoutOk)
+          println(s"Exceeded budget. Piecewise? ${Options.PIECEWISE_EXECUTION} $pwTimeoutOk")
           // for piecewise, a timeout is the expected result for some tests
           if (Options.PIECEWISE_EXECUTION && !pwTimeoutOk.contains(test)) resultsMap(test)
           else {
@@ -320,7 +330,9 @@ object DowncastCheckingClientTests extends ClientTests {
       executionTimer.stop
           
       resultsMap.get(test) match {
-        case Some(expectedResults) => assert(results.equals(expectedResults) || pwTimeoutOk.contains(test),  s"test $test failed. got $results but expected $expectedResults")
+        case Some(expectedResults) =>
+          assert(results.equals(expectedResults) || pwTimeoutOk.contains(test),
+                 s"test $test failed. got $results but expected $expectedResults")
         case None =>
           assert(results.numMightFail > 0)
           if (test.contains("NoRefute")) assert(results.numThresherProvedSafe == 0, "test " + test + " failed.")
