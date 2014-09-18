@@ -1,28 +1,18 @@
 package edu.colorado.scwala.client
 
 import java.io.File
-import java.util.LinkedList
-import scala.collection.JavaConversions.iterableAsScalaIterable
-import scala.io.Source
+
 import com.ibm.wala.classLoader.IBytecodeMethod
 import com.ibm.wala.demandpa.alg.BudgetExceededException
-import com.ibm.wala.ipa.callgraph.AnalysisOptions
-import com.ibm.wala.ipa.callgraph.AnalysisScope
-import com.ibm.wala.ipa.callgraph.Entrypoint
 import com.ibm.wala.ipa.callgraph.propagation.LocalPointerKey
-import com.ibm.wala.ipa.cha.ClassHierarchy
 import com.ibm.wala.ssa.SSACheckCastInstruction
-import com.ibm.wala.types.ClassLoaderReference
-import edu.colorado.scwala.state.ObjVar
-import edu.colorado.scwala.state.PtEdge
-import edu.colorado.scwala.state.Qry
+import com.ibm.wala.types.{ClassLoaderReference, MethodReference, TypeReference}
+import edu.colorado.scwala.state.{ObjVar, PtEdge, Qry}
 import edu.colorado.scwala.util._
 import edu.colorado.thresher.core.Options
-import com.ibm.wala.classLoader.ShrikeBTMethod
-import com.ibm.wala.ipa.callgraph.CallGraph
-import com.ibm.wala.classLoader.IMethod
-import com.ibm.wala.types.TypeReference
-import com.ibm.wala.types.MethodReference
+
+import scala.collection.JavaConversions.iterableAsScalaIterable
+import scala.io.Source
 
 class CastCheckingResults(val numSafe : Int, val numMightFail : Int, val numThresherProvedSafe : Int) {
   
@@ -282,14 +272,14 @@ object DowncastCheckingClientTests extends ClientTests {
                      "IteratorNoRefute", // get different results with different Java version s
                      "SwitchRefute", "SwitchNoRefute", "InfiniteLoopReturnRefute", "ListContainmentNoRefute", 
                      "SwitchReturnNoRefute", 
-                     //"HashtableEnumeratorNoRefute", // these don't work without using the WALA version with Manu's context hack
+                     "HashtableEnumeratorNoRefute",
                      //"HashtableEnumeratorRefute",
                      "InstrOpcodeIndexSensitivePiecewiseRefute", "InstrOpcodeIndexSensitivePiecewiseNoRefute")
                         //"CallTypeRefute", "CallTypeNoRefute") // will fix these later; results are sound, but not precise
 
     val exceptionTests =
-      Set("CatchNoRefute", "CatchRefute", "CatchNoRefuteLocal", "CatchRefuteLocal",
-           "CatchNoRefuteLocal2", "CatchNoRefuteInterproc", "CatchRefuteInterproc")
+      Set("CatchNoRefute", "CatchRefute", "CatchNoRefuteLocal", "CatchRefuteLocal", "CatchNoRefuteLocal2",
+          "CatchNoRefuteInterproc", "CatchRefuteInterproc", "CatchThrowNoRefute", "CatchThrowRefute")
 
     val tests = standardTests ++ exceptionTests
 
@@ -303,7 +293,7 @@ object DowncastCheckingClientTests extends ClientTests {
         if (javaVersion == J51 || javaVersion == J55 || javaVersion == J67)
           new CastCheckingResults(2, 3, 0) else new CastCheckingResults(4, 1, 0))
     resultsMap.put("HashtableEnumeratorRefute", new CastCheckingResults(0, 2, 2))
-    resultsMap.put("HashtableEnumeratorNoRefute", new CastCheckingResults(0, 2, 1))
+    resultsMap.put("HashtableEnumeratorNoRefute", new CastCheckingResults(0, 2, 0))
     resultsMap.put("CatchNoRefute", new CastCheckingResults(0, 1, 0))
     resultsMap.put("CatchRefute", new CastCheckingResults(1, 0, 0))
 

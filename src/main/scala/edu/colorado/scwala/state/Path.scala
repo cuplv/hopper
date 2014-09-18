@@ -488,5 +488,5 @@ class Path(val qry : Qry, var lastBlk : WalaBlock = null,
   override def hashCode =
     if (Options.SOUND_EXCEPTIONS && isExceptional) Util.makeHash(List(qry, exceptionTypes))
     else qry.hashCode //qry.hashCode
-  override def toString = id + "X: " + qry.toString//qry.toString()
+  override def toString = id + "X: " + qry.toString
 }

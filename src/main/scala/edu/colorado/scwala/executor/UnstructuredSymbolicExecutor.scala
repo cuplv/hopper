@@ -1,47 +1,31 @@
 package edu.colorado.scwala.executor
 
+import com.ibm.wala.analysis.reflection.CloneInterpreter
 import com.ibm.wala.analysis.typeInference.TypeInference
 import com.ibm.wala.cfg.ControlFlowGraph
-
-import scala.collection.JavaConversions.asScalaBuffer
-import scala.collection.JavaConversions.asScalaIterator
-import scala.collection.JavaConversions.asScalaSet
-import scala.collection.JavaConversions.collectionAsScalaIterable
-import scala.collection.JavaConversions.mapAsJavaMap
-import com.ibm.wala.analysis.reflection.CloneInterpreter
-import com.ibm.wala.ipa.callgraph.CGNode
-import com.ibm.wala.ipa.callgraph.CallGraph
+import com.ibm.wala.classLoader.IClass
+import com.ibm.wala.ipa.callgraph.{CGNode, CallGraph}
 import com.ibm.wala.ipa.cfg.ExceptionPrunedCFG
-import com.ibm.wala.ipa.cfg.PrunedCFG
 import com.ibm.wala.ipa.cha.IClassHierarchy
 import com.ibm.wala.shrikeBT.IConditionalBranchInstruction.Operator.EQ
 import com.ibm.wala.ssa._
-import com.ibm.wala.types.MethodReference
-import com.ibm.wala.types.TypeReference
+import com.ibm.wala.types.{MethodReference, TypeReference}
 import com.ibm.wala.util.graph.dominators.Dominators
 import com.twitter.util.LruMap
-import UnstructuredSymbolicExecutor._
-import edu.colorado.scwala.state.Path
-import edu.colorado.scwala.state.Qry
-import edu.colorado.scwala.translate.InvariantMap
-import edu.colorado.scwala.translate.MinSet
-import edu.colorado.scwala.translate.WalaBlock
-import edu.colorado.scwala.translate.WalaBlock.fromISSABasicBlock
-import edu.colorado.scwala.translate.WalaBlock.fromWalaBlock
-import edu.colorado.scwala.util.CFGUtil
-import edu.colorado.scwala.util.CGNodeUtil
-import edu.colorado.scwala.util.ClassUtil
-import edu.colorado.scwala.util.LoopUtil
-import edu.colorado.scwala.util.Timer
-import edu.colorado.scwala.util.Util
+import edu.colorado.scwala.executor.UnstructuredSymbolicExecutor._
+import edu.colorado.scwala.state.{Path, Qry}
+import edu.colorado.scwala.translate.{InvariantMap, MinSet, WalaBlock}
+import edu.colorado.scwala.translate.WalaBlock.{fromISSABasicBlock, fromWalaBlock}
+import edu.colorado.scwala.util.{CFGUtil, CGNodeUtil, ClassUtil, LoopUtil, Timer, Util}
 import edu.colorado.thresher.core.Options
-import com.ibm.wala.classLoader.{IClass, IMethod}
+
+import scala.collection.JavaConversions.{asScalaBuffer, asScalaIterator, asScalaSet, collectionAsScalaIterable, mapAsJavaMap}
 
 object UnstructuredSymbolicExecutor {
-  protected[executor] def DEBUG = Options.SCALA_DEBUG
+  protected[executor] def DEBUG = true//Options.SCALA_DEBUG
   protected[executor] def MIN_DEBUG = DEBUG
   private[executor] val TRACE = false
-  private[executor] val PRINT_IR = false
+  private[executor] val PRINT_IR = true
   // save invariant maps that lead to refutations
   private val SAVE_INVARIANT_MAPS = false
   
@@ -140,13 +124,13 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
           val calleePath = p.deepCopy
           if (PRINT_IR) println(callee.getIR())
           val (enterPaths, skipPaths) = pair
-          
-          // this checks if the callee is System.exit() or calls System.exit() directly. 
+
+          // this checks if the calls System.exit() directly.
           // TODO: for maximal precision, we might want to check if System.exit() can be called transitively. don't want
-          // to try this wihtout evaluating it, though
+          // to try this without evaluating it, though
           def mayDirectlyCallExitMethod() : Boolean = 
             (cg.getSuccNodes(callee).foldLeft (Set.empty[MethodReference]) ((s, n) => s + n.getMethod().getReference())).contains(Path.SYSTEM_EXIT)
-          
+
           if (calleePath.isDispatchFeasible(i, caller, callee, tf) && callee.getMethod().getReference() != Path.SYSTEM_EXIT)            
             if (Path.methodBlacklistContains(callee.getMethod())) { // skip method if it is in our blacklist
               calleePath.dropReturnValueConstraints(i, caller, tf)
@@ -262,12 +246,14 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
               case i : SSAInvokeInstruction =>
                 // calls are a special case. we have to execute even pathsNotToExecute to account for the possibility
                 // that an exception was thrown inside of the call
-                val (pathsNotToExecute, pathsToExecute) = partitionExceptionalAndNormalPaths(thrownExceptionTypes)
+                val (pathsNotToExecute, _) = partitionExceptionalAndNormalPaths(thrownExceptionTypes)
                 val pathsNotToExecuteCopy = pathsNotToExecute.map(p => p.deepCopy)
                 executeInstr(paths, instr).union(pathsNotToExecuteCopy)
               case _ =>
                 val (pathsNotToExecute, pathsToExecute) = partitionExceptionalAndNormalPaths(thrownExceptionTypes)
-                executeInstr(pathsToExecute, instr).union(pathsNotToExecute)
+                // keep exceptional paths that could have caught e, refute other paths
+                val feasibleExceptionalPaths = pathsNotToExecute.filter(p => !p.isExceptional)
+                executeInstr(pathsToExecute, instr).union(feasibleExceptionalPaths)
             }
           } else executeInstr(paths, instr)
         } else paths
@@ -423,7 +409,7 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
       if (Options.SOUND_EXCEPTIONS && startBlk.isCatchBlock) {
         // if we are going backward from a catch block, mark all paths as exceptional
         val caughtExceptionTypes = startBlk.getCaughtExceptionTypes.toSet
-        println(s"setting to exceptional; types are $caughtExceptionTypes")
+        if (DEBUG) println(s"setting path ${p.id} to exceptional; types are $caughtExceptionTypes")
         instrPaths.foreach(p => p.setExceptionTypes(caughtExceptionTypes, cha))
         instrPaths.foreach(p => assert(p.isExceptional))
       }
