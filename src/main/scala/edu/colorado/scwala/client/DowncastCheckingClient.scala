@@ -5,11 +5,12 @@ import java.io.File
 import com.ibm.wala.classLoader.IBytecodeMethod
 import com.ibm.wala.demandpa.alg.BudgetExceededException
 import com.ibm.wala.ipa.callgraph.propagation.{InstanceKey, LocalPointerKey}
+import com.ibm.wala.ipa.cha.ClassHierarchy
 import com.ibm.wala.ssa.SSACheckCastInstruction
-import com.ibm.wala.types.{ClassLoaderReference, MethodReference, TypeReference}
+import com.ibm.wala.types.{ClassLoaderReference, TypeReference}
 import edu.colorado.scwala.state.{ObjVar, PtEdge, Qry}
 import edu.colorado.scwala.util._
-import edu.colorado.thresher.core.Options
+import edu.colorado.thresher.core.{DemandCastChecker, Options}
 
 import scala.collection.JavaConversions.iterableAsScalaIterable
 import scala.io.Source
@@ -28,9 +29,6 @@ class CastCheckingResults(val numSafe : Int, val numMightFail : Int, val numThre
 
 class DowncastCheckingClient(appPath : String, libPath : Option[String], mainClass : String, mainMethod : String, 
     isRegression : Boolean = false) extends Client(appPath, libPath, mainClass, mainMethod, isRegression) {
-
-  // don't use exclusions in cast checking client. may want to change this in the future
-  //override def setExclusions(analysisScope : AnalysisScope) : Unit = () 
  
   def parseCastList(fileName : String) : Set[String] = 
     if (new File(fileName).exists()) {
@@ -50,35 +48,20 @@ class DowncastCheckingClient(appPath : String, libPath : Option[String], mainCla
   def checkCasts() : CastCheckingResults = {
     val walaRes = makeCallGraphAndPointsToAnalysis
     import walaRes._
-
-    /*walaRes.cha.foreach(c => if (!ClassUtil.isLibrary(c)) {
-      println("class: " + c)
-      c.getDeclaredMethods().foreach(m => {
-        println("method " + m + " is static? " + m.isStatic())
-      })
-    })*/
     
     val castTimer = new Timer
     
-    val demandFails : java.util.Map[MethodReference,Set[Int]] = if (Options.USE_DEMAND_CAST_CHECKER) {
-      sys.error("Refactor this not to use Thresher")
-      /*val scope = AnalysisScope.createJavaAnalysisScope()
-      val entryPoints = new LinkedList[Entrypoint]     
-      val cha = edu.colorado.thresher.core.Main.setupScopeAndEntrypoints(Options.APP, entryPoints, scope)
-      val options = new AnalysisOptions(scope, entryPoints) 
-      val demandPair = DemandCastChecker.makeDemandPointerAnalysis(scope, cha.asInstanceOf[ClassHierarchy], entryPoints, options, 
-        edu.colorado.thresher.core.Main.WALA_REGRESSION_EXCLUSIONS)
-      val fails = DemandCastChecker.findFailingCasts(demandPair.fst.getBaseCallGraph(), demandPair.snd, demandPair.fst)
-      println("====Done with demand cast checking====")
-      fails*/
-    } else null
-    //} else Set.empty[Pair[MethodReference,SSACheckCastInstruction]]   
-    
-    //val failSet = parseFailingCastList(Options.APP + "fail_casts.txt")
-    //val failSet = parseFailingCastList(Options.APP + "fail_casts_bc.txt")
-    //val failSet = parseFailingCastList(Options.APP + "fail_casts_piecewise_10.txt")
-    //val failSet = parseCastList(Options.APP + "fail_casts_fi.txt")
-    //val failSet = parseCastList(Options.APP + "fi_fail_casts.txt")
+    val demandFails =
+      if (Options.USE_DEMAND_CAST_CHECKER) {
+        val entryPoints = makeEntrypoints
+        val options = makeOptions(analysisScope, entryPoints)
+        val demandPair =
+          DemandCastChecker.makeDemandPointerAnalysis(analysisScope, walaRes.cha.asInstanceOf[ClassHierarchy], options)
+        val fails = DemandCastChecker.findFailingCasts(demandPair.fst.getBaseCallGraph(), demandPair.snd, demandPair.fst)
+        println("====Done with demand cast checking====")
+        fails
+      } else java.util.Collections.EMPTY_SET
+
     val proveSetFile =
       if (Options.FLOW_INSENSITIVE_ONLY && !Options.USE_DEMAND_CAST_CHECKER) "none.txt" // don't use prove set
       else if (Options.USE_DEMAND_CAST_CHECKER) "prove_casts_fi.txt" // use casts proven by flow-insensitive analysis
@@ -90,35 +73,24 @@ class DowncastCheckingClient(appPath : String, libPath : Option[String], mainCla
     val thProveSet = parseCastList(Options.APP + "prove_casts_th.txt")
     val pwMinusTh = pwProveSet.diff(thProveSet) // run on each of the casts that piecewise can prove, but Thresher can't
     println("pwMinusTh is " + pwMinusTh)
-      */
+    */
       
     // for dacapo only
     val benchPath = Options.APP.substring(0, Options.APP.lastIndexOf('/') + 1)
     println(s"$benchPath")
     val proveSet = parseCastList(benchPath + proveSetFile)
-    //val checkSet = parseCastList("both.txt").map(s => s.toInt)
-    //println("checkSet size is " + checkSet.size + "; " + checkSet)    
-    
-    // TODO: tmp; sanity check!
-    val checked = Util.makeSet[String]
-    
-    //println("failSet size is " + failSet.size) //+ " " + failSet)
+
     println("proveSet size is " + proveSet.size)
-   
-    val exec = makeSymbolicExecutor(walaRes)
-    
-    val NUM_ITERS = 1 // allow multiple runs to exploit recomputed invariant map
-    var res : CastCheckingResults = null // TODO: hack!
-    
     val alreadyRefuted = Util.makeSet[Int]
-    
-    val ITER_1_BUDGET = 10
-    val ITER_2_BUDGET = 10
-    
+    //val NUM_ITERS = 1 // allow multiple runs to exploit recomputed invariant map
+    //val ITER_1_BUDGET = 10
+    //val ITER_2_BUDGET = 10
     //for (i <- 1 to NUM_ITERS) {
     //if (i == 1) Options.TIMEOUT = ITER_1_BUDGET
     //else if (i == 2) Options.TIMEOUT = ITER_2_BUDGET
     //println("doing iter " + i + " using timeout budget " + Options.TIMEOUT)
+
+    val exec = makeSymbolicExecutor(walaRes)
     castTimer.start
 
     val cha = walaRes.cha
@@ -161,11 +133,10 @@ class DowncastCheckingClient(appPath : String, libPath : Option[String], mainCla
                                                                                         key.getConcreteType()))
                                               
                       badKeys.foreach(k => assert(k.getConcreteType() != declaredResultClass, "types " + declaredResultClass + " the same!"))
-                      //if (!checkSet.contains(total)) {
                       if (badKeys.isEmpty ||
                           proveSet.contains(castId)) {
                         //!pwMinusTh.contains(castId)) {
-                        //proveSet.contains(castId) || total < 1178) { // TMP!
+                        //proveSet.contains(castId) || total < 1178) { // TMP for focusing on a specific cast!
                         println("Points-to analysis proved cast #" + total + " safe.")
                         println("CAST_ID: " + castId)
                         (numSafe + 1, numMightFail, numThresherProvedSafe, total + 1)
@@ -178,10 +149,7 @@ class DowncastCheckingClient(appPath : String, libPath : Option[String], mainCla
                         (numSafe + 1, numMightFail, numThresherProvedSafe, total + 1)
                       } else {                        
                         println("According to point-to analysis, cast #" + total + " may fail.")
-                        if (Options.USE_DEMAND_CAST_CHECKER &&                            
-                            //({ val hasKey = demandFails.containsKey(method); println("fails has key? " + hasKey); !hasKey} ||
-                            //{ val failCasts = demandFails.get(method); println("set " + failCasts); !failCasts.contains(index)} )) {
-                            (!demandFails.containsKey(method) || !demandFails.get(method).contains(index))) {
+                        if (Options.USE_DEMAND_CAST_CHECKER && !demandFails.contains(castId)) {
                           println("Demand cast checker proved cast #" + total + " safe.")
                           println("CAST_ID: " + castId)
                           (numSafe + 1, numMightFail, numThresherProvedSafe, total + 1)                        
@@ -201,7 +169,6 @@ class DowncastCheckingClient(appPath : String, libPath : Option[String], mainCla
                           singleCastTimer.start
                           val (foundWitness, fail) =
                             try {
-                              checked.add(castId)
                               // start at line BEFORE cast statement
                               (exec.executeBackward(qry), false)
                             } catch {
@@ -241,15 +208,8 @@ class DowncastCheckingClient(appPath : String, libPath : Option[String], mainCla
     println("Thresher proved safe: " + numThresherProvedSafe)    
     castTimer.stop
     println("Checking all casts took " + castTimer.time + " seconds")
-    
-    // TMP: 
-    //val didntCheck = failSet -- checked
-    //val didntCheck = proveSet -- checked
-    //println("DID NOT CHECK " + didntCheck.size); didntCheck.foreach(println)
-    
-    res = new CastCheckingResults(numSafe, numMightFail, numThresherProvedSafe)
-    //}
-    res
+
+    new CastCheckingResults(numSafe, numMightFail, numThresherProvedSafe)
   }        
 }
 

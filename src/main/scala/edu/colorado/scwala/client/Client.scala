@@ -211,7 +211,6 @@ abstract class Client(appPath : String, libPath : Option[String], mainClass : St
   def setExclusions(analysisScope : AnalysisScope) : Unit = {
     // set exclusions if appropriate
     val exclusionsFile = new File(Options.EXCLUSIONS)
-    //val exclusionsFile = new File(Options.EXCLUSIONS)
     if (exclusionsFile.exists()) {
       if (DEBUG) println(s"Using exclusions file ${exclusionsFile.getAbsolutePath()}")
       analysisScope.setExclusions(new FileOfClasses(new FileInputStream(exclusionsFile)))           
