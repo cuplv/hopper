@@ -4,7 +4,7 @@ import java.io.File
 
 import com.ibm.wala.classLoader.IBytecodeMethod
 import com.ibm.wala.demandpa.alg.BudgetExceededException
-import com.ibm.wala.ipa.callgraph.propagation.LocalPointerKey
+import com.ibm.wala.ipa.callgraph.propagation.{InstanceKey, LocalPointerKey}
 import com.ibm.wala.ssa.SSACheckCastInstruction
 import com.ibm.wala.types.{ClassLoaderReference, MethodReference, TypeReference}
 import edu.colorado.scwala.state.{ObjVar, PtEdge, Qry}
@@ -154,8 +154,11 @@ class DowncastCheckingClient(appPath : String, libPath : Option[String], mainCla
                               " source line " + IRUtil.getSourceLine(bytecodeIndex, bytecodeMethod))//edu.colorado.thresher.core.Util.getSourceLineNumber(ir, index))
                       val castPk = hm.getPointerKeyForLocal(node, castInstr.getUse(0)).asInstanceOf[LocalPointerKey]  
                       val declaredResultClass = cha.lookupClass(declaredResultType)
-                      assert(declaredResultClass != null, "Null class for " + declaredResultType)
-                      val badKeys = pa.getPointsToSet(castPk).filter(key => !cha.isAssignableFrom(declaredResultClass, key.getConcreteType()))
+                      val badKeys =
+                        if (declaredResultClass == null) Set.empty[InstanceKey] // this can happen because of exclusions
+                        else
+                          pa.getPointsToSet(castPk).filter(key => !cha.isAssignableFrom(declaredResultClass,
+                                                                                        key.getConcreteType()))
                                               
                       badKeys.foreach(k => assert(k.getConcreteType() != declaredResultClass, "types " + declaredResultClass + " the same!"))
                       //if (!checkSet.contains(total)) {

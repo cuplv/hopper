@@ -8,8 +8,8 @@ org\/netbeans\/.*
 org\/openide\/.*
 com\/ibm\/crypto\/.*
 com\/ibm\/security\/.*
-java\/nio\/charset.*
-org\/apache\/.*
+org\/apache\/xerces\/.*
 java\/lang\/IntegralToString
+java\/nio\/charset.*
 java\/util\/concurrent.*
 
