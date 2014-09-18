@@ -1,49 +1,22 @@
 package edu.colorado.scwala.client.android
 
-import scala.collection.JavaConversions.asJavaCollection
-import scala.collection.JavaConversions.asScalaBuffer
-import scala.collection.JavaConversions.asScalaSet
-import scala.collection.JavaConversions.bufferAsJavaList
-import scala.collection.JavaConversions.collectionAsScalaIterable
-import scala.collection.JavaConversions.iterableAsScalaIterable
-import scala.collection.JavaConversions.mutableSetAsJavaSet
-import scala.collection.JavaConversions.seqAsJavaList
-import com.ibm.wala.classLoader.IClass
-import com.ibm.wala.classLoader.IField
+import com.ibm.wala.classLoader.{IClass, IField}
 import com.ibm.wala.demandpa.alg.BudgetExceededException
-import com.ibm.wala.ipa.callgraph.propagation.AbstractTypeInNode
-import com.ibm.wala.ipa.callgraph.propagation.AllocationSiteInNode
-import com.ibm.wala.ipa.callgraph.propagation.ArrayContentsKey
-import com.ibm.wala.ipa.callgraph.propagation.ConcreteTypeKey
-import com.ibm.wala.ipa.callgraph.propagation.InstanceFieldKey
-import com.ibm.wala.ipa.callgraph.propagation.InstanceKey
-import com.ibm.wala.ipa.callgraph.propagation.PointerKey
-import com.ibm.wala.ipa.callgraph.propagation.StaticFieldKey
-import com.ibm.wala.types.ClassLoaderReference
-import com.ibm.wala.types.TypeReference
+import com.ibm.wala.ipa.callgraph.AnalysisScope
+import com.ibm.wala.ipa.callgraph.propagation.{AllocationSiteInNode, ArrayContentsKey, ConcreteTypeKey, InstanceFieldKey, InstanceKey, PointerKey, StaticFieldKey}
+import com.ibm.wala.types.{ClassLoaderReference, TypeReference}
 import com.ibm.wala.types.annotations.Annotation
 import com.ibm.wala.util.graph.Graph
 import com.ibm.wala.util.graph.traverse.DFS
-import edu.colorado.scwala.client.WalaAnalysisResults
+import edu.colorado.scwala.client.{ClientTests, WalaAnalysisResults}
 import edu.colorado.scwala.piecewise.RelevanceRelation
 import edu.colorado.scwala.solver.Z3Solver
-import edu.colorado.scwala.state.CallStack
-import edu.colorado.scwala.state.Fld
-import edu.colorado.scwala.state.HeapPtEdge
-import edu.colorado.scwala.state.ObjVar
-import edu.colorado.scwala.state.PtEdge
-import edu.colorado.scwala.state.PureConstraint
-import edu.colorado.scwala.state.Qry
-import edu.colorado.scwala.state.Path
-import edu.colorado.scwala.util.ClassUtil
-import edu.colorado.scwala.util.LoopUtil
-import edu.colorado.scwala.util.Timer
-import edu.colorado.scwala.util.Util
-import edu.colorado.thresher.core.HeapGraphWrapper
-import edu.colorado.thresher.core.Options
+import edu.colorado.scwala.state.{CallStack, Fld, HeapPtEdge, ObjVar, Path, PtEdge, PureConstraint, Qry}
 import edu.colorado.scwala.util.Types._
-import edu.colorado.scwala.client.ClientTests
-import com.ibm.wala.ipa.callgraph.AnalysisScope
+import edu.colorado.scwala.util.{ClassUtil, LoopUtil, Timer, Util}
+import edu.colorado.thresher.core.{HeapGraphWrapper, Options}
+
+import scala.collection.JavaConversions.{asJavaCollection, asScalaBuffer, asScalaSet, bufferAsJavaList, collectionAsScalaIterable, iterableAsScalaIterable, mutableSetAsJavaSet, seqAsJavaList}
 
 class AndroidLeakClient(appPath : String, libPath : Option[String], mainClass : String, mainMethod : String, 
   isRegression : Boolean = false) extends AndroidClient(appPath, libPath, mainClass, mainMethod, isRegression) {
@@ -294,20 +267,20 @@ object AndroidLeakClientTests extends ClientTests {
         "LoopInBranchRefute", "LoopInBranchNoRefute", "HeapReturnRefute", "HeapReturnNoRefute", "NullRefute",
         "NullNoRefute", "IrrelevantBranchNoRefute", "UninitVarRefute", "UninitVarNoRefute", "ArrayLengthRefute",
         "ArrayLengthNoRefute", "DoubleLoopAndBranchNoRefute", 
-        //"SimpleDisjunctiveRefute", // broken with stack overflow right now 
+        //"SimpleDisjunctiveRefute", // broken with stack overflow right now
         "SimpleDisjunctiveNoRefute", "HarderDisjunctiveRefute", "BranchReturnRefute",
         "SimpleConjunctiveRefute", "SimpleConjunctiveNoRefute", "MultiLevelParamPassRefute", "MultiLevelParamPassNoRefute",
         "StartInLoopNoRefute", "CallInLoopHeadRefute", "CallInLoopHeadNoRefute", "LoopProcRefute", "LoopProcNoRefute", "BreakLoopNoRefute",
         "ForEachLoopRefute", "ForEachLoopNoRefute",
-        //"InfiniteLoopRefute",
+        //"InfiniteLoopRefute", // this test is wrong -- refuting is unsound
         "StraightLineCaseSplitNoRefute", "ManuLoopNoRefute",
         "CallPruningNoRefute", "SingletonNoRefute", "ForEachLoopArrRefute", "CheckCastNoRefute", "BranchReturnRefute",
         "IndexSensitiveRefute", "IndexSensitiveNoRefute", "IndexSensitiveDefaultValRefute", "IndexSensitiveDefaultValNoRefute",
         "IndexSensitiveVarIndexRefute", "IndexSensitiveVarIndexNoRefute", 
         "LoopThrowNoRefute", "DoLoopRefute",
         "SimpleAliasingNoRefute", 
-        //"SimpleHashMapRefute", // can't refute currently 
-        //"SimpleHashMapNoRefute", 
+        //"SimpleHashMapRefute", // now fixed in android.jar, doesn't fail anymore
+        "SimpleHashMapNoRefute",
         "ContainsKeyRefute", "ContainsKeyNoRefute")
   
         // TODO: break, continue, labeled break, labeled continue, do...while

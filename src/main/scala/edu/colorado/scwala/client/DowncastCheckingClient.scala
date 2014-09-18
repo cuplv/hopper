@@ -273,7 +273,7 @@ object DowncastCheckingClientTests extends ClientTests {
                      "SwitchRefute", "SwitchNoRefute", "InfiniteLoopReturnRefute", "ListContainmentNoRefute", 
                      "SwitchReturnNoRefute", 
                      "HashtableEnumeratorNoRefute",
-                     //"HashtableEnumeratorRefute",
+                     "HashtableEnumeratorRefute",
                      "InstrOpcodeIndexSensitivePiecewiseRefute", "InstrOpcodeIndexSensitivePiecewiseNoRefute")
                         //"CallTypeRefute", "CallTypeNoRefute") // will fix these later; results are sound, but not precise
 
@@ -292,7 +292,7 @@ object DowncastCheckingClientTests extends ClientTests {
         //if (javaVersion == J51 || javaVersion == J55 || javaVersion == J67)
           //new CastCheckingResults(2, 3, 0) else new CastCheckingResults(4, 1, 0))
     resultsMap.put("HashtableEnumeratorRefute", new CastCheckingResults(0, 2, 2))
-    resultsMap.put("HashtableEnumeratorNoRefute", new CastCheckingResults(0, 2, 0))
+    resultsMap.put("HashtableEnumeratorNoRefute", new CastCheckingResults(0, 2, 1))
     resultsMap.put("CatchNoRefute", new CastCheckingResults(0, 1, 0))
     resultsMap.put("CatchRefute", new CastCheckingResults(1, 0, 0))
 
