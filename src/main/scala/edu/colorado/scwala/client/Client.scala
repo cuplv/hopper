@@ -195,6 +195,12 @@ abstract class Client(appPath : String, libPath : Option[String], mainClass : St
         analysisScope.addToScope(analysisScope.getPrimordialLoader(), new JarFile(libFile))
       case None => sys.error("Can't find path to Java libraries. Exiting.")
     }
+
+    getStubs match {
+      case Some(stubDir) =>
+        analysisScope.addToScope(analysisScope.getPrimordialLoader, new BinaryDirectoryTreeModule(stubDir))
+      case None => ()
+    }
     
     val THRESHER_ASSERTS_AND_ANNOTATIONS_PATH = "../thresher/bin/edu/colorado/thresher/external"
     
@@ -233,6 +239,12 @@ abstract class Client(appPath : String, libPath : Option[String], mainClass : St
   def getJVMLibFile : Option[File] = {    
     val PATH = System.getProperty("java.home")
     List(new File(PATH + "/lib/rt.jar"), new File(PATH + "/../Classes/classes.jar")).find(f => f.exists())
+  }
+
+  def getStubs : Option[File] = {
+    val stubDir = new File("stubs")
+    if (stubDir.exists() && stubDir.isDirectory) Some(stubDir)
+    else None
   }
     
 }

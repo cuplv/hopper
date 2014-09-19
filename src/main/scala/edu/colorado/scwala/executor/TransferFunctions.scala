@@ -1,65 +1,25 @@
 package edu.colorado.scwala.executor
 
-import scala.collection.JavaConversions._
-
 import com.ibm.wala.analysis.pointers.HeapGraph
 import com.ibm.wala.analysis.typeInference.TypeAbstraction
-import com.ibm.wala.classLoader.IClass
-import com.ibm.wala.classLoader.IField
-import com.ibm.wala.ipa.callgraph.CGNode
-import com.ibm.wala.ipa.callgraph.CallGraph
-import com.ibm.wala.ipa.callgraph.ContextKey
-import com.ibm.wala.ipa.callgraph.propagation.AllocationSiteInNode
-import com.ibm.wala.ipa.callgraph.propagation.ConcreteTypeKey
-import com.ibm.wala.ipa.callgraph.propagation.HeapModel
-import com.ibm.wala.ipa.callgraph.propagation.InstanceKey
-import com.ibm.wala.ipa.callgraph.propagation.LocalPointerKey
-import com.ibm.wala.ipa.callgraph.propagation.PointerKey
-import com.ibm.wala.ipa.callgraph.propagation.StaticFieldKey
+import com.ibm.wala.classLoader.{IClass, IField}
+import com.ibm.wala.ipa.callgraph.{CGNode, CallGraph, ContextKey}
+import com.ibm.wala.ipa.callgraph.propagation.{AllocationSiteInNode, ConcreteTypeKey, HeapModel, InstanceKey, LocalPointerKey, PointerKey}
 import com.ibm.wala.ipa.cha.IClassHierarchy
 import com.ibm.wala.ipa.modref.DelegatingExtendedHeapModel
-import com.ibm.wala.ssa.ISSABasicBlock
-import com.ibm.wala.ssa.SSAArrayLengthInstruction
-import com.ibm.wala.ssa.SSAArrayLoadInstruction
-import com.ibm.wala.ssa.SSAArrayReferenceInstruction
-import com.ibm.wala.ssa.SSAArrayStoreInstruction
-import com.ibm.wala.ssa.SSABinaryOpInstruction
-import com.ibm.wala.ssa.SSACFG
-import com.ibm.wala.ssa.SSACheckCastInstruction
-import com.ibm.wala.ssa.SSAComparisonInstruction
-import com.ibm.wala.ssa.SSAConditionalBranchInstruction
-import com.ibm.wala.ssa.SSAConversionInstruction
-import com.ibm.wala.ssa.SSAFieldAccessInstruction
-import com.ibm.wala.ssa.SSAGetCaughtExceptionInstruction
-import com.ibm.wala.ssa.SSAGetInstruction
-import com.ibm.wala.ssa.SSAGotoInstruction
-import com.ibm.wala.ssa.SSAInstanceofInstruction
-import com.ibm.wala.ssa.SSAInstruction
-import com.ibm.wala.ssa.SSAInvokeInstruction
-import com.ibm.wala.ssa.SSALoadMetadataInstruction
-import com.ibm.wala.ssa.SSAMonitorInstruction
-import com.ibm.wala.ssa.SSANewInstruction
-import com.ibm.wala.ssa.SSAPhiInstruction
-import com.ibm.wala.ssa.SSAPutInstruction
-import com.ibm.wala.ssa.SSAReturnInstruction
-import com.ibm.wala.ssa.SSAThrowInstruction
-import com.ibm.wala.ssa.SSAUnaryOpInstruction
-import com.ibm.wala.ssa.SymbolTable
+import com.ibm.wala.ssa.{ISSABasicBlock, SSAArrayLengthInstruction, SSAArrayLoadInstruction, SSAArrayReferenceInstruction, SSAArrayStoreInstruction, SSABinaryOpInstruction, SSACFG, SSACheckCastInstruction, SSAComparisonInstruction, SSAConditionalBranchInstruction, SSAConversionInstruction, SSAGetCaughtExceptionInstruction, SSAGetInstruction, SSAGotoInstruction, SSAInstanceofInstruction, SSAInstruction, SSAInvokeInstruction, SSALoadMetadataInstruction, SSAMonitorInstruction, SSANewInstruction, SSAPhiInstruction, SSAPutInstruction, SSAReturnInstruction, SSAThrowInstruction, SSAUnaryOpInstruction}
 import com.ibm.wala.types.TypeReference
 import com.ibm.wala.util.graph.traverse.DFS
 import com.ibm.wala.util.intset.OrdinalSet
-
-import TransferFunctions._
-import edu.colorado.scwala.state._
-import edu.colorado.scwala.state.CallStackFrame
-import edu.colorado.scwala.state.ObjPtEdge
-import edu.colorado.scwala.state.PureVal
+import edu.colorado.scwala.executor.TransferFunctions._
+import edu.colorado.scwala.state.{CallStackFrame, ObjPtEdge, _}
 import edu.colorado.scwala.synthesis.InterfaceMethodField
-import edu.colorado.scwala.util.ClassUtil
 import edu.colorado.scwala.util.PtUtil._
 import edu.colorado.scwala.util.Types._
-import edu.colorado.scwala.util.Util
+import edu.colorado.scwala.util.{ClassUtil, Util}
 import edu.colorado.thresher.core.Options
+
+import scala.collection.JavaConversions._
 
 object TransferFunctions {  
   def DEBUG = Options.SCALA_DEBUG      
@@ -1738,7 +1698,8 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph, _hm : HeapModel,
   }
   
   // if dropConstraints is true, drops constraints produceable by callee -- otherwise, returns true if callee is relevant to qry
-  private def dropCallConstraintsOrCheckCallRelevant(callee : CGNode, heapConstraints : MSet[HeapPtEdge], dropConstraints : Boolean, loopDrop : Boolean, qry : Qry) : Boolean = {
+  private def dropCallConstraintsOrCheckCallRelevant(callee : CGNode, heapConstraints : MSet[HeapPtEdge],
+                                                     dropConstraints : Boolean, loopDrop : Boolean, qry : Qry) : Boolean = {
     val modKeys = modRef.get(callee).toSet // set of pointer keys modified by the callee function
     val staticFlds = // static fields declared by the callee function (if any)
       if (callee.getMethod().isClinit()) callee.getMethod().getDeclaringClass().getDeclaredStaticFields().toSet else Set.empty[IField]
@@ -1820,7 +1781,7 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph, _hm : HeapModel,
                 case None => sys.error("Empty region for " + x)                  
               }                     
             case ClassVar(c) => true
-          }}) dropHeapConstraint(e, qry, loopDrop)// src and snk both match -- need to drop this constraint
+          }}) dropHeapConstraint(e, qry, loopDrop) // src and snk both match -- need to drop this constraint
         })
       case i : SSAArrayStoreInstruction => // x[i] = y
         heapConstraints.foreach(e => e match {
@@ -1850,12 +1811,12 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph, _hm : HeapModel,
           case _ => ()
         })
         
-      case i : SSAInvokeInstruction =>     
+      case i : SSAInvokeInstruction =>
         def dropEdgeIfConsumedByInitToDefaultVals(e : HeapPtEdge) = e.snk match {
           case p@PureVar(_) => 
             if (qry.checkTmpPureConstraint(Pure.makeDefaultValConstraint(p)))
               assert(!e.snk.isArrayType) // TODO: initialize array contents to default vals?
-              dropHeapConstraint(e, qry, loopDrop) 
+            dropHeapConstraint(e, qry, loopDrop)
               // else, initialization to pure vars would not produce e                
           case ObjVar(_) => () // no need to drop; initialization to default values can't assign an objet (only null)
         }   
@@ -1913,11 +1874,11 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph, _hm : HeapModel,
   def dropLoopWriteableConstraints(qry : Qry, loopHead : ISSABasicBlock, n : CGNode) : Unit = {
     if (DEBUG) println("Doing loop drop for " + qry.id + " head " + loopHead)
     val loopInstrs = edu.colorado.thresher.core.WALACFGUtil.getInstructionsInLoop(loopHead.asInstanceOf[SSACFG#BasicBlock], n.getIR()).toSet
-    dropConstraintsFromInstructions(loopInstrs,
-    //dropConstraintsFromInstructions(edu.colorado.thresher.core.WALACFGUtil.getInstructionsInLoop(loopHead.asInstanceOf[SSACFG#BasicBlock], n.getIR()),     
-        //n, qry, modRef, callee = None, loopDrop = true)
-    // do *not* flip loopDrop to true -- it causes problems
-        n, qry, callee = None, loopDrop = false)
+    dropConstraintsFromInstructions(loopInstrs, n, qry, callee = None,
+      // do *not* flip loopDrop to true -- it causes problems
+      loopDrop = false)
+
+
   }
               
 }

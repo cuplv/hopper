@@ -1,21 +1,13 @@
 package edu.colorado.scwala.solver
 
-import edu.colorado.scwala.state.PureExpr
-import com.ibm.wala.shrikeBT.IConditionalBranchInstruction
-import edu.colorado.scwala.util.Types._
-import edu.colorado.scwala.state.CharVal
-import edu.colorado.scwala.state.PureVar
-import edu.colorado.scwala.state.IntVal
+import com.ibm.wala.shrikeBT.{IBinaryOpInstruction, IConditionalBranchInstruction}
 import com.ibm.wala.types.TypeReference
-import edu.colorado.scwala.state.PureBinExpr
-import com.ibm.wala.shrikeBT.IBinaryOpInstruction
-import edu.colorado.scwala.state.PureConstraint
-import edu.colorado.scwala.state.PureVal
-import edu.colorado.scwala.state.BoolVal
-import edu.colorado.scwala.state.PureAtomicConstraint
-import edu.colorado.scwala.state.PureDisjunctiveConstraint
+import edu.colorado.scwala.state.{BoolVal, CharVal, IntVal, PureAtomicConstraint, PureBinExpr, PureConstraint, PureDisjunctiveConstraint, PureExpr, PureVar}
+import edu.colorado.scwala.util.Types._
 
 trait Assumptions
+
+object UnknownSMTResult extends Exception
 
 /** SMT solver parameterized by its AST or expression type */
 trait Solver[T] {

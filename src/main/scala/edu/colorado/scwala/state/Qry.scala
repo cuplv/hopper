@@ -1,24 +1,16 @@
 package edu.colorado.scwala.state
 
-import scala.collection.JavaConversions._
 import com.ibm.wala.analysis.pointers.HeapGraph
 import com.ibm.wala.classLoader.IField
 import com.ibm.wala.ipa.callgraph.CGNode
-import com.ibm.wala.ipa.callgraph.propagation.HeapModel
-import com.ibm.wala.ipa.callgraph.propagation.InstanceKey
-import com.ibm.wala.ssa.ISSABasicBlock
-import com.ibm.wala.ssa.SSAInstruction
-import Qry._
-import edu.colorado.scwala.solver.Solver
-import edu.colorado.scwala.solver.Z3Solver
+import com.ibm.wala.ipa.callgraph.propagation.{HeapModel, InstanceKey}
+import com.ibm.wala.ssa.{ISSABasicBlock, SSAInstruction}
+import edu.colorado.scwala.solver.{Solver, UnknownSMTResult, Z3Solver}
+import edu.colorado.scwala.state.Qry._
 import edu.colorado.scwala.translate.Concretizable
-import edu.colorado.scwala.util.CGNodeUtil
-import edu.colorado.scwala.util.PtUtil
 import edu.colorado.scwala.util.Types._
-import edu.colorado.scwala.util.Util
+import edu.colorado.scwala.util.{CFGUtil, CGNodeUtil, IRUtil, PtUtil, Util}
 import edu.colorado.thresher.core.Options
-import edu.colorado.scwala.util.CFGUtil
-import edu.colorado.scwala.util.IRUtil
 
 object Qry {
   private def DEBUG = Options.SCALA_DEBUG  
@@ -233,9 +225,17 @@ class Qry(val heapConstraints : MSet[HeapPtEdge], val pureConstraints : MSet[Pur
       if (pureConstraints.add(p)) solver.mkAssertWithAssumption(id.toString, p)         
     }   
 
-    val res = checkPureConstraintsSAT
-    if (!res && Options.PRINT_REFS) println(s"Refuted by pure constraint! ${this.id}")
-    res
+    try {
+      val res = checkPureConstraintsSAT
+      if (!res && Options.PRINT_REFS) println(s"Refuted by pure constraint! ${this.id}")
+      res
+    } catch {
+      case UnknownSMTResult =>
+        // SMT solver can't handle this constraint; just drop it and assume SAT
+        removePureConstraint(p)
+        true
+      case e : Throwable => throw e
+    }
   }  
   
   // "assumptions" here are the id's of the current query and each of its parent queries. whenever a query adds a pure constraint p, it adds "id => p"
