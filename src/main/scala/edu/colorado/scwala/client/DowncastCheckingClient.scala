@@ -163,8 +163,7 @@ class DowncastCheckingClient(appPath : String, libPath : Option[String], mainCla
                           // for instr v0 = checkcast v1 T, query is v1 -> a && (a from badKeys)
                           val localEdge = PtEdge.make(castPk, ObjVar(badKeys.toSet))
                           val qry = Qry.make(List(localEdge), castInstr, node, hm, startBeforeI = true)
-                          
-                          //println("starting in " + node.getIR())
+
                           val singleCastTimer = new Timer
                           singleCastTimer.start
                           val (foundWitness, fail) =

@@ -1,38 +1,15 @@
 package edu.colorado.scwala.util
 
-import com.ibm.wala.classLoader.IClass
-import com.ibm.wala.types.ClassLoaderReference
-import com.ibm.wala.classLoader.IField
+import com.ibm.wala.classLoader.{IClass, IField, IMethod}
 import com.ibm.wala.ipa.callgraph.CGNode
-import com.ibm.wala.classLoader.IMethod
-import com.ibm.wala.types.FieldReference
-import com.ibm.wala.ssa.SSAPutInstruction
-import com.ibm.wala.ssa.SSABinaryOpInstruction
-import com.ibm.wala.ssa.SSAGetInstruction
-import com.ibm.wala.ssa.SSAArrayLoadInstruction
-import com.ibm.wala.ssa.SSANewInstruction
-import com.ibm.wala.ssa.SSAArrayLengthInstruction
-import com.ibm.wala.ssa.SSAArrayStoreInstruction
-import com.ibm.wala.ssa.SSAInstruction
-import com.ibm.wala.ssa.SSAConditionalBranchInstruction
-import com.ibm.wala.ssa.SSAInstanceofInstruction
-import com.ibm.wala.ssa.SSAUnaryOpInstruction
-import com.ibm.wala.ssa.SSACheckCastInstruction
-import com.ibm.wala.ssa.SSAAbstractInvokeInstruction
-import com.ibm.wala.ssa.SSAReturnInstruction
-import com.ibm.wala.ssa.IR
-import com.ibm.wala.shrikeBT.IConditionalBranchInstruction.Operator._
-import com.ibm.wala.shrikeBT.IBinaryOpInstruction.Operator._
-import com.ibm.wala.shrikeBT.IUnaryOpInstruction.Operator._
-import com.ibm.wala.shrikeBT.IShiftInstruction.Operator._
-import com.ibm.wala.ssa.SSAPhiInstruction
-import com.ibm.wala.types.MethodReference
-import com.ibm.wala.types.TypeReference
+import com.ibm.wala.ipa.callgraph.propagation.{AllocationSiteInNode, InstanceKey}
 import com.ibm.wala.ipa.cha.IClassHierarchy
-import com.ibm.wala.ipa.callgraph.propagation.AllocationSiteInNode
-import com.ibm.wala.ipa.callgraph.propagation.InstanceKey
-import com.ibm.wala.util.strings.Atom
-import com.ibm.wala.types.TypeName
+import com.ibm.wala.shrikeBT.IBinaryOpInstruction.Operator._
+import com.ibm.wala.shrikeBT.IConditionalBranchInstruction.Operator._
+import com.ibm.wala.shrikeBT.IShiftInstruction.Operator._
+import com.ibm.wala.shrikeBT.IUnaryOpInstruction.Operator._
+import com.ibm.wala.ssa.{IR, SSAAbstractInvokeInstruction, SSAArrayLengthInstruction, SSAArrayLoadInstruction, SSAArrayStoreInstruction, SSABinaryOpInstruction, SSACheckCastInstruction, SSAConditionalBranchInstruction, SSAGetInstruction, SSAInstanceofInstruction, SSAInstruction, SSANewInstruction, SSAPhiInstruction, SSAPutInstruction, SSAReturnInstruction, SSAUnaryOpInstruction}
+import com.ibm.wala.types.{ClassLoaderReference, MethodReference, TypeName, TypeReference}
 
 object ClassUtil {
   
@@ -96,7 +73,7 @@ object ClassUtil {
     (firstParam to m.getNumberOfParameters() - 1).map(i => m.getParameterType(i))
     
   // TODO: move this somewhere reasonable  
-  def pp_instr (i : SSAInstruction, ir : IR) : Unit = if (ir != null) {    
+  def pp_instr (i : SSAInstruction, ir : IR) : Unit = if (ir != null) {
     val assign = " := "  
     val tbl = ir.getSymbolTable()
     i match {
@@ -158,14 +135,14 @@ object ClassUtil {
             case SHL => print(" << ")
             case SHR => print(" >> ")
             case USHR => print(" >>> ")
-            case op => sys.error("unsupported op " + op)
+            case op => print(op)
           }
           print(v(i.getUse(1)))
         case i : SSAUnaryOpInstruction =>         
           print(v(i.getDef()) + assign)
           i.getOpcode() match {
             case NEG => print('!')
-            case op => sys.error("unsupported op " + op)
+            case op => print(op)
           }
           print(v(i.getUse(0)))
         case i : SSAInstanceofInstruction => 

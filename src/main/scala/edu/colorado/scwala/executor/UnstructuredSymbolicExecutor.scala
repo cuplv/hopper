@@ -22,10 +22,10 @@ import edu.colorado.thresher.core.Options
 import scala.collection.JavaConversions.{asScalaBuffer, asScalaIterator, asScalaSet, collectionAsScalaIterable, mapAsJavaMap}
 
 object UnstructuredSymbolicExecutor {
-  protected[executor] def DEBUG = true//Options.SCALA_DEBUG
+  protected[executor] def DEBUG = Options.SCALA_DEBUG
   protected[executor] def MIN_DEBUG = DEBUG
   private[executor] val TRACE = false
-  private[executor] val PRINT_IR = true
+  private[executor] val PRINT_IR = false
   // save invariant maps that lead to refutations
   private val SAVE_INVARIANT_MAPS = false
   
@@ -35,7 +35,6 @@ object UnstructuredSymbolicExecutor {
 
 class DefaultSymbolicExecutor(override val tf : TransferFunctions) extends UnstructuredSymbolicExecutor {}
 
-//class UnstructuredSymbolicExecutor(val tf : TransferFunctions) extends SymbolicExecutor {
 trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
   val tf : TransferFunctions
   
