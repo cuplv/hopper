@@ -7,7 +7,7 @@ import edu.colorado.scwala.util.Types._
 
 trait Assumptions
 
-object UnknownSMTResult extends Exception
+class UnknownSMTResult(msg : String) extends Exception(msg)
 
 /** SMT solver parameterized by its AST or expression type */
 trait Solver[T] {

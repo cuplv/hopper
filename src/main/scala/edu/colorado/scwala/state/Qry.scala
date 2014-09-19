@@ -5,7 +5,7 @@ import com.ibm.wala.classLoader.IField
 import com.ibm.wala.ipa.callgraph.CGNode
 import com.ibm.wala.ipa.callgraph.propagation.{HeapModel, InstanceKey}
 import com.ibm.wala.ssa.{ISSABasicBlock, SSAInstruction}
-import edu.colorado.scwala.solver.{Solver, UnknownSMTResult, Z3Solver}
+import edu.colorado.scwala.solver.{UnknownSMTResult, Solver, Z3Solver}
 import edu.colorado.scwala.state.Qry._
 import edu.colorado.scwala.translate.Concretizable
 import edu.colorado.scwala.util.Types._
@@ -87,12 +87,22 @@ object Qry {
   }
   
   def indicesPossiblyEqual(qry : Qry, fld : ArrayFld, indexVar : PureVar) : Boolean = fld.index match {
-    case Some(index) => qry.checkTmpPureConstraint(Pure.makeEqConstraint(indexVar, index))
+    case Some(index) =>
+      try
+        qry.checkTmpPureConstraint(Pure.makeEqConstraint(indexVar, index))
+      catch {
+        case e : UnknownSMTResult => true
+      }
     case None => true // no index specified; could be equal
   }          
   
   def indicesDefinitelyEqual(qry : Qry, fld : ArrayFld, indexVar : PureVar) : Boolean = fld.index match {
-    case Some(index) => !qry.checkTmpPureConstraint(Pure.makeNeConstraint(indexVar, index))
+    case Some(index) =>
+      try
+        !qry.checkTmpPureConstraint(Pure.makeNeConstraint(indexVar, index))
+      catch {
+        case e : UnknownSMTResult => false
+      }
     case None => false // no index specified; might not be equal
   }  
 }
@@ -230,11 +240,10 @@ class Qry(val heapConstraints : MSet[HeapPtEdge], val pureConstraints : MSet[Pur
       if (!res && Options.PRINT_REFS) println(s"Refuted by pure constraint! ${this.id}")
       res
     } catch {
-      case UnknownSMTResult =>
+      case e : UnknownSMTResult =>
         // SMT solver can't handle this constraint; just drop it and assume SAT
         removePureConstraint(p)
         true
-      case e : Throwable => throw e
     }
   }  
   
@@ -472,7 +481,13 @@ class Qry(val heapConstraints : MSet[HeapPtEdge], val pureConstraints : MSet[Pur
       }
   }
   
-  def foundWitness : Boolean = localConstraints.isEmpty && heapConstraints.isEmpty && checkPureConstraintsSAT
+  def foundWitness : Boolean = localConstraints.isEmpty && {
+    try
+     checkPureConstraintsSAT
+    catch {
+      case e : UnknownSMTResult => true // conservatively assume SAT
+    }
+  }
   
   def getPT(v : StackVar) : Set[Val] = Qry.getPT(v, localConstraints)
   

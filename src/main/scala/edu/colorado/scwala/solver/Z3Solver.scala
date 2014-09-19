@@ -55,8 +55,8 @@ class Z3Solver extends ModelSolver[AST] {
     case Status.UNSATISFIABLE => false
     case Status.SATISFIABLE => true
     case Status.UNKNOWN =>
-      println("Z3 decidability issue--got Status.UNKNOWN")
-      throw UnknownSMTResult
+      // this usually happens because of timeouts
+      throw new UnknownSMTResult("Z3 decidability or timeout issue--got Status.UNKNOWN")
   } 
   
   override def mkAssert(a : AST) : Unit = solver.Assert(a.asInstanceOf[BoolExpr])

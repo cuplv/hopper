@@ -1,62 +1,23 @@
 package edu.colorado.scwala.piecewise
 
-import scala.collection.JavaConversions._
 import com.ibm.wala.analysis.pointers.HeapGraph
-import com.ibm.wala.ipa.callgraph.CGNode
-import com.ibm.wala.ipa.callgraph.CallGraph
-import com.ibm.wala.ipa.callgraph.propagation.HeapModel
-import com.ibm.wala.ipa.callgraph.propagation.LocalPointerKey
+import com.ibm.wala.ipa.callgraph.{CGNode, CallGraph}
+import com.ibm.wala.ipa.callgraph.propagation.{HeapModel, InstanceKey, LocalPointerKey}
 import com.ibm.wala.ipa.cfg.ExceptionPrunedCFG
 import com.ibm.wala.ipa.cha.IClassHierarchy
-import com.ibm.wala.ssa.ISSABasicBlock
-import com.ibm.wala.ssa.SSAArrayLoadInstruction
-import com.ibm.wala.ssa.SSAArrayStoreInstruction
-import com.ibm.wala.ssa.SSACFG
-import com.ibm.wala.ssa.SSAGetInstruction
-import com.ibm.wala.ssa.SSAInstruction
-import com.ibm.wala.ssa.SSAInvokeInstruction
-import com.ibm.wala.ssa.SSANewInstruction
-import com.ibm.wala.ssa.SSAPhiInstruction
-import com.ibm.wala.ssa.SSAPutInstruction
-import com.ibm.wala.ssa.SymbolTable
+import com.ibm.wala.ssa.{ISSABasicBlock, SSAArrayLoadInstruction, SSAArrayStoreInstruction, SSACFG, SSAGetInstruction, SSAInstruction, SSAInvokeInstruction, SSANewInstruction, SSAPhiInstruction, SSAPutInstruction, SSAReturnInstruction, SymbolTable}
 import com.ibm.wala.util.graph.dominators.Dominators
 import com.ibm.wala.util.graph.impl.GraphInverter
-import com.ibm.wala.util.intset.BasicNaturalRelation
-import com.ibm.wala.util.intset.OrdinalSet
+import com.ibm.wala.util.intset.{BasicNaturalRelation, OrdinalSet}
 import com.twitter.util.LruMap
-import RelevanceRelation._
-import edu.colorado.scwala.state.InstanceFld
-import edu.colorado.scwala.state.ArrayFld
-import edu.colorado.scwala.state.ArrayPtEdge
-import edu.colorado.scwala.state.ObjPtEdge
-import edu.colorado.scwala.state.ClassVar
-import edu.colorado.scwala.state.ObjVar
-import edu.colorado.scwala.state.PtEdge
-import edu.colorado.scwala.state.Pure
-import edu.colorado.scwala.state.PureVar
-import edu.colorado.scwala.state.Qry
-import edu.colorado.scwala.state.Var
-import edu.colorado.scwala.state.StaticFld
-import edu.colorado.scwala.state.Path
-import edu.colorado.scwala.util.ClassUtil
-import edu.colorado.scwala.util.IRUtil
-import edu.colorado.scwala.util.PtUtil
+import edu.colorado.scwala.piecewise.RelevanceRelation._
+import edu.colorado.scwala.solver.UnknownSMTResult
+import edu.colorado.scwala.state.{ArrayFld, ArrayPtEdge, Fld, HeapPtEdge, InstanceFld, LocalPtEdge, LocalVar, ObjPtEdge, ObjVar, Path, PtEdge, Pure, PureVar, Qry, ReturnVar, StaticFld, StaticPtEdge, Val, Var}
 import edu.colorado.scwala.util.Types._
-import edu.colorado.scwala.util.Util
-import edu.colorado.thresher.core.Options
-import edu.colorado.thresher.core.WALACFGUtil
-import edu.colorado.scwala.state.StaticPtEdge
-import edu.colorado.scwala.state.LocalPtEdge
-import edu.colorado.scwala.state.LocalVar
-import edu.colorado.scwala.state.Val
-import com.ibm.wala.ipa.callgraph.propagation.InstanceKey
-import edu.colorado.scwala.state.ReturnVar
-import com.ibm.wala.ssa.SSAReturnInstruction
-import edu.colorado.scwala.state.Fld
-import edu.colorado.scwala.util.CGNodeUtil
-import edu.colorado.scwala.state.HeapPtEdge
-import edu.colorado.scwala.util.Timer
-import edu.colorado.scwala.util.CFGUtil
+import edu.colorado.scwala.util.{CFGUtil, CGNodeUtil, ClassUtil, IRUtil, PtUtil, Util}
+import edu.colorado.thresher.core.{Options, WALACFGUtil}
+
+import scala.collection.JavaConversions._
 
 
 
@@ -503,10 +464,14 @@ class RelevanceRelation(val cg : CallGraph, val hg : HeapGraph, val hm : HeapMod
       case ObjVar(rgnRhs) => !tbl.isNullConstant(rhsUse) && heapCheck(rhsUse, node, rgnRhs)
       case p@PureVar(_) =>
         def pureMayEqCheck(useNum : Int, p : PureVar, tbl : SymbolTable, qry : Qry) : Boolean = !tbl.isConstant(useNum) || {
-          if (tbl.isStringConstant(useNum)) qry.checkTmpPureConstraint(Pure.makeNeNullConstraint(p))
-          // unsupported constraint types -- assume equality
-          else if (tbl.isFloatConstant(useNum) || tbl.isDoubleConstant(useNum) || tbl.isLongConstant(useNum)) true
-          else qry.checkTmpPureConstraint(Pure.makeEqConstraint(Pure.makePureVal(tbl, useNum), p))    
+          try
+            if (tbl.isStringConstant(useNum)) qry.checkTmpPureConstraint(Pure.makeNeNullConstraint(p))
+            // unsupported constraint types -- assume equality
+            else if (tbl.isFloatConstant(useNum) || tbl.isDoubleConstant(useNum) || tbl.isLongConstant(useNum)) true
+            else qry.checkTmpPureConstraint(Pure.makeEqConstraint(Pure.makePureVal(tbl, useNum), p))
+          catch {
+            case e : UnknownSMTResult => true // SMT solver failed; conservatively assume that they may be equal
+          }
         }                
         pureMayEqCheck(rhsUse, p, tbl, qry)
     }}           
