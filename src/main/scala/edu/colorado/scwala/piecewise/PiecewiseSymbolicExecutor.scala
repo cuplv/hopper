@@ -13,9 +13,8 @@ import edu.colorado.scwala.state.Qry
 import edu.colorado.scwala.translate.InvariantMap
 import edu.colorado.scwala.state.Path
 import edu.colorado.scwala.translate.WalaBlock
-import edu.colorado.scwala.util.ClassUtil
+import edu.colorado.scwala.util.{PtUtil, ClassUtil, Util}
 import edu.colorado.scwala.util.Types.MSet
-import edu.colorado.scwala.util.Util
 import PiecewiseSymbolicExecutor._
 import edu.colorado.scwala.executor.UnstructuredSymbolicExecutor
 import edu.colorado.scwala.executor.DefaultSymbolicExecutor
@@ -199,8 +198,8 @@ trait PiecewiseSymbolicExecutor extends UnstructuredSymbolicExecutor {
   }  
   
    /** set of fields that we tried to jump because we suspected they were involved in an invariant, but failed to get a refutation */
-  val failedObjInvariants : MSet[Set[IField]] = Util.makeSet[Set[IField]]      
-  
+  val failedObjInvariants : MSet[Set[IField]] = Util.makeSet[Set[IField]]
+
   // TODO: make special case to exclude iterators here?
   /**
    * @return true if there are constraints on two or more fields of the same object in @param constraints,
@@ -218,10 +217,23 @@ trait PiecewiseSymbolicExecutor extends UnstructuredSymbolicExecutor {
       case Some((objVar, flds)) => 
         // TODO: which of these do we want?
         // weaken heapPath so it only contains constraints containing the fields involved in the invariants
-        q.dropConstraintsNotContaining(objVar, flds)        
-        // keep the o.f -> _, o.g -> _ constraints and anything reachable from them
+        q.dropConstraintsNotContaining(objVar, flds)
+        // another less aggressive choice: keep the o.f -> _, o.g -> _ constraints and anything reachable from them
         //q.dropConstraintsNotReachableFrom(q.heapConstraints.filter(e => e.src == objVar).toSet)  
-        //println("after drop " + q)
+
+        // TODO: extract this to a method and use in other templates too?
+        // if we have a constraint x.f -> o where o != null and pt(x.f) is a singleton set, we're not very likely to
+        // find a refutation by jumping to writes of x.f (in fact, we'll only find a refutation if the assignment is
+        // x.f = null. instead, drop such constraints and keep ones we're likely to find refutations with
+        q.heapConstraints.foreach(c => c match {
+          case ObjPtEdge(ObjVar(srcRgn), InstanceFld(fld), ObjVar(snkRgn)) if snkRgn.size == 1 =>
+            val snkKeys = PtUtil.getPtI(srcRgn, fld, tf.hg)
+            if (snkKeys.size == 1) {
+              if (DEBUG) println(s"Dropping constraint $c due to singleton points-to set")
+              q.removeHeapConstraint(c)
+            }
+          case _ => ()
+        })
 
         // we consider the invariant produced if none of the constraints have any of the relevant fields anymore
         val producedInvariantCallback : Qry => Boolean = ((q : Qry) => {

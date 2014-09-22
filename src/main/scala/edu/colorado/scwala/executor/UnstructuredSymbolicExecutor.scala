@@ -508,7 +508,9 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
               case keys if keys.isEmpty => // default case
                 if (blk == goalBlk || domInfo.isDominatedBy(blk, defaultBlk))
                   switchMap.values.flatten.forall(cond => p.addConstraintFromSwitch(cond, tf, negated = true))
-                else sys.error("Couldn't find constraining instr for " + blk + " default is " + defaultBlk + " switch blk is " + goalBlk + " ir " + ir)
+                else
+                  if (DEBUG) sys.error("Couldn't find constraining instr for " + blk + " default is " + defaultBlk + " switch blk is " + goalBlk + " ir " + ir)
+                  else true
               case keys => p.constrainBasedOnSwitchCases(keys.flatMap(k => switchMap(k)), tf) // normal switch case                              
             }
           }

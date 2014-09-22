@@ -190,7 +190,12 @@ class RelevanceRelation(val cg : CallGraph, val hg : HeapGraph, val hm : HeapMod
 
     // get producers
     val prodMap = getNodeProducerMap(p.qry, ignoreLocalConstraints = true)
-    println("Overall, have " + prodMap.values.flatten.size + " producers")   
+
+    if (DEBUG) {
+      val producers = prodMap.values.flatten
+      println(s"Overall, have ${prodMap.size} producers")
+      producers.foreach(println)
+    }
      
     if (!USE_REACHABILITY_INFO && !DO_DOMINATOR_CHECK) {
       p.clearCallStack 
