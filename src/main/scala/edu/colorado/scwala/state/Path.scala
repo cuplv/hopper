@@ -115,7 +115,8 @@ object Path {
     setupJumpPath(p, instr, blk, index, node, hm, hg, cha, jmpNum)
   }
   
-  def setupJumpPath(p : Path, i : SSAInstruction, blk : ISSABasicBlock, index : Int, node : CGNode, hm : HeapModel, hg : HeapGraph, cha : IClassHierarchy, jmpNum : Int) = {
+  def setupJumpPath(p : Path, i : SSAInstruction, blk : ISSABasicBlock, index : Int, node : CGNode, hm : HeapModel,
+                    hg : HeapGraph, cha : IClassHierarchy, jmpNum : Int) = {
     val qry = p.qry
     require(qry.callStack.isEmpty)      
    
@@ -126,34 +127,51 @@ object Path {
     assert(!p.jumpMap.values.toSet.contains(copy), "already jumped to " + jmpLoc)
     p.jumpMap += (jmpNum -> copy)
     p.jumpHistory += copy
-            
-    // we need to set up x to point to the base obj A of the constraint A.f -> B or A[i] -> B to be consumed
-    def addLocalConstraintOnLHS(lhs : ObjVar, lhsLocNum : Int) = {
-      val x = Var.makeLPK(lhsLocNum, node, hm)
-      val ptX = PtUtil.getPt(x, hg)            
-      val rgnInter = ptX.intersect(lhs.rgn)
-      assert(!rgnInter.isEmpty)
-      val interVar = ObjVar(rgnInter)
-      val res = qry.substitute(interVar, lhs, hg)
-      assert(res)
-      qry.addLocalConstraint(PtEdge.make(x, interVar))
+
+    def addLocalConstraintOnConsumedEdge(pred : HeapPtEdge => Boolean, lhsLocNum : Int) : Unit = {
+      // we need to set up x to point to the base obj A of the constraint A.f -> B or A[i] -> B to be consumed
+      def addLocalConstraintOnLHS(lhs : ObjVar) = {
+        val x = Var.makeLPK(lhsLocNum, node, hm)
+        val ptX = PtUtil.getPt(x, hg)
+        val rgnInter = ptX.intersect(lhs.rgn)
+        assert(!rgnInter.isEmpty)
+        val interVar = ObjVar(rgnInter)
+        val res = qry.substitute(interVar, lhs, hg)
+        assert(res)
+        qry.addLocalConstraint(PtEdge.make(x, interVar))
+      }
+
+      val consumedEdges = qry.heapConstraints.filter(pred)
+      val consumedEdge = consumedEdges.size match {
+        case 0 => sys.error("Expected at least one edge in consumed set")
+        case 1 => consumedEdges.head
+        case n =>
+          // only expecting one edge to be consumed by a given instruction. if there are more, we pick one arbitrarily
+          // and drop the others
+          // TODO: instead, choose to do a case split in the case where consumed.size > 1?
+          consumedEdges.tail.foreach(e => qry.removeHeapConstraint(e))
+          consumedEdges.head
+      }
+
+      consumedEdge.src match {
+        case lhs@ObjVar(_) => addLocalConstraintOnLHS(lhs)
+        case lhs => sys.error(s"Expecting ObjVar on LHS, found $lhs")
+      }
     }
-    
+
     // TODO: add context-sensitivity constraints from node
     // setup local constraints based on instruction we're jumping to
     // the idea is that we're jumping to an instruction that will consume some edge in our constraints,
     // so we set up the local constraints in a way that guarantee the edge will be consumed
     i match {
       case i : SSAPutInstruction => // x.f = y
-        if (!i.isStatic()) { // if it's static, no setup necessary
-          val consumed = qry.heapConstraints.collect({ case e@ObjPtEdge(_, InstanceFld(fld), _) if cha.resolveField(i.getDeclaredField) == fld => e})
-          assert(consumed.size == 1, "Got consumed set " + consumed) // only expecting one edge to be consumed by a given instruction
-          addLocalConstraintOnLHS(consumed.head.src, i.getRef())        
-        }
+        if (!i.isStatic()) // if it's static, no setup necessary
+          addLocalConstraintOnConsumedEdge(e => e match {
+            case e@ObjPtEdge(_, InstanceFld(fld), _) => cha.resolveField(i.getDeclaredField) == fld
+            case _ => false
+          }, i.getRef)
       case i : SSAArrayStoreInstruction => // x[i] = y
-        val consumed = qry.heapConstraints.collect({ case e@ArrayPtEdge(_, _, _) => e })
-        assert(consumed.size == 1, "Got consumed set " + consumed) // only expecting one edge to be consumed by a given instruction
-        addLocalConstraintOnLHS(consumed.head.src, i.getArrayRef())        
+        addLocalConstraintOnConsumedEdge(e => e.isInstanceOf[ArrayPtEdge], i.getArrayRef)
       case s => sys.error("Implement me: setup for " + s)
     }
   }
