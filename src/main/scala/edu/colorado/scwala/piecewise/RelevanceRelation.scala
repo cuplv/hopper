@@ -292,12 +292,7 @@ class RelevanceRelation(val cg : CallGraph, val hg : HeapGraph, val hm : HeapMod
       Path.fork(p, relevantNode, filtered, jmpNum, cg, hg, hm, cha, paths)
     }
   }
-  
-  /*
-     if (tbl.isConstant(lhs.getValueNumber())) snk match { // special case for constant locals
-        case p@PureVar(_,_) => qry.checkTmpPureConstraint(Pure.makeEqConstraint(Pure.makePureVal(tbl, lhs.getValueNumber()), p))
-        case ObjVar(_) => sys.error("Unexpected snk " + snk)        
-      }*/
+
   def hasUnproduceableConstraint(p : Path) : Boolean = p.qry.hasConstraint && hasUnproduceableConstraint(p, getConstraintProducerMap(p.qry))  
   
   def hasUnproduceableConstraint(p : Path, prodMap : Map[PtEdge, List[(CGNode,SSAInstruction)]]) = {
@@ -387,7 +382,12 @@ class RelevanceRelation(val cg : CallGraph, val hg : HeapGraph, val hm : HeapMod
   }
   
   def mayBeArrayContentsConstraintHoldingDefaultValue(e : PtEdge, qry : Qry) : Boolean = e match {
-    case ArrayPtEdge(_, _, p@PureVar(_)) => qry.checkTmpPureConstraint(Pure.makeDefaultValConstraint(p))
+    case ArrayPtEdge(_, _, p@PureVar(_)) =>
+      try {
+        qry.checkTmpPureConstraint(Pure.makeDefaultValConstraint(p))
+      } catch {
+        case e : UnknownSMTResult => true
+      }
     case _ => false
   }
     
@@ -457,8 +457,13 @@ class RelevanceRelation(val cg : CallGraph, val hg : HeapGraph, val hm : HeapMod
     l.foldLeft (Set.empty[CGNode]) ((set, pred) => set + pred.getNode())
   
   private def arrayIndicesPossiblyEqual(indexUse : Int, fld : ArrayFld, tbl : SymbolTable, qry : Qry) = fld match {
-    case ArrayFld(_, _, Some(indexVar)) => !Options.INDEX_SENSITIVITY || !tbl.isConstant(indexUse) || 
-      qry.checkTmpPureConstraint(Pure.makeEqConstraint(indexVar, Pure.makePureVal(tbl, indexUse)))
+    case ArrayFld(_, _, Some(indexVar)) => !Options.INDEX_SENSITIVITY || !tbl.isConstant(indexUse) || {
+      try {
+        qry.checkTmpPureConstraint(Pure.makeEqConstraint(indexVar, Pure.makePureVal(tbl, indexUse)))
+      } catch {
+        case e : UnknownSMTResult => true // SMT solver failed conservatively assume that they may be equal
+      }
+    }
     case ArrayFld(_, _, None) => true    
   }
   
@@ -545,7 +550,6 @@ class RelevanceRelation(val cg : CallGraph, val hg : HeapGraph, val hm : HeapMod
       
     case e@ObjPtEdge(ObjVar(rgnLhs), InstanceFld(fld), snk) => // edge A0.f -> A1
       val lhsPreds = PtUtil.getLocalPreds(rgnLhs, hg)
-      val lhsNodes = getLPKNodes(lhsPreds)           
       val (producerOrModifierNodes, heapCheck) = getProducerOrModifierNodesAndHeapCheck(rgnLhs, snk, getModifiers)
       // final instance fields can only be written in constructors
       producerOrModifierNodes.foldLeft (List.empty[(CGNode,SSAInstruction)]) ((lst, node) => if (!fld.isFinal() || node.getMethod().isInit()) { 
@@ -611,8 +615,7 @@ class RelevanceRelation(val cg : CallGraph, val hg : HeapGraph, val hm : HeapMod
         
     case ArrayPtEdge(ObjVar(rgnLhs), fld, snk) => // A0[i] = f
       val lhsPreds = PtUtil.getLocalPreds(rgnLhs, hg)
-      val lhsNodes = getLPKNodes(lhsPreds)
-      val (producerOrModifierNodes, heapCheck) = getProducerOrModifierNodesAndHeapCheck(rgnLhs, snk, getModifiers)    
+      val (producerOrModifierNodes, heapCheck) = getProducerOrModifierNodesAndHeapCheck(rgnLhs, snk, getModifiers)
       producerOrModifierNodes.foldLeft (List.empty[(CGNode,SSAInstruction)]) ((lst, node) => {
         val ir = node.getIR()
         if (ir != null) {
@@ -650,7 +653,12 @@ class RelevanceRelation(val cg : CallGraph, val hg : HeapGraph, val hm : HeapMod
             // ... x := new_A (), or 
             case i : SSANewInstruction => if (lhsesEq(lhs, i) && { snk match {
               case ObjVar(rgnRhs) => getModifiers || rgnRhs.contains(hm.getInstanceKeyForAllocation(node, i.getNewSite()))
-              case p@PureVar(_) => qry.checkTmpPureConstraint(Pure.makeNeNullConstraint(p))
+              case p@PureVar(_) =>
+                try {
+                  qry.checkTmpPureConstraint(Pure.makeNeNullConstraint(p))
+                } catch {
+                  case e : UnknownSMTResult => true
+                }
              }}) Some(node, i) else None            
             // ... x := y.f where y.f -> A or x := Class.f, or 
             case i : SSAGetInstruction => 
