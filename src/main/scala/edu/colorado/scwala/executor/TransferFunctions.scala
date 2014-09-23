@@ -1,10 +1,9 @@
 package edu.colorado.scwala.executor
 
 import com.ibm.wala.analysis.pointers.HeapGraph
-import com.ibm.wala.analysis.typeInference.TypeAbstraction
 import com.ibm.wala.classLoader.{IClass, IField}
-import com.ibm.wala.ipa.callgraph.{CGNode, CallGraph, ContextKey}
-import com.ibm.wala.ipa.callgraph.propagation.{AllocationSiteInNode, ConcreteTypeKey, HeapModel, InstanceKey, LocalPointerKey, PointerKey}
+import com.ibm.wala.ipa.callgraph.propagation.{ConcreteTypeKey, HeapModel, InstanceKey, LocalPointerKey, PointerKey}
+import com.ibm.wala.ipa.callgraph.{CGNode, CallGraph}
 import com.ibm.wala.ipa.cha.IClassHierarchy
 import com.ibm.wala.ipa.modref.DelegatingExtendedHeapModel
 import com.ibm.wala.ssa.{ISSABasicBlock, SSAArrayLengthInstruction, SSAArrayLoadInstruction, SSAArrayReferenceInstruction, SSAArrayStoreInstruction, SSABinaryOpInstruction, SSACFG, SSACheckCastInstruction, SSAComparisonInstruction, SSAConditionalBranchInstruction, SSAConversionInstruction, SSAGetCaughtExceptionInstruction, SSAGetInstruction, SSAGotoInstruction, SSAInstanceofInstruction, SSAInstruction, SSAInvokeInstruction, SSALoadMetadataInstruction, SSAMonitorInstruction, SSANewInstruction, SSAPhiInstruction, SSAPutInstruction, SSAReturnInstruction, SSAThrowInstruction, SSAUnaryOpInstruction}
@@ -439,8 +438,8 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph, _hm : HeapModel,
     getConstraintEdgeForDef(i, qry.localConstraints, node) match {
       case Some(e@LocalPtEdge(_, ObjVar(rgnX))) => // found edge x -> ptX
         qry.removeLocalConstraint(e)
-        val cloneReceiver = Var.makeLPK(i.getUse(0), node, hm)        
-        // resolve the receiver(s) of clone in our call stack/constraints and make sure each one is type-consistent with the keys in rgnX
+        // resolve the receiver(s) of clone in our call stack/constraints and make sure each one is type-consistent with
+        // the keys in rgnX
         // TODO: this is really ugly
         val callStkArr = qry.callStack.stack.toArray        
         !callStkArr.indices.exists(i => {
@@ -450,27 +449,14 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph, _hm : HeapModel,
               assert(i + 1 < callStkArr.length)
               val nextNode = callStkArr(i + 1).node // nextNode is the caller of call
               val receiverLPK = Var.makeLPK(call.getUse(0), nextNode, hm)
-              if (receiverLPK.getValueNumber() == 1) { 
-                val receiverType = nextNode.getMethod().getDeclaringClass()
-                // receiver is the "this" var, can compare against type directly
-                // if there's no key k in rgnX such that type(k) <: receiverType, this call to clone can't have returned ptX
-                !rgnX.exists(k => k match {
-                  case k : AllocationSiteInNode => 
-                    val ctx = k.getNode().getContext()
-                    ctx.get(ContextKey.RECEIVER) match {
-                      case t : TypeAbstraction =>
-                        // ask type(k) <: receiverType? if not, this call to clone could not possibly have returned k
-                        cha.isAssignableFrom(receiverType, t.getType())
-                      case t => sys.error("Unexpected receiver context " + t)
-                    }
-                  case k => sys.error("Unexpected instance key " + k + " type " + k.getClass())
-                })
-              } else { // have to use pts-to set
-                getPt(receiverLPK, qry.localConstraints, hg) match {
-                  case Some((ObjVar(rgnReceiver), _)) => Util.unimp("Using pt-analysis here.") 
-                  case None => true // refuted by null dispatch
+              val receiverTypes =
+                if (receiverLPK.getValueNumber() == 1) Set(nextNode.getMethod().getDeclaringClass())
+                else getPt(receiverLPK, qry.localConstraints, hg) match {
+                  case Some((ObjVar(rgnReceiver), _)) => rgnReceiver.map(key => key.getConcreteType)
+                  case None => Set.empty // refuted by null dispatch
                 }
-              }
+              rgnX.exists(k =>
+                receiverTypes.exists(receiverType => cha.isAssignableFrom(receiverType, k.getConcreteType)))
             case _ => false
         }})
       case Some(e@LocalPtEdge(_, p@PureVar(_))) =>
@@ -480,7 +466,8 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph, _hm : HeapModel,
     }
   }
   
-  /** perform parameter binding and call stack manipulation associated with making a call to @param callee from @param caller via the instruction @param call */
+  /** perform parameter binding and call stack manipulation associated with making a call to @param callee from
+    * @param caller via the instruction @param call */
   def enterCallee(call : SSAInvokeInstruction, qry : Qry, caller : CGNode, callee : CGNode) : Boolean = {
     val calleeLocalConstraints = Util.makeSet[LocalPtEdge]
     // bind return value (if needed)
