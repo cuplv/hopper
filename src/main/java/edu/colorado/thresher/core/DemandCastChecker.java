@@ -34,7 +34,10 @@ import com.ibm.wala.classLoader.IClass;
 import com.ibm.wala.demandpa.alg.ContextSensitiveStateMachine;
 import com.ibm.wala.demandpa.alg.DemandRefinementPointsTo;
 import com.ibm.wala.demandpa.alg.DemandRefinementPointsTo.PointsToResult;
-import com.ibm.wala.demandpa.alg.refinepolicy.*;
+import com.ibm.wala.demandpa.alg.refinepolicy.FieldRefinePolicy;
+import com.ibm.wala.demandpa.alg.refinepolicy.ManualFieldPolicy;
+import com.ibm.wala.demandpa.alg.refinepolicy.RefinementPolicyFactory;
+import com.ibm.wala.demandpa.alg.refinepolicy.TunedRefinementPolicy;
 import com.ibm.wala.demandpa.alg.statemachine.StateMachineFactory;
 import com.ibm.wala.demandpa.flowgraph.IFlowLabel;
 import com.ibm.wala.demandpa.util.MemoryAccessMap;
@@ -217,7 +220,14 @@ public class DemandCastChecker {
           }
 
           long startTime = System.currentTimeMillis();
-          Pair<PointsToResult, Collection<InstanceKey>> queryResult = dmp.getPointsTo(castedPk, castPred);
+          Pair<PointsToResult, Collection<InstanceKey>> queryResult;
+          try {
+            queryResult = dmp.getPointsTo(castedPk, castPred);
+          } catch (Exception e) {
+            // treat failures as timeouts
+            queryResult = Pair.make(PointsToResult.BUDGETEXCEEDED, null);
+          }
+
           long runningTime = System.currentTimeMillis() - startTime;
           System.err.println("running time: " + runningTime + "ms");
           final FieldRefinePolicy fieldRefinePolicy = dmp.getRefinementPolicy().getFieldRefinePolicy();
