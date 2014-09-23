@@ -11,6 +11,7 @@ import com.ibm.wala.types.TypeReference
 import com.ibm.wala.util.graph.traverse.DFS
 import com.ibm.wala.util.intset.OrdinalSet
 import edu.colorado.scwala.executor.TransferFunctions._
+import edu.colorado.scwala.solver.UnknownSMTResult
 import edu.colorado.scwala.state.{CallStackFrame, ObjPtEdge, _}
 import edu.colorado.scwala.synthesis.InterfaceMethodField
 import edu.colorado.scwala.util.PtUtil._
@@ -405,12 +406,16 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph, _hm : HeapModel,
           //rgnReceiver.filter(i => cha.isAssignableFrom(i.getConcreteType(), calleeClass))
           // TODO: use context-sensitivity information and o vs callee information here
           true 
-        case Some(LocalPtEdge(_, p@PureVar(_))) => 
-          // make sure the receiver is non-null
-          val res = qry.checkTmpPureConstraint(Pure.makeNeNullConstraint(p))
-          if (!res && Options.PRINT_REFS) println("Refuted by null dispatch!")
-          res
-          case None => true // no constraint on receiver, assume feasible
+        case Some(LocalPtEdge(_, p@PureVar(_))) =>
+          try {
+            // make sure the receiver is non-null
+            val res = qry.checkTmpPureConstraint(Pure.makeNeNullConstraint(p))
+            if (!res && Options.PRINT_REFS) println("Refuted by null dispatch!")
+            res
+          } catch {
+            case _ : UnknownSMTResult => true
+          }
+        case None => true // no constraint on receiver, assume feasible
       }
     }
     
@@ -1394,20 +1399,21 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph, _hm : HeapModel,
         case Some(edge) => // found edge x -> v0
           qry.removeLocalConstraint(edge)
           edge.snk match {
-            case p@PureVar(_) => 
-              // find pure constraint(s) on p
-              val negated = qry.checkTmpPureConstraint(Pure.makeEqBoolConstraint(p, false))           
-              
-              // find y and filter it by the type of T
-              val checkedType = cha.lookupClass(s.getCheckedType())
-              val yLPK = Var.makeLPK(s.getRef(), n, hm)
-              
-              def handleYObj(ptY : ObjVar, yEdge : Option[LocalPtEdge]) : Boolean = {
-                 val newRgn = ptY.rgn.filter(k => { 
+            case p@PureVar(_) =>
+              try {
+                // find pure constraint(s) on p
+                val negated = qry.checkTmpPureConstraint(Pure.makeEqBoolConstraint(p, false))
+
+                // find y and filter it by the type of T
+                val checkedType = cha.lookupClass(s.getCheckedType())
+                val yLPK = Var.makeLPK(s.getRef(), n, hm)
+
+                def handleYObj(ptY : ObjVar, yEdge : Option[LocalPtEdge]) : Boolean = {
+                  val newRgn = ptY.rgn.filter(k => {
                     val assignable = cha.isAssignableFrom(checkedType, k.getConcreteType())
                     (assignable && !negated) || (!assignable && negated)
-                  })              
-                  
+                  })
+
                   // record result of instanceof and do SAT check
                   if (!newRgn.isEmpty && qry.addPureConstraint(Pure.makeEqBoolConstraint(p, !negated))) {
                     // add newly constrained edge to points-to constraints
@@ -1420,36 +1426,39 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph, _hm : HeapModel,
                   } else {
                     if (Options.PRINT_REFS) println("Refuted by instanceof check!")
                     false // refuted
-                  } 
-              }
-              
-              def handleNoEdge() : Boolean = {
-                val ptY = getPt(yLPK, hg)
-                if (ptY.isEmpty) handleYNull
-                else handleYObj(ObjVar(ptY), None)
-              }
-              
-              def handleYNull() : Boolean = { // x = null instanceof T  
-                val pNull = Qry.getNullVar(qry)
-                qry.addLocalConstraint(PtEdge.make(yLPK, pNull))
-                true
-              }
-              
-              getConstraintEdge(yLPK, qry.localConstraints) match {
-                case Some(e@LocalPtEdge(_, ptY@ObjVar(_))) => handleYObj(ptY, Some(e))                  
-                case Some(e@LocalPtEdge(_, p@PureVar(_))) =>
-                  if (qry.isNull(p)) true
-                  else {
-                    // edge says that y points-to some non-null value
-                    // remove this edge and replace it with y's points-to set
-                    qry.removeLocalConstraint(e)
-                    handleNoEdge
                   }
-                case None => 
+                }
+
+                def handleNoEdge() : Boolean = {
                   val ptY = getPt(yLPK, hg)
                   if (ptY.isEmpty) handleYNull
                   else handleYObj(ObjVar(ptY), None)
-              }              
+                }
+
+                def handleYNull() : Boolean = { // x = null instanceof T
+                val pNull = Qry.getNullVar(qry)
+                  qry.addLocalConstraint(PtEdge.make(yLPK, pNull))
+                  true
+                }
+
+                getConstraintEdge(yLPK, qry.localConstraints) match {
+                  case Some(e@LocalPtEdge(_, ptY@ObjVar(_))) => handleYObj(ptY, Some(e))
+                  case Some(e@LocalPtEdge(_, p@PureVar(_))) =>
+                    if (qry.isNull(p)) true
+                    else {
+                      // edge says that y points-to some non-null value
+                      // remove this edge and replace it with y's points-to set
+                      qry.removeLocalConstraint(e)
+                      handleNoEdge
+                    }
+                  case None =>
+                    val ptY = getPt(yLPK, hg)
+                    if (ptY.isEmpty) handleYNull
+                    else handleYObj(ObjVar(ptY), None)
+                }
+              } catch {
+                case e : UnknownSMTResult => true
+              }
             case _ => sys.error("Unexpected snk for edge " + edge)
           }
         case None => true
@@ -1789,9 +1798,14 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph, _hm : HeapModel,
             if (rgn.contains(allocatedKey)) {
               if (Fld.isArrayLengthFld(e.fld)) dropHeapConstraint(e, qry, loopDrop) // drop constraint on array length
               else e.snk match {
-                case p@PureVar(_) if qry.checkTmpPureConstraint(Pure.makeDefaultValConstraint(p)) =>
-                  // drop constraint; might be consumed by initialization to default values
-                  dropHeapConstraint(e, qry, loopDrop)
+                case p@PureVar(_) =>
+                  try {
+                    if (qry.checkTmpPureConstraint(Pure.makeDefaultValConstraint(p)))
+                      // drop constraint; might be consumed by initialization to default values
+                      dropHeapConstraint(e, qry, loopDrop)
+                  } catch {
+                    case _ : UnknownSMTResult => dropHeapConstraint(e, qry, loopDrop)
+                  }
                 case _ => ()
               }
             }
@@ -1800,11 +1814,15 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph, _hm : HeapModel,
         
       case i : SSAInvokeInstruction =>
         def dropEdgeIfConsumedByInitToDefaultVals(e : HeapPtEdge) = e.snk match {
-          case p@PureVar(_) => 
-            if (qry.checkTmpPureConstraint(Pure.makeDefaultValConstraint(p)))
-              assert(!e.snk.isArrayType) // TODO: initialize array contents to default vals?
-            dropHeapConstraint(e, qry, loopDrop)
-              // else, initialization to pure vars would not produce e                
+          case p@PureVar(_) =>
+            try {
+              if (qry.checkTmpPureConstraint(Pure.makeDefaultValConstraint(p))) {
+                assert(!e.snk.isArrayType) // TODO: initialize array contents to default vals?
+                dropHeapConstraint(e, qry, loopDrop)
+              } // else, initialization to pure vars would not produce e
+            } catch {
+              case _ : UnknownSMTResult => dropHeapConstraint(e, qry, loopDrop)
+            }
           case ObjVar(_) => () // no need to drop; initialization to default values can't assign an objet (only null)
         }   
         
