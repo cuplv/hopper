@@ -176,9 +176,9 @@ trait PiecewiseSymbolicExecutor extends UnstructuredSymbolicExecutor {
   // TODO: cache sets of constraints we've already checked
   // match the first invariant template that we can
   /** @return callback to be called on failure of jump if we should jump, None otherwise */
-  private def shouldJump(p : Path) : Option[(Path, Qry => Boolean, Unit => Any)] = 
-    //if (p.isClinitPath(cg) || p.jumpSetSize > 1) None // TODO: we don't allow nested jumps now, can lift this later. really, just don't want to jump to the same spot 
-    if (!p.qry.hasConstraint || p.isClinitPath(cg) || p.isInJump) None // TODO: we don't allow nested jumps now, can lift this later. really, just don't want to jump to the same spot 
+  private def shouldJump(p : Path) : Option[(Path, Qry => Boolean, Unit => Any)] =
+    // TODO: we don't allow nested jumps now, can lift this later. really, just don't want to jump to the same spot
+    if (!p.qry.hasConstraint || p.isClinitPath(cg) || p.isInJump) None
     else matchesInvariantTemplate(p)
   
   // TODO: extract InvariantTemplate to a class
@@ -193,7 +193,7 @@ trait PiecewiseSymbolicExecutor extends UnstructuredSymbolicExecutor {
       case None => false
       case other =>
         matched = other; true
-    })   
+    })
     matched
   }  
   
@@ -214,45 +214,40 @@ trait PiecewiseSymbolicExecutor extends UnstructuredSymbolicExecutor {
     })
     // TODO: consider multiple matches instead of just the first one?
     varConstraintMap.find(pair => pair._2.size > 1 && !failedObjInvariants.contains(pair._2)) match {
-      case Some((objVar, flds)) => 
-        // TODO: which of these do we want?
-        // weaken heapPath so it only contains constraints containing the fields involved in the invariants
-        q.dropConstraintsNotContaining(objVar, flds)
-        // another less aggressive choice: keep the o.f -> _, o.g -> _ constraints and anything reachable from them
-        //q.dropConstraintsNotReachableFrom(q.heapConstraints.filter(e => e.src == objVar).toSet)  
-
+      case Some((objVar, flds)) =>
         // TODO: extract this to a method and use in other templates too?
         // if we have a constraint x.f -> o where o != null and pt(x.f) is a singleton set, we're not very likely to
         // find a refutation by jumping to writes of x.f (in fact, we'll only find a refutation if the assignment is
         // x.f = null. instead, drop such constraints and keep ones we're likely to find refutations with
-        q.heapConstraints.foreach(c => c match {
-          case ObjPtEdge(ObjVar(srcRgn), InstanceFld(fld), ObjVar(snkRgn)) if snkRgn.size == 1 =>
-            val snkKeys = PtUtil.getPtI(srcRgn, fld, tf.hg)
-            if (snkKeys.size == 1) {
-              if (DEBUG) println(s"Dropping constraint $c due to singleton points-to set")
-              q.removeHeapConstraint(c)
-            }
-          case _ => ()
+        val singletonPointsToConstraints = q.heapConstraints.filter(e => e match {
+          case ObjPtEdge(ObjVar(srcRgn), InstanceFld(fld), ObjVar(snkRgn)) =>
+            snkRgn.size == 1 && flds.contains(fld) &&PtUtil.getPtI(srcRgn, fld, tf.hg).size == 1
+          case _ => false
         })
 
-        // we consider the invariant produced if none of the constraints have any of the relevant fields anymore
-        val producedInvariantCallback : Qry => Boolean = ((q : Qry) => {
-          !q.heapConstraints.exists(e => e.fld match {
-            case InstanceFld(fld) => flds.contains(fld)
-            case _ => false
-          }) 
-        })
-       
-        val failureCallback : Any => Unit = ((x : Any) => failedObjInvariants.add(flds))
-        
-        // TODO: MEGA HACK. don't allow jumping that drops the start query
-        //if (q.constraints.exists(e => e.src == c.getVars().contains(Main.startSnk)) &&
-        //    !heapPath.qry.constraints().exists(c => c.getVars().contains(Main.startSnk))) {
-          //None
-        //} else {
-        println("Matched object invariant template; found constraints on more than one fld of var " + objVar + " flds: " + flds)
-        Some(p.deepCopy(q), producedInvariantCallback, failureCallback)
-        //}
+        if (singletonPointsToConstraints.size >= 2) None // we would need to drop too much; give up
+        else {
+          // weaken heapPath so it only contains constraints containing the fields involved in the invariants
+          q.dropConstraintsNotContaining(objVar, flds)
+          singletonPointsToConstraints.foreach(c => {
+            if (DEBUG) println(s"Dropping constraint $c due to singleton points-to set")
+            q.removeHeapConstraint(c)
+          })
+          // another less aggressive choice: keep the o.f -> _, o.g -> _ constraints and anything reachable from them
+          //q.dropConstraintsNotReachableFrom(q.heapConstraints.filter(e => e.src == objVar).toSet)
+
+          // we consider the invariant produced if none of the constraints have any of the relevant fields anymore
+          val producedInvariantCallback: Qry => Boolean = ((q: Qry) => {
+            !q.heapConstraints.exists(e => e.fld match {
+              case InstanceFld(fld) => flds.contains(fld)
+              case _ => false
+            })
+          })
+
+          val failureCallback: Any => Unit = ((x: Any) => failedObjInvariants.add(flds))
+          println("Matched object invariant template; found constraints on more than one fld of var " + objVar + " flds: " + flds)
+          Some(p.deepCopy(q), producedInvariantCallback, failureCallback)
+        }
       case None => None
     }      
   }
