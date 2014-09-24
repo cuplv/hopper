@@ -990,7 +990,7 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph, _hm : HeapModel,
           val indexVar = getArrayIndexVar(s, qry)
           val (arrConstraints, mustEq) = getRelevantArrayEdges(qry, arrRef, indexVar)
           if (arrConstraints.isEmpty) {
-            assert(splits.size == 1, "have " + splits.size + "splits") // TODO: otherwise we may be creating unecessary case splits
+            if (DEBUG) assert(splits.size == 1, s"have ${splits.size} splits") // TODO: otherwise we may be creating unecessary case splits
             List(qry)
           } else {
             addNonAliasingConstraintsCB() // invoke callback to add non-aliasing constraints
