@@ -661,11 +661,17 @@ class RelevanceRelation(val cg : CallGraph, val hg : HeapGraph, val hm : HeapMod
                 }
              }}) Some(node, i) else None            
             // ... x := y.f where y.f -> A or x := Class.f, or 
-            case i : SSAGetInstruction => 
-              val fld = cha.resolveField(i.getDeclaredField())
-              assert(fld != null, " couldn't resolve " + i.getDeclaredField())
-              if (lhsesEq(lhs, i) && (i.isStatic() || rhsMayEqCheck(snk, i.getRef, node, tbl, qry,
-                  (argUse, node, rgnRhs) => PtUtil.contains(Var.makeLPK(argUse, node, hm), fld, rgnRhs, hg), getModifiers))) Some(node, i) else None
+            case i : SSAGetInstruction =>
+              cha.resolveField(i.getDeclaredField) match {
+                case null => None
+                case fld =>
+                  if (lhsesEq(lhs, i) && (i.isStatic() ||
+                        rhsMayEqCheck(snk, i.getRef, node, tbl, qry,
+                                      (argUse, node, rgnRhs) => PtUtil.contains(Var.makeLPK(argUse, node, hm), fld, rgnRhs, hg),
+                                      getModifiers)))
+                    Some(node, i)
+                  else None
+              }
             // ... x := y[i] where y[i] -> A
             case i : SSAArrayLoadInstruction => if (lhsesEq(lhs, i) && 
                 rhsMayEqCheck(snk, i.getArrayRef(), node, tbl, qry, 
