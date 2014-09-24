@@ -196,12 +196,16 @@ class Qry(val heapConstraints : MSet[HeapPtEdge], val pureConstraints : MSet[Pur
     val localObjVars = callStack.stack.foldLeft (Set.empty[ObjVar]) ((s, f) => keepObjVars(f.localConstraints, s))
     keepObjVars(heapConstraints, localObjVars)
   }   
-  
-  // TODO: get rid of this and ask Z3
+
+  /** @return true if @param p is definitely null, false otherwise */
   def isNull(p : PureVar) : Boolean = {
     require(p.isReferenceType)
     // p is null if the solver says UNSAT to a neq null constraint
-    !checkTmpPureConstraint(Pure.makeNeNullConstraint(p))
+    try {
+      !checkTmpPureConstraint(Pure.makeNeNullConstraint(p))
+    } catch {
+      case e : UnknownSMTResult => false
+    }
     /*
     pureConstraints.find(c => c.lhs == p) match {
       case Some(c) => c.rhs match {
