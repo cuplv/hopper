@@ -272,6 +272,7 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph, _hm : HeapModel,
         
         def handleSingleObjComparison(e : LocalPtEdge, useNum : Int) : Boolean = {
           val nullConst = tbl.isNullConstant(useNum)
+          val stringConst = tbl.isStringConstant(useNum)
           e.snk match {
             case o@ObjVar(_) => 
               if (nullConst) {
@@ -285,7 +286,7 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph, _hm : HeapModel,
                     Qry.getNullVar(qry)
                   case rgn => ObjVar(rgn)
                 }
-                qry.addLocalConstraint(PtEdge.make(yLPK, yVar))
+                if (!stringConst) qry.addLocalConstraint(PtEdge.make(yLPK, yVar))
                 handleObjComparison(o, yVar)
               }
             case p@PureVar(_) => // add eq / ne null constraint as appropriate
@@ -302,25 +303,33 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph, _hm : HeapModel,
                   } else if (Options.PRINT_REFS) println("refuted by nullness in conditional!")
                   !qrySaysNull
                 }  
-              } else {           
+              } else {
                 val zLPK = Var.makeLPK(useNum, n, hm)
                 if (Pure.isEqualityOp(op)) {
-                  // we have y -> p from constraints and conditional y == z, so z points to whatever y does
-                  qry.addLocalConstraint(PtEdge.make(zLPK, p)) // add z -> p constraint
-                  true
+                  if (stringConst) qry.addPureConstraint(Pure.makeEqConstraint(p, Pure.makePureVal(tbl, useNum)))
+                  else {
+                    // we have y -> p from constraints and conditional y == z, so z points to whatever y does
+                    qry.addLocalConstraint(PtEdge.make(zLPK, p)) // add z -> p constraint
+                    true
+                  }
                 } else {
                   // we have y -> p from constraints and conditional y != z, so cannot point to what y points to
-                  if (qry.isNull(p)) { // then z cannot be null. add z -> pt(z) constraint                                        
-                    val ptZ = getPt(zLPK, hg)
-                    if (ptZ.isEmpty) false
+                  if (qry.isNull(p)) { // then z cannot be null. add z -> pt(z) constraint
+                    if (stringConst) true // z is definitely not null since it's a string constant
                     else {
-                      qry.addLocalConstraint(PtEdge.make(zLPK, ObjVar(ptZ)))
-                      true
-                    }                    
+                      val ptZ = getPt(zLPK, hg)
+                      if (ptZ.isEmpty) false
+                      else {
+                        qry.addLocalConstraint(PtEdge.make(zLPK, ObjVar(ptZ)))
+                        true
+                      }
+                    }
                   } else { // then z must be null. add z == null constraint
-                    val pNull = Qry.getNullVar(qry)
-                    qry.addLocalConstraint(PtEdge.make(zLPK, pNull))
-                    true
+                    if (stringConst) false // z can't be null; it's a string constant
+                    else {
+                      qry.addLocalConstraint(PtEdge.make(zLPK, Qry.getNullVar(qry)))
+                      true
+                    }
                   }
                 }
               }

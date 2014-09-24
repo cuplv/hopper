@@ -291,7 +291,7 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
              val callerCFG = callerIR.getControlFlowGraph()
 
              // get all call instructions in caller that might call callee
-             caller.getIR().getInstructions().zipWithIndex.collect({ 
+             callerIR.getInstructions().zipWithIndex.collect({
                case (i : SSAInvokeInstruction, index) if cg.getPossibleTargets(caller, i.getCallSite()).contains(callee) => (i, index)
              })
              .foldLeft (lst) ((lst, pair) => {
@@ -304,7 +304,8 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
                }
                val callBlk : WalaBlock = callerCFG.getBlockForInstruction(index)
                val callLine = callBlk.size - 2 // call is always the last instruction in a block. set to line *before* the call
-               assert(callBlk.getLastInstruction == invoke)
+               assert(callBlk.getLastInstruction == invoke,
+                 s"Expected call to be last instruction in $callBlk, but got ${callBlk.getLastInstruction}. IR $callerIR")
                if (sitePath.returnFromCall(caller, callee, callBlk, callLine, invoke, tf)) {
                  assert(sitePath.node == caller)
                  sitePath :: lst

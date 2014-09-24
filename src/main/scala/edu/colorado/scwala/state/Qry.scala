@@ -131,12 +131,13 @@ class Qry(val heapConstraints : MSet[HeapPtEdge], val pureConstraints : MSet[Pur
     if (DEBUG) { 
       e.src match {
         case LocalVar(key) =>
-          val tbl = key.getNode().getIR().getSymbolTable()
-          assert(!tbl.isConstant(key.getValueNumber()), "Trying to add const edge " + e )
+          val ir = key.getNode().getIR()
+          val tbl = ir.getSymbolTable()
+          assert(!tbl.isConstant(key.getValueNumber()), s"Trying to add const edge $e IR $ir")
         case ReturnVar(key) => () 
       }
-      assert(!localConstraints.exists(edg => edg.src == e.src && edg.snk != e.snk), "Trying to add duplicate edge " + e + " " + localConstraints)
-      //println("adding local constraint " + e + " to " + id)
+      assert(!localConstraints.exists(edg => edg.src == e.src && edg.snk != e.snk),
+             s"Trying to add duplicate edge $e $localConstraints")
     }
     localConstraints += e
   }
