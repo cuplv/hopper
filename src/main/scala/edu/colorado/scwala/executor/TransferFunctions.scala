@@ -783,7 +783,7 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph, _hm : HeapModel,
       case (p@PureVar(_), _) =>
         if (tbl.isConstant(indexUse)) {
           val res = qry.addPureConstraint(Pure.makeEqConstraint(p, Pure.makePureVal(tbl, indexUse)))
-          assert(res)         
+          assert(res, s"Got refutation while adding equality to pure constraint: query $qry IR ${n.getIR}")
         } else // add edge i -> p 
           qry.addLocalConstraint(PtEdge.make(iLPK, p))
         Some(p)
