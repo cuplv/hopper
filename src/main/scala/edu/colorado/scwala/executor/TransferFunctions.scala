@@ -1,6 +1,7 @@
 package edu.colorado.scwala.executor
 
 import com.ibm.wala.analysis.pointers.HeapGraph
+import com.ibm.wala.analysis.reflection.CloneInterpreter
 import com.ibm.wala.classLoader.{IClass, IField}
 import com.ibm.wala.ipa.callgraph.propagation.{ConcreteTypeKey, HeapModel, InstanceKey, LocalPointerKey, PointerKey}
 import com.ibm.wala.ipa.callgraph.{CGNode, CallGraph}
@@ -1511,7 +1512,7 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph, _hm : HeapModel,
           }
           
           getConstraintEdge(y, qry.localConstraints) match {
-            case yEdge@Some(LocalPtEdge(_, ptY@ObjVar(_))) => handleObjY(ptY, yEdge)              
+            case yEdge@Some(LocalPtEdge(_, ptY@ObjVar(_))) => handleObjY(ptY, yEdge)
             case Some(LocalPtEdge(_, pureY@PureVar(_))) =>
               if (qry.isNull(pureY)) true
               else handleMissingYEdge
@@ -1573,7 +1574,7 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph, _hm : HeapModel,
                   val clazz = cha.lookupClass(t)
                   edge.snk match {
                     case ObjVar(rgn) => 
-                       val ok = rgn.contains(new ConcreteTypeKey(clazz))// check y.class == v
+                       val ok = rgn.contains(new ConcreteTypeKey(clazz)) // check y.class == v
                        if (!ok && Options.PRINT_REFS) println("Refuted by loadMetadata instruction! ")                         
                        else qry.removeLocalConstraint(edge)                              
                        ok
@@ -1733,16 +1734,67 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph, _hm : HeapModel,
         staticFlds.contains(key.getField()) // relevant because of initialization to default values
       case e@ArrayPtEdge(arrRef, ArrayFld(keys, _, _), _) => !modKeys.intersect(keys.asInstanceOf[Set[PointerKey]]).isEmpty
     }} && maybeDrop(e))
-  }   
-    
-  def isCallRelevant(i : SSAInvokeInstruction, caller : CGNode, callee : CGNode, qry : Qry) : Boolean = {    
-    // TODO: do something less dumb!
-    if (i.hasDef()) {
-      val lhs = LocalVar(Var.makeLPK(i.getDef(), qry.node, hm))
-      if (qry.localConstraints.exists(e => e.src == lhs)) return true // retval relevant      
-    }        
-    
-    dropCallConstraintsOrCheckCallRelevant(callee, qry.heapConstraints, dropConstraints = false, loopDrop = false, qry)
+  }
+
+  // handle Java methods with special semantics like clone() and Class.isInstance()
+  def handleJavaMagicMethod(i : SSAInvokeInstruction, caller : CGNode,
+                            paths : List[Path]) : Option[(List[Path],List[Path])] =
+    i.getCallSite.getDeclaredTarget match {
+      case m if m.getDeclaringClass().getName() == CloneInterpreter.CLONE.getDeclaringClass().getName() &&
+        m.getSelector() == CloneInterpreter.CLONE.getSelector() => // Object.clone() special case
+        // TODO: factor out handleCallToObjectClone into TransferFunctions
+        Some(Nil, paths.filter(p => handleCallToObjectClone(i, p.qry, caller)))
+      case m if m.getDeclaringClass.getName == TypeReference.JavaLangClass.getName &&
+          m.getName.toString == "isInstance" => // Class.isInstance() special case
+        paths.foreach(p => {
+          val qry = p.qry
+          getConstraintEdgeForDef(i, qry.localConstraints, caller) match {
+            case Some(e@LocalPtEdge(_, p@PureVar(_))) => // found edge x -> ptX
+              // x.IsInstance(y) means the same as y instanceof x
+              qry.removeLocalConstraint(e)
+              val y = Var.makeLPK(i.getUse(1), caller, hm)
+              getConstraintEdge(y, qry.localConstraints) match {
+                case Some(LocalPtEdge(yVar, ObjVar(rgnY))) =>
+                  if (qry.isDefinitelyTrue(p)) {
+                    val x = Var.makeLPK(i.getUse(0), caller, hm)
+                    // drop existing constraint on x; for maximum precision, we should not need to do this, but we have to
+                    // because of a hack (see below)
+                    getConstraintEdge(x, qry.localConstraints) match {
+                      case Some(e) =>
+                        qry.removeLocalConstraint(e)
+                      case None => ()
+                    }
+                    val typeKeys = rgnY.foldLeft (Set.empty[InstanceKey]) ((keys, instanceKey) =>
+                      keys + new ConcreteTypeKey(instanceKey.getConcreteType))
+                    // add x -> {ConcreteTypeKey(z) for z in types(pt(y))} constraint. technically, this is a type error
+                    // since the type of x is java.lang.Class however, this is just a hack to create a constraint that
+                    // says typeof(x) \in typesof(pt(y)) without creating new constraint forms. the SSALoadMetadata
+                    // instruction is the one to encounter this constraint, and it understands what to do with it
+                    qry.addLocalConstraint(PtEdge.make(x, ObjVar(typeKeys)))
+                  }/* else if (qry.isDefinitelyFalse(p)) {
+                    // trickier case than the true case. this can be any type except for the type of something in pt(y)
+                    // TODO: implement this case
+                    ()
+                  }*/ else ()
+                case _ =>
+                  // TODO: for maximum precision, could still add constraint in this case, but will be trickier
+                  ()
+              }
+            case _ => ()
+        }})
+        Some(Nil, paths)
+      case m => None
+    }
+
+  def isCallRelevant(i : SSAInvokeInstruction, caller : CGNode, callee : CGNode, qry : Qry) : Boolean = {
+    def isRetvalRelevant(i : SSAInvokeInstruction, caller : CGNode, qry : Qry) =
+      i.hasDef() && {
+        val lhs = LocalVar(Var.makeLPK(i.getDef(), caller, hm))
+        qry.localConstraints.exists(e => e.src == lhs)
+      }
+
+    isRetvalRelevant(i, caller, qry) ||
+      dropCallConstraintsOrCheckCallRelevant(callee, qry.heapConstraints, dropConstraints = false, loopDrop = false, qry)
   }  
   
   private def dropCallConstraints(qry : Qry, callee : CGNode, 

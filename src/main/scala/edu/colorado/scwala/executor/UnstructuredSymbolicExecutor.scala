@@ -1,6 +1,5 @@
 package edu.colorado.scwala.executor
 
-import com.ibm.wala.analysis.reflection.CloneInterpreter
 import com.ibm.wala.analysis.typeInference.TypeInference
 import com.ibm.wala.cfg.ControlFlowGraph
 import com.ibm.wala.classLoader.IClass
@@ -14,8 +13,8 @@ import com.ibm.wala.util.graph.dominators.Dominators
 import com.twitter.util.LruMap
 import edu.colorado.scwala.executor.UnstructuredSymbolicExecutor._
 import edu.colorado.scwala.state.{Path, Qry}
-import edu.colorado.scwala.translate.{InvariantMap, MinSet, WalaBlock}
 import edu.colorado.scwala.translate.WalaBlock.{fromISSABasicBlock, fromWalaBlock}
+import edu.colorado.scwala.translate.{InvariantMap, MinSet, WalaBlock}
 import edu.colorado.scwala.util.{CFGUtil, CGNodeUtil, ClassUtil, LoopUtil, Timer, Util}
 import edu.colorado.thresher.core.Options
 
@@ -96,23 +95,13 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
       failPaths : List[Path] = List.empty[Path]) : List[Path] = 
     executeBackwardWhile(passPaths, (p => if (p.foundWitness) throw WitnessFoundException else test(p)), failPaths)
   
-  // TODO: this is wrong because the method reference won't be resolved
-  def isCallToObjectClone(m : MethodReference) : Boolean = cha.resolveMethod(m) match {
-    case null => false
-    case m => 
-      // do this instead of direct comparison with CloneInterpreter.CLONE because classloader differences
-      // can obscure the equality check 
-      m.getDeclaringClass().getName() == CloneInterpreter.CLONE.getDeclaringClass().getName() &&
-      m.getSelector() == CloneInterpreter.CLONE.getSelector()
-  }
-  
   // return (list of paths that entered callee, list of paths that have chosen to skip callee)
   def enterCallee(paths : List[Path], i : SSAInvokeInstruction) : (List[Path], List[Path]) = {
     if (TRACE) logMethodAndTime("enterCallee")
-    val caller = paths.head.node    
-    if (isCallToObjectClone(i.getCallSite().getDeclaredTarget())) // special case for special clone() method 
-       (Nil, paths.filter(p => p.handleCallToObjectClone(i, tf)))
-    else {
+    val caller = paths.head.node
+    tf.handleJavaMagicMethod(i, caller, paths) match {
+      case Some(res) => res
+      case None =>
       val callees = cg.getPossibleTargets(caller, i.getCallSite())      
       if (callees.isEmpty()) {
         // callee is a native method or cannot be resolved for some reason. drop any retval constraints we have

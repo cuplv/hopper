@@ -236,6 +236,7 @@ object DowncastCheckingClientTests extends ClientTests {
                      "SwitchReturnNoRefute", 
                      "HashtableEnumeratorNoRefute",
                      "HashtableEnumeratorRefute",
+                     "IsInstanceRefute", "IsInstanceNoRefute",
                      "InstrOpcodeIndexSensitivePiecewiseRefute", "InstrOpcodeIndexSensitivePiecewiseNoRefute")
                         //"CallTypeRefute", "CallTypeNoRefute") // will fix these later; results are sound, but not precise
 

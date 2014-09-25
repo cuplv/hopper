@@ -196,7 +196,21 @@ class Qry(val heapConstraints : MSet[HeapPtEdge], val pureConstraints : MSet[Pur
     })) 
     val localObjVars = callStack.stack.foldLeft (Set.empty[ObjVar]) ((s, f) => keepObjVars(f.localConstraints, s))
     keepObjVars(heapConstraints, localObjVars)
-  }   
+  }
+
+  private def isDefinitelyBool(p : PureVar, bool : Boolean) = {
+    try {
+      !qry.checkTmpPureConstraint(Pure.makeEqBoolConstraint(p, !bool))
+    } catch {
+      case e : UnknownSMTResult => false
+    }
+  }
+
+  /** @return true if @param p is definitely false, false otherwise */
+  def isDefinitelyTrue(p : PureVar) : Boolean = isDefinitelyBool(p, true)
+
+  /** @return true if @param p is definitely true, false otherwise */
+  def isDefinitelyFalse(p : PureVar) : Boolean = isDefinitelyBool(p, false)
 
   /** @return true if @param p is definitely null, false otherwise */
   def isNull(p : PureVar) : Boolean = {

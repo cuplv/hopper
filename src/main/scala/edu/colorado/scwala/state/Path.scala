@@ -349,13 +349,6 @@ class Path(val qry : Qry, var lastBlk : WalaBlock = null,
     lastBlk = callStack.top.blk
     callStack.top.blk = newBlk
     callStack.top.index = newBlk.size - 1
-  }   
-  
-  def handleCallToObjectClone(i : SSAInvokeInstruction, tf : TransferFunctions) : Boolean = {
-    // special case for object clone, which is a magic method in Java
-    val res = tf.handleCallToObjectClone(i, qry, node)
-    if (DEBUG && !res) println("Refuted by bad call to Object.clone!")
-    res
   }
 
   def enterCallee(i : SSAInvokeInstruction, callee : CGNode, tf : TransferFunctions) : Boolean = {
