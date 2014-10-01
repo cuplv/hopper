@@ -381,9 +381,10 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
       if (CFGUtil.endsWithConditionalInstr(startBlk)) {
         if (DEBUG) println("at loop head BB" + loopHeader.getNumber() + " on path " + p)
         val thenBranch = CFGUtil.getThenBranch(startBlk, p.node.getIR().getControlFlowGraph())
-        // don't do the loop invariant check if we're coming from outside the loop!
-        if ((p.lastBlk != thenBranch || LoopUtil.isDoWhileLoop(loopHeader, ir)) && 
-            invariantImpliesPath(p)) return (passPaths, failPaths)
+
+        // don't do the loop invariant check if we're coming from outside the loop
+        if ((LoopUtil.getLoopBody(loopHeader, ir).contains(p.lastBlk)|| LoopUtil.isDoWhileLoop(loopHeader, ir)) &&
+          invariantImpliesPath(p)) return (passPaths, failPaths)
       } else if (LoopUtil.isExplicitlyInfiniteLoop(loopHeader, ir) && // won't have any conditional branch instruction in this case
                  invariantImpliesPath(p)) return (passPaths, failPaths)
     )
@@ -614,7 +615,7 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
     }     
     val curJoinCount = {joinCount += 1; joinCount} // debug only
     if (DEBUG) { 
-      println(curJoinCount + " executing all paths to join BB" + goal.getNumber() + " from node BB" + node.getNumber() + 
+      println(curJoinCount + " executing all paths to join BB" + goal.getNumber() + " from node BB" + node.getNumber() +
               " initCallStackSize " + initCallStackSize)
     }    
     
@@ -655,38 +656,39 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
     )
   }
   
-  def handleSwitch(paths : List[Path], switch : SSASwitchInstruction, switchBlk : ISSABasicBlock, cfg : SSACFG) : List[Path] = if (PRE_CONSTRAIN_SWITCHES &&
-      paths.exists(p => p.switchConstraintsAdded.contains(switchBlk))) {
-    paths.foreach(p => p.switchConstraintsAdded.remove(switchBlk))
-    paths 
-   } else {
-     if (TRACE) logMethodAndTime("handleSwitch")
-   // if (paths.toSet.size == 1) println("switch: got reduction to 1 from " + paths.size)//List(paths.head) // switch not relevant -- continue on single path
-    //else {
-      val defaultNum = cfg.getBlockForInstruction(switch.getDefault()).getNumber()
-      if (DEBUG) {
-        val pSet = paths.toSet
-        if (paths.size != pSet.size) println("got reduction to " + pSet.size + " down from " + paths.size + " by switching to set")
-      }
-      val switchMap = getSwitchMap(switch, paths.head.node.getIR())   
-      paths.foldLeft (List.empty[Path]) ((lst, p) => {
-        val lastBlkNum = cfg.getNumber(p.lastBlk)
-        if (lastBlkNum == defaultNum) {
-          val copy = p.deepCopy
-          // if we came from default block, need to add negation of all other cases
-          if (switchMap.values.flatten.forall(cond => copy.addConstraintFromSwitch(cond, tf, negated = true))) copy :: lst
-          else lst // refuted by adding switch constraint
-        } else {
-          assert (switchMap.containsKey(lastBlkNum), 
-                  "switchMap " + switchMap + " does not have an entry for " + lastBlkNum + " ir " + p.node.getIR())
-          // otherwise, fork a case for each possible value that could have sent use to this block
-          switchMap(lastBlkNum).foldLeft (lst) ((lst, cond) => {
-            val copy = p.deepCopy
-            if (copy.addConstraintFromSwitch(cond, tf)) copy :: lst 
-            else lst // refuted by adding switch constraint 
-          })
+  def handleSwitch(paths : List[Path], switch : SSASwitchInstruction, switchBlk : ISSABasicBlock, cfg : SSACFG) : List[Path] =
+    if (PRE_CONSTRAIN_SWITCHES &&
+        paths.exists(p => p.switchConstraintsAdded.contains(switchBlk))) {
+      paths.foreach(p => p.switchConstraintsAdded.remove(switchBlk))
+      paths
+    } else {
+       if (TRACE) logMethodAndTime("handleSwitch")
+     // if (paths.toSet.size == 1) println("switch: got reduction to 1 from " + paths.size)//List(paths.head) // switch not relevant -- continue on single path
+      //else {
+        val defaultNum = cfg.getBlockForInstruction(switch.getDefault()).getNumber()
+        if (DEBUG) {
+          val pSet = paths.toSet
+          if (paths.size != pSet.size) println("got reduction to " + pSet.size + " down from " + paths.size + " by switching to set")
         }
-      }) 
+        val switchMap = getSwitchMap(switch, paths.head.node.getIR())
+        paths.foldLeft (List.empty[Path]) ((lst, p) => {
+          val lastBlkNum = cfg.getNumber(p.lastBlk)
+          if (lastBlkNum == defaultNum) {
+            val copy = p.deepCopy
+            // if we came from default block, need to add negation of all other cases
+            if (switchMap.values.flatten.forall(cond => copy.addConstraintFromSwitch(cond, tf, negated = true))) copy :: lst
+            else lst // refuted by adding switch constraint
+          } else {
+            assert (switchMap.containsKey(lastBlkNum),
+                    s"switchMap $switchMap does not have an entry for $lastBlkNum ir ${p.node.getIR()}")
+            // otherwise, fork a case for each possible value that could have sent us to this block
+            switchMap(lastBlkNum).foldLeft (lst) ((lst, cond) => {
+              val copy = p.deepCopy
+              if (copy.addConstraintFromSwitch(cond, tf)) copy :: lst
+              else lst // refuted by adding switch constraint
+            })
+          }
+        })
     //}
   }
     

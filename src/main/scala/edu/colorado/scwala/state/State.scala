@@ -1,30 +1,15 @@
 package edu.colorado.scwala.state
 
+import com.ibm.wala.analysis.reflection.InstanceKeyWithNode
+import com.ibm.wala.analysis.typeInference.TypeInference
 import com.ibm.wala.classLoader.IClass
 import com.ibm.wala.ipa.callgraph.CGNode
-import com.ibm.wala.ipa.callgraph.propagation.HeapModel
-import com.ibm.wala.ipa.callgraph.propagation.InstanceKey
-import com.ibm.wala.ipa.callgraph.propagation.LocalPointerKey
-import com.ibm.wala.ipa.callgraph.propagation.PointerKey
-import com.ibm.wala.ipa.callgraph.propagation.ReturnValueKey
-import com.ibm.wala.shrikeBT.IBinaryOpInstruction
-import com.ibm.wala.shrikeBT.IConditionalBranchInstruction
-import com.ibm.wala.ssa.SymbolTable
-import com.microsoft.z3.AST
-import com.microsoft.z3.Context
-import edu.colorado.scwala.util.ClassUtil
-import edu.colorado.scwala.util.Util
-import com.microsoft.z3.ArithExpr
-import edu.colorado.scwala.util.Types._
-import com.microsoft.z3.Expr
+import com.ibm.wala.ipa.callgraph.propagation.{HeapModel, InstanceKey, LocalPointerKey, PointerKey, ReturnValueKey}
+import com.ibm.wala.shrikeBT.{IBinaryOpInstruction, IConditionalBranchInstruction, IShiftInstruction, IUnaryOpInstruction}
+import com.ibm.wala.ssa.{SSAConditionalBranchInstruction, SymbolTable}
 import com.ibm.wala.types.TypeReference
-import com.ibm.wala.ssa.SSAConditionalBranchInstruction
-import com.ibm.wala.analysis.typeInference.TypeInference
-import com.ibm.wala.shrikeBT.ConditionalBranchInstruction
-import com.ibm.wala.shrikeBT.IShiftInstruction
-import com.ibm.wala.ipa.callgraph.CallGraph
-import com.ibm.wala.analysis.reflection.InstanceKeyWithNode
-import com.ibm.wala.shrikeBT.IUnaryOpInstruction
+import edu.colorado.scwala.util.Types._
+import edu.colorado.scwala.util.{ClassUtil, Util}
 
 /**
  * Base components of analysis state--Val's and Var's
@@ -250,7 +235,7 @@ case class ObjVar(rgn : Set[InstanceKey]) extends HeapVar with Val {
     case _ => false
   }
   override def toString : String = if (rgn.size == 1) id + "-" + ClassUtil.pretty(rgn.head)
-    else id + "-" + ClassUtil.pretty(rgn.head.getConcreteType()) 
+    else s"$id-${ClassUtil.pretty(rgn.head.getConcreteType())}(${rgn.size})"
   //override def toString : String =  
     //id + "-" + ClassUtil.pretty(rgn.head.getConcreteType()) + "<RGN>\n" + rgn.foldLeft ("") ((str, ele>) => str + "\n" + elem) + "<eRGN>\n"
 }

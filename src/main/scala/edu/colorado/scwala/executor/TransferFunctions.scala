@@ -809,7 +809,7 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph, _hm : HeapModel,
   }
                                          
   def execute(s : SSAInstruction, qry : Qry, n : CGNode) : List[Qry] = s match {
-    case s : SSAPutInstruction => // x.f = y    
+    case s : SSAPutInstruction => // x.f = y
       def processPut(edge : Option[HeapPtEdge], qry : Qry, l : List[Qry] = Nil) : List[Qry] = edge match {
         case Some(edge) => edge.src match { // have edge A.f -> B
           case xVar@ObjVar(rgn) => // have x -> A, A.f -> B
@@ -1051,14 +1051,15 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph, _hm : HeapModel,
     case s : SSAGetInstruction => // x = y.f
       val iFld = cha.resolveField(s.getDeclaredField())            
       getConstraintEdgeForDef(s, qry.localConstraints, n) match {
-        case Some(xEdge) =>          
+        case Some(xEdge) =>
           def processGet(qry : Qry, ptY : ObjVar, fld : InstanceFld, xEdge : LocalPtEdge) : Boolean = {                        
             getConstraintPt(ptY, iFld, qry.heapConstraints) match {
               case Some(e@ObjPtEdge(_, _, ptYf@ObjVar(rgnA))) => // found edge ptY.f -> A
                 processGetInternal(qry, ptY, fld, ptYf, xEdge, Some(e))
               case Some(e@ObjPtEdge(src, f, p@PureVar(_))) => // found edge ptY.f -> p
                 xEdge.snk match {
-                  case snk@PureVar(_) => qry.addPureConstraint(Pure.makeEqConstraint(p, snk))
+                  case snk@PureVar(_) =>
+                    qry.addPureConstraint(Pure.makeEqConstraint(p, snk))
                   case o@ObjVar(_) => 
                     val res = qry.addPureConstraint(Pure.makeNeNullConstraint(p))
                     if (res) {

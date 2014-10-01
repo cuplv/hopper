@@ -366,7 +366,7 @@ class Path(val qry : Qry, var lastBlk : WalaBlock = null,
     tf.constrainBasedOnSwitchCases(cases, qry, node)
   }
  
-  def addConstraintFromSwitch(i : SSAConditionalBranchInstruction, tf : TransferFunctions, negated : Boolean = false) : Boolean = { 
+  def addConstraintFromSwitch(i : SSAConditionalBranchInstruction, tf : TransferFunctions, negated : Boolean = false) : Boolean = {
     val res0 = tf.executeCond(i, qry, node, !negated)    
     res0
   }
