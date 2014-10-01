@@ -1,19 +1,12 @@
 package edu.colorado.scwala.translate
 
 import java.io.File
-import edu.colorado.scwala.client.AssertionCheckingClientTests
-import edu.colorado.scwala.client.DowncastCheckingClient
-import edu.colorado.scwala.client.DowncastCheckingClientTests
-import edu.colorado.scwala.client.android.AndroidLeakClient
-import edu.colorado.scwala.client.android.AndroidLeakClientTests
-import edu.colorado.scwala.client.android.AndroidUIClient
+
+import edu.colorado.scwala.client.{AssertionCheckingClient, AssertionCheckingClientTests, DowncastCheckingClient, DowncastCheckingClientTests, NullDereferenceClient}
+import edu.colorado.scwala.client.android.{AndroidLeakClient, AndroidLeakClientTests, AndroidUIClient}
+import edu.colorado.scwala.client.bounds.{ArrayBoundsClient, ArrayBoundsClientTests}
 import edu.colorado.scwala.util.Util
 import edu.colorado.thresher.core.Options
-import edu.colorado.scwala.client.bounds.ArrayBoundsClient
-import edu.colorado.scwala.client.bounds.ArrayBoundsClientTests
-import edu.colorado.scwala.client.bounds.ArrayBoundsClient
-import edu.colorado.scwala.client.AssertionCheckingClient
-import edu.colorado.scwala.client.NullDereferenceClient
 
 object Main {
   
@@ -58,7 +51,7 @@ object Main {
       }
     } else if (Options.CHECK_CASTS) {
       Options.PRINT_REFS = false
-      Options.EXIT_ON_FAIL = false        
+      Options.EXIT_ON_FAIL = false
       new DowncastCheckingClient(Options.APP, Util.strToOption(Options.LIB), Options.MAIN_CLASS, Options.MAIN_METHOD)
       .checkCasts()
     } else if (Options.ANDROID_LEAK)      

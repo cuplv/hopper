@@ -1,33 +1,20 @@
 package edu.colorado.scwala.client
 
-import scala.collection.JavaConversions._
-import com.ibm.wala.ipa.callgraph.CGNode
-import com.ibm.wala.ipa.callgraph.propagation.ConcreteTypeKey
-import com.ibm.wala.ipa.callgraph.propagation.InstanceKey
-import com.ibm.wala.ipa.callgraph.propagation.LocalPointerKey
-import com.ibm.wala.ssa.SSAFieldAccessInstruction
-import com.ibm.wala.ssa.SSAInstruction
-import com.ibm.wala.ssa.SSAInvokeInstruction
-import com.ibm.wala.ssa.SSAPutInstruction
-import com.ibm.wala.ssa.SymbolTable
-import edu.colorado.droidel.util.IRUtil
-import edu.colorado.scwala.client.bounds.DefaultArrayBoundsSymbolicExecutor
-import edu.colorado.scwala.client.bounds.PiecewiseArrayBoundsSymbolicExecutor
-import edu.colorado.scwala.executor.DefaultSymbolicExecutor
-import edu.colorado.scwala.executor.TransferFunctions
-import edu.colorado.scwala.piecewise.DefaultPiecewiseSymbolicExecutor
-import edu.colorado.scwala.piecewise.RelevanceRelation
-import edu.colorado.scwala.state.LocalPtEdge
-import edu.colorado.scwala.state.PtEdge
-import edu.colorado.scwala.state.Pure
-import edu.colorado.scwala.state.PureVar
-import edu.colorado.scwala.state.Qry
-import edu.colorado.scwala.state.Var
-import edu.colorado.scwala.util.ClassUtil
-import edu.colorado.scwala.util.PtUtil
-import edu.colorado.thresher.core.Options
-import scala.io.Source
 import java.io.File
+
+import com.ibm.wala.ipa.callgraph.CGNode
+import com.ibm.wala.ipa.callgraph.propagation.{ConcreteTypeKey, InstanceKey}
+import com.ibm.wala.ssa.{SSAFieldAccessInstruction, SSAInstruction, SSAInvokeInstruction, SSAPutInstruction, SymbolTable}
+import com.ibm.wala.types.TypeReference
+import edu.colorado.droidel.util.IRUtil
+import edu.colorado.scwala.executor.{DefaultSymbolicExecutor, TransferFunctions}
+import edu.colorado.scwala.piecewise.{DefaultPiecewiseSymbolicExecutor, RelevanceRelation}
+import edu.colorado.scwala.state.{LocalPtEdge, PtEdge, Pure, PureVar, Qry, Var}
+import edu.colorado.scwala.util.{CFGUtil, ClassUtil, PtUtil}
+import edu.colorado.thresher.core.Options
+
+import scala.collection.JavaConversions._
+import scala.io.Source
 
 class NullDereferenceClient(appPath : String, libPath : Option[String], mainClass : String, mainMethod : String, 
     isRegression : Boolean = false) extends Client(appPath, libPath, mainClass, mainMethod, isRegression) {
@@ -48,7 +35,7 @@ class NullDereferenceClient(appPath : String, libPath : Option[String], mainClas
       proven
     }
     else {
-      println("Cast file " + fileName + " does not exist.")
+      println("File " + fileName + " does not exist.")
       Set.empty[Int]
     }  
   
@@ -108,6 +95,14 @@ class NullDereferenceClient(appPath : String, libPath : Option[String], mainClas
       if (proveSet.contains(count)) { 
         println(s"Skipping possible null deref # ${count} due to prove set")
         false
+      } else if (Options.SOUND_EXCEPTIONS && {
+          val ir = n.getIR
+          val startBlk = ir.getBasicBlockForInstruction(i)
+          CFGUtil.isProtectedByCatchBlockInterprocedural(startBlk, n,
+            TypeReference.JavaLangNullPointerException, cg, cha)
+        }) {
+          println("Exception analysis proved null deref safe.")
+          false
       } else {
         val ir = n.getIR()
         val srcLine = IRUtil.getSourceLine(i, ir)

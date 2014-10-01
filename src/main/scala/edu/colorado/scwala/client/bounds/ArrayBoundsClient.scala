@@ -1,28 +1,18 @@
 package edu.colorado.scwala.client.bounds
 
-import scala.collection.JavaConversions._
-import edu.colorado.scwala.client.Client
-import edu.colorado.scwala.client.ClientTests
-import edu.colorado.scwala.util.LoopUtil
-import edu.colorado.scwala.util.Timer
-import edu.colorado.scwala.util.Util
-import edu.colorado.thresher.core.Options
-import edu.colorado.scwala.piecewise.RelevanceRelation
-import com.ibm.wala.ipa.callgraph.CGNode
-import com.ibm.wala.ssa.SSAArrayReferenceInstruction
-import edu.colorado.scwala.util.ClassUtil
-import edu.colorado.scwala.state.Pure
-import edu.colorado.scwala.state.Qry
-import edu.colorado.scwala.state.ObjVar
-import edu.colorado.scwala.util.PtUtil
-import edu.colorado.scwala.util.IRUtil
-import edu.colorado.scwala.state.Var
-import edu.colorado.scwala.state.PtEdge
-import edu.colorado.scwala.state.IntVal
-import edu.colorado.scwala.state.Fld
-import com.ibm.wala.ssa.SSANewInstruction
-import scala.io.Source
 import java.io.File
+
+import com.ibm.wala.ipa.callgraph.CGNode
+import com.ibm.wala.ssa.{SSAArrayReferenceInstruction, SSANewInstruction}
+import com.ibm.wala.types.TypeReference
+import edu.colorado.scwala.client.{Client, ClientTests}
+import edu.colorado.scwala.piecewise.RelevanceRelation
+import edu.colorado.scwala.state.{Fld, IntVal, ObjVar, PtEdge, Pure, Qry, Var}
+import edu.colorado.scwala.util._
+import edu.colorado.thresher.core.Options
+
+import scala.collection.JavaConversions._
+import scala.io.Source
 
 class ArrayBoundsClient(appPath : String, libPath : Option[String], mainClass : String, mainMethod : String, 
     isRegression : Boolean = false) extends Client(appPath, libPath, mainClass, mainMethod, isRegression) {
@@ -79,6 +69,13 @@ class ArrayBoundsClient(appPath : String, libPath : Option[String], mainClass : 
           else if (Options.CAST > 0 && Options.CAST != countPair._2) (countPair._1, countPair._2 + 1) // hack for debugging - let us target a particular access
           else if (proveSet.contains(countPair._2)) {
             println(s"Skipping possible bounds fail # ${countPair._2 + 1} due to prove set")
+            (countPair._1 + 1, countPair._2 + 1)
+          } else if (Options.SOUND_EXCEPTIONS && {
+            val startBlk = ir.getBasicBlockForInstruction(instr)
+            CFGUtil.isProtectedByCatchBlockInterprocedural(startBlk, n,
+              TypeReference.JavaLangNullPointerException, cg, this.cha)
+          }) {
+            println("Exception analysis proved null deref safe.")
             (countPair._1 + 1, countPair._2 + 1)
           } else {
             val (failCount, total) = countPair
@@ -192,7 +189,8 @@ object ArrayBoundsClientTests extends ClientTests {
           Options.INDEX_SENSITIVITY = test.contains("IndexSensitive")
           if (!Options.PIECEWISE_EXECUTION && test.contains("Piecewise")) Options.PIECEWISE_EXECUTION = true
           if (Options.PIECEWISE_EXECUTION) Options.PRIM_ARRAY_SENSITIVITY = true
-          new ArrayBoundsClient(path, Util.strToOption(Options.LIB), test, "main", isRegression = true).checkArrayBounds
+          new ArrayBoundsClient(path, Util.strToOption(Options.LIB), test, "main", isRegression = true)
+          .checkArrayBounds()
         } catch {      
           case e : Throwable =>
             printTestFailureMsg(test, testNum)

@@ -67,14 +67,20 @@ class DowncastCheckingClient(appPath : String, libPath : Option[String], mainCla
       else if (Options.USE_DEMAND_CAST_CHECKER) "prove_casts_fi.txt" // use casts proven by flow-insensitive analysis
       else if (Options.PIECEWISE_EXECUTION) "prove_casts_th.txt" // use casts proven by regular Thresher
       else "prove_casts_dc.txt" // regular Thresher case; use casts proven by demand cast checker
-      
+
     /*  
     val pwProveSet = parseCastList(Options.APP + "prove_casts_pw.txt")
     val thProveSet = parseCastList(Options.APP + "prove_casts_th.txt")
     val pwMinusTh = pwProveSet.diff(thProveSet) // run on each of the casts that piecewise can prove, but Thresher can't
     println("pwMinusTh is " + pwMinusTh)
     */
-      
+
+    // for Chord only
+    val chordQueryPath = s"${Options.APP.replace("classes", "")}/queries.txt"
+    println(s"Checking $chordQueryPath for Chord queries")
+    val chordQueries = parseCastList(chordQueryPath)
+    println(s"Solving ${chordQueries.size} queries from Chord")
+
     // for dacapo only
     val benchPath = Options.APP.substring(0, Options.APP.lastIndexOf('/') + 1)
     println(s"$benchPath")
@@ -121,33 +127,37 @@ class DowncastCheckingClient(appPath : String, libPath : Option[String], mainCla
                       // bytecode index is the only way we can get different points-to analyses to agree on which casts are the same
                       val bytecodeIndex = bytecodeMethod.getBytecodeIndex(index)
                       val castId = method + ":" + bytecodeIndex
-                      print("Checking "); ClassUtil.pp_instr(castInstr, node.getIR()) 
-                      println(" in class " + declaringClass + " method " + ClassUtil.pretty(method) + 
-                              " source line " + IRUtil.getSourceLine(bytecodeIndex, bytecodeMethod))//edu.colorado.thresher.core.Util.getSourceLineNumber(ir, index))
-                      val castPk = hm.getPointerKeyForLocal(node, castInstr.getUse(0)).asInstanceOf[LocalPointerKey]  
+                      val castDescr = s"class $declaringClass method ${ClassUtil.pretty(method)}} line ${IRUtil.getSourceLine(bytecodeIndex, bytecodeMethod)}"
+                      print("Checking ");
+                      ClassUtil.pp_instr(castInstr, node.getIR())
+                      println(s" $castDescr")
+                      val castPk = hm.getPointerKeyForLocal(node, castInstr.getUse(0)).asInstanceOf[LocalPointerKey]
                       val declaredResultClass = cha.lookupClass(declaredResultType)
                       val badKeys =
                         if (declaredResultClass == null) Set.empty[InstanceKey] // this can happen because of exclusions
                         else
                           pa.getPointsToSet(castPk).filter(key => !cha.isAssignableFrom(declaredResultClass,
                                                                                         key.getConcreteType()))
-                                              
+
                       badKeys.foreach(k => assert(k.getConcreteType() != declaredResultClass, "types " + declaredResultClass + " the same!"))
-                      if (badKeys.isEmpty ||
-                          proveSet.contains(castId)) {
+                      if (!chordQueries.isEmpty && !chordQueries.contains(castId)) {
+                        println("This query not specified by Chord; skipping")
+                        (numSafe, numMightFail, numThresherProvedSafe, total)
+                      } else if (badKeys.isEmpty ||
+                        proveSet.contains(castId)) {
                         //!pwMinusTh.contains(castId)) {
                         //proveSet.contains(castId) || total < 1178) { // TMP for focusing on a specific cast!
                         println("Points-to analysis proved cast #" + total + " safe.")
                         println("CAST_ID: " + castId)
                         (numSafe + 1, numMightFail, numThresherProvedSafe, total + 1)
                       } else if (Options.SOUND_EXCEPTIONS && {
-                          val startBlk = ir.getBasicBlockForInstruction(castInstr)
-                          CFGUtil.isProtectedByCatchBlockInterprocedural(startBlk, node,
-                                                                         TypeReference.JavaLangClassCastException, cg)
-                        }) {
+                        val startBlk = ir.getBasicBlockForInstruction(castInstr)
+                        CFGUtil.isProtectedByCatchBlockInterprocedural(startBlk, node,
+                                                                       TypeReference.JavaLangClassCastException, cg, cha)
+                      }) {
                         println("Exception analysis proved cast safe.")
                         (numSafe + 1, numMightFail, numThresherProvedSafe, total + 1)
-                      } else {                        
+                      } else {
                         println("According to point-to analysis, cast #" + total + " may fail.")
                         if (Options.USE_DEMAND_CAST_CHECKER && !demandFails.contains(castId)) {
                           println("Demand cast checker proved cast #" + total + " safe.")
@@ -189,7 +199,8 @@ class DowncastCheckingClient(appPath : String, libPath : Option[String], mainCla
                             (numSafe, numMightFail + 1, numThresherProvedSafe + 1, total + 1)
                           } else {
                             println("Thresher cannot prove cast #" + total + " safe. Fail? " + fail)
-                            println("Not safe: " + castId)
+                            ClassUtil.pp_instr(castInstr, node.getIR()); println
+                            println(s"Not safe: $castId $castDescr")
                             (numSafe, numMightFail + 1, numThresherProvedSafe, total + 1)
                           }
                           }

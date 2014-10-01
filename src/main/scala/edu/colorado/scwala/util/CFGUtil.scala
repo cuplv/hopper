@@ -1,28 +1,17 @@
 package edu.colorado.scwala.util
 
+import com.ibm.wala.ipa.callgraph.{CGNode, CallGraph}
+import com.ibm.wala.ipa.cha.IClassHierarchy
+import com.ibm.wala.ssa.{ISSABasicBlock, SSACFG, SSAConditionalBranchInstruction, SSAGotoInstruction, SSAInstruction, SSAReturnInstruction, SSASwitchInstruction, SSAThrowInstruction}
 import com.ibm.wala.types.TypeReference
-
-import scala.collection.JavaConversions._
-import scala.collection.JavaConversions.collectionAsScalaIterable
-import scala.collection.JavaConversions.iterableAsScalaIterable
-import com.ibm.wala.ipa.callgraph.{CallGraph, CGNode}
-import com.ibm.wala.ssa.IR
-import com.ibm.wala.ssa.ISSABasicBlock
-import com.ibm.wala.ssa.SSACFG
-import com.ibm.wala.ssa.SSAConditionalBranchInstruction
-import com.ibm.wala.ssa.SSAGotoInstruction
-import com.ibm.wala.ssa.SSAInstruction
-import com.ibm.wala.ssa.SSAReturnInstruction
-import com.ibm.wala.ssa.SSASwitchInstruction
-import com.ibm.wala.ssa.SSAThrowInstruction
-import com.ibm.wala.util.graph.Graph
+import com.ibm.wala.util.graph.{Graph, NumberedGraph}
 import com.ibm.wala.util.graph.dominators.Dominators
 import com.ibm.wala.util.graph.impl.GraphInverter
-import com.ibm.wala.util.graph.traverse.BFSPathFinder
-import com.ibm.wala.util.graph.traverse.DFS
-import edu.colorado.thresher.core.WALACFGUtil
-import com.ibm.wala.util.graph.NumberedGraph
+import com.ibm.wala.util.graph.traverse.{BFSPathFinder, DFS}
 import edu.colorado.scwala.translate.WalaBlock
+import edu.colorado.thresher.core.WALACFGUtil
+
+import scala.collection.JavaConversions.{collectionAsScalaIterable, iterableAsScalaIterable, _}
 
 
 object CFGUtil {
@@ -190,13 +179,15 @@ object CFGUtil {
     }
 
     /** @return true if @param block is protected by a catch block when it throws exception @exc */
-    def isProtectedByCatchBlockIntraprocedural(blk : ISSABasicBlock, cfg : SSACFG, exc : TypeReference) : Boolean =
-      edu.colorado.thresher.core.WALACFGUtil.isProtectedByCatchBlock(blk, cfg, exc)
+    def isProtectedByCatchBlockIntraprocedural(blk : ISSABasicBlock, cfg : SSACFG, exc : TypeReference,
+                                               cha : IClassHierarchy) : Boolean = {
+      edu.colorado.thresher.core.WALACFGUtil.isProtectedByCatchBlock(blk, cfg, cha.lookupClass(exc), cha)
+    }
 
     def isProtectedByCatchBlockInterprocedural(blk : ISSABasicBlock, node : CGNode, exc : TypeReference,
-                                               cg : CallGraph) : Boolean =
+                                               cg : CallGraph, cha : IClassHierarchy) : Boolean =
       // protected if it is protected intraprocedurally...
-      isProtectedByCatchBlockIntraprocedural(blk, node.getIR.getControlFlowGraph, exc) || {
+      isProtectedByCatchBlockIntraprocedural(blk, node.getIR.getControlFlowGraph, exc, cha) || {
         // ...or interprocedurally in callers
         def extendWorklistWithPreds(node : CGNode, worklist : List[(CGNode,CGNode)]) : List[(CGNode,CGNode)] =
           cg.getPredNodes(node).foldLeft (worklist) ((worklist, caller) => (caller, node) :: worklist)
@@ -218,7 +209,7 @@ object CFGUtil {
                   val siteBlks =
                     cg.getPossibleSites(caller, callee).foldLeft(Set.empty[ISSABasicBlock])((siteBlks, site) =>
                       siteBlks ++ ir.getBasicBlocksForCall(site))
-                  siteBlks.forall(blk => isProtectedByCatchBlockIntraprocedural(blk, cfg, exc))
+                  siteBlks.forall(blk => isProtectedByCatchBlockIntraprocedural(blk, cfg, exc, cha))
                 }
 
                 if (hasCatchBlk && protectedAtAllCallSites())

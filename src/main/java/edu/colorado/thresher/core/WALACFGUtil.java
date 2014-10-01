@@ -1,27 +1,13 @@
 package edu.colorado.thresher.core;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Comparator;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
 import com.ibm.wala.classLoader.CallSiteReference;
 import com.ibm.wala.classLoader.IClass;
 import com.ibm.wala.classLoader.IMethod;
 import com.ibm.wala.ipa.callgraph.CGNode;
 import com.ibm.wala.ipa.callgraph.CallGraph;
-import com.ibm.wala.ssa.IR;
-import com.ibm.wala.ssa.ISSABasicBlock;
-import com.ibm.wala.ssa.SSACFG;
+import com.ibm.wala.ipa.cha.IClassHierarchy;
+import com.ibm.wala.ssa.*;
 import com.ibm.wala.ssa.SSACFG.ExceptionHandlerBasicBlock;
-import com.ibm.wala.ssa.SSAConditionalBranchInstruction;
-import com.ibm.wala.ssa.SSAInstruction;
-import com.ibm.wala.ssa.SSAInvokeInstruction;
-import com.ibm.wala.ssa.SSAThrowInstruction;
 import com.ibm.wala.types.MethodReference;
 import com.ibm.wala.types.TypeReference;
 import com.ibm.wala.util.collections.HashMapFactory;
@@ -32,12 +18,9 @@ import com.ibm.wala.util.graph.Graph;
 import com.ibm.wala.util.graph.dominators.Dominators;
 import com.ibm.wala.util.graph.traverse.BFSIterator;
 import com.ibm.wala.util.graph.traverse.BFSPathFinder;
-import com.ibm.wala.util.intset.IBinaryNaturalRelation;
-import com.ibm.wala.util.intset.IntIterator;
-import com.ibm.wala.util.intset.IntPair;
-import com.ibm.wala.util.intset.IntSet;
-import com.ibm.wala.util.intset.MutableIntSet;
-import com.ibm.wala.util.intset.MutableSparseIntSet;
+import com.ibm.wala.util.intset.*;
+
+import java.util.*;
 
 /**
  * utility class for asking various common questions about WALA CFG's
@@ -84,11 +67,8 @@ public class WALACFGUtil {
   }
 
   /**
-   * @param suspected
-   *          loop head
-   * @param IR
-   *          for block containing suspected loop head
-   * @return true if suspsectedHead is a loop head, false otherwise
+   * @param ir - IR for block containing suspected loop head
+   * @return true if suspectedHead is a loop head, false otherwise
    */
   public static boolean isLoopHead(ISSABasicBlock suspectedHead, IR ir) {
     MutableIntSet loopHeaders = getLoopHeaders(ir);
@@ -799,11 +779,12 @@ public class WALACFGUtil {
     return null;
   }
 
-  public static boolean isProtectedByCatchBlock(ISSABasicBlock blk, SSACFG cfg, TypeReference exc) {
+  public static boolean isProtectedByCatchBlock(ISSABasicBlock blk, SSACFG cfg, IClass exc, IClassHierarchy cha) {
     for (ISSABasicBlock b : cfg.getExceptionalSuccessors(blk)) {
       if (b.isCatchBlock()) {
           for (Iterator<TypeReference> iter = b.getCaughtExceptionTypes(); iter.hasNext();) {
-            if (iter.next().equals(exc)) return true;
+            IClass caughtExc = cha.lookupClass(iter.next());
+            if (cha.isAssignableFrom(caughtExc, exc)) return true;
           }
       }
     }
