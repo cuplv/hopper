@@ -1,19 +1,10 @@
 package edu.colorado.scwala.util
 
-import javax.tools.ToolProvider
-import javax.tools.DiagnosticCollector
-import javax.tools.JavaFileObject
+import java.io.{File, FileInputStream, FileOutputStream, InputStream, OutputStream}
+import java.util.jar.{JarEntry, JarFile, JarOutputStream}
+import javax.tools.{DiagnosticCollector, JavaFileObject, ToolProvider}
+
 import scala.collection.JavaConversions._
-import java.io.File
-import java.util.jar.JarEntry
-import java.io.FileInputStream
-import java.util.jar.JarOutputStream
-import java.io.FileOutputStream
-import java.util.jar.JarFile
-import java.io.InputStream
-import java.io.OutputStream
-import java.io.BufferedReader
-import java.io.InputStreamReader
 
 object JavaUtil {
   
@@ -69,7 +60,7 @@ object JavaUtil {
   }    
   
   private def writeEntry(e : JarEntry, entryStream : InputStream, jarStream : JarOutputStream) : Unit = {
-    var buf = new Array[Byte](1024)
+    val buf = new Array[Byte](1024)
     jarStream.putNextEntry(e)
     Stream.continually(entryStream.read(buf)).takeWhile(_ != -1).foreach(jarStream.write(buf, 0, _))
     jarStream.closeEntry()
@@ -82,7 +73,7 @@ object JavaUtil {
    *  mean that the directory with the given name is not added twice -- the contents of the given directory
    *  will be merged correctly
    *  
-   *  @param duplicatedWarning - if true, print warning message when a duplicate file entry is found and not added   
+   *  @param duplicateWarning - if true, print warning message when a duplicate file entry is found and not added
    **/
   def mergeJars(jarFiles : Iterable[File], newJarName : String, duplicateWarning : Boolean = false) : Unit = {
     val outStream = new FileOutputStream(newJarName)
@@ -108,7 +99,7 @@ object JavaUtil {
   // entries always occur before their children. probably better to just use the command line jar utility
   def extractJar(jarFile : File, outPath : String) : Unit = {
     def copyStream(istream : InputStream, ostream : OutputStream) : Unit = {
-      var bytes =  new Array[Byte](1024)
+      val bytes =  new Array[Byte](1024)
       var len = -1
       while({ len = istream.read(bytes, 0, 1024); len != -1 })
         ostream.write(bytes, 0, len)

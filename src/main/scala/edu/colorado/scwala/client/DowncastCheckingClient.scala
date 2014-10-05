@@ -79,6 +79,7 @@ class DowncastCheckingClient(appPath : String, libPath : Option[String], mainCla
     val chordQueryPath = s"${Options.APP.replace("classes", "")}/queries.txt"
     println(s"Checking $chordQueryPath for Chord queries")
     val chordQueries = parseCastList(chordQueryPath)
+    var checked = Set.empty[String]
     println(s"Solving ${chordQueries.size} queries from Chord")
 
     // for dacapo only
@@ -108,7 +109,8 @@ class DowncastCheckingClient(appPath : String, libPath : Option[String], mainCla
         if (!declaringClass.getClassLoader().equals(ClassLoaderReference.Primordial)) {
           node.getIR() match {
             case null => quad
-            case ir => 
+            case ir =>
+              println("Checking method " + ClassUtil.pretty(node.getMethod))
               ir.getInstructions().view.zipWithIndex.foldLeft (quad) ((quad, pair) => { 
                 val method = node.getMethod().getReference()
                 val (numSafe, numMightFail, numThresherProvedSafe, total) = quad
@@ -149,6 +151,7 @@ class DowncastCheckingClient(appPath : String, libPath : Option[String], mainCla
                         //proveSet.contains(castId) || total < 1178) { // TMP for focusing on a specific cast!
                         println("Points-to analysis proved cast #" + total + " safe.")
                         println("CAST_ID: " + castId)
+                        checked = checked + castId
                         (numSafe + 1, numMightFail, numThresherProvedSafe, total + 1)
                       } else if (Options.SOUND_EXCEPTIONS && {
                         val startBlk = ir.getBasicBlockForInstruction(castInstr)
@@ -156,9 +159,11 @@ class DowncastCheckingClient(appPath : String, libPath : Option[String], mainCla
                                                                        TypeReference.JavaLangClassCastException, cg, cha)
                       }) {
                         println("Exception analysis proved cast safe.")
+                        checked = checked + castId
                         (numSafe + 1, numMightFail, numThresherProvedSafe, total + 1)
                       } else {
                         println("According to point-to analysis, cast #" + total + " may fail.")
+                        checked = checked + castId
                         if (Options.USE_DEMAND_CAST_CHECKER && !demandFails.contains(castId)) {
                           println("Demand cast checker proved cast #" + total + " safe.")
                           println("CAST_ID: " + castId)
@@ -218,6 +223,9 @@ class DowncastCheckingClient(appPath : String, libPath : Option[String], mainCla
     println("Thresher proved safe: " + numThresherProvedSafe)    
     castTimer.stop
     println("Checking all casts took " + castTimer.time + " seconds")
+
+    val diff = chordQueries diff checked
+    if (!chordQueries.isEmpty && !diff.isEmpty) println(s"WARNING: did not check $diff")
 
     new CastCheckingResults(numSafe, numMightFail, numThresherProvedSafe)
   }        

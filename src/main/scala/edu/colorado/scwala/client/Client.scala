@@ -7,7 +7,6 @@ import com.ibm.wala.analysis.pointers.HeapGraph
 import com.ibm.wala.classLoader.{BinaryDirectoryTreeModule, IClass, IMethod}
 import com.ibm.wala.ipa.callgraph.AnalysisOptions.ReflectionOptions
 import com.ibm.wala.ipa.callgraph.impl.{ArgumentTypeEntrypoint, DefaultEntrypoint}
-import com.ibm.wala.ipa.callgraph.propagation.cfa.ZeroXInstanceKeys
 import com.ibm.wala.ipa.callgraph.propagation.{HeapModel, PointerAnalysis, PointerKey}
 import com.ibm.wala.ipa.callgraph.{AnalysisCache, AnalysisOptions, AnalysisScope, CGNode, CallGraph, CallGraphBuilder, CallGraphStats, Entrypoint}
 import com.ibm.wala.ipa.cha.{ClassHierarchy, IClassHierarchy}
@@ -57,7 +56,7 @@ abstract class Client(appPath : String, libPath : Option[String], mainClass : St
     val cache = makeAnalysisCache
 
     // finally, build the call graph and extract the points-to analysis
-    val cgBuilder = makeCallGraphBuilder(options, cache, cha, analysisScope, isRegression)    
+    val cgBuilder = makeCallGraphBuilder(options, cache, cha, analysisScope, isRegression)
 
     val ptTimer = new Timer
     ptTimer.start
@@ -84,7 +83,7 @@ abstract class Client(appPath : String, libPath : Option[String], mainClass : St
       
   def makeCallGraphBuilder(options : AnalysisOptions, cache : AnalysisCache, cha : IClassHierarchy, 
                            analysisScope : AnalysisScope, isRegression : Boolean) : CallGraphBuilder = {
-    assert(options.getMethodTargetSelector() == null, "Method target selector should not be set at this point.")
+    /*assert(options.getMethodTargetSelector() == null, "Method target selector should not be set at this point.")
     assert(options.getClassTargetSelector() == null, "Class target selector should not be set at this point.")
     com.ibm.wala.ipa.callgraph.impl.Util.addDefaultSelectors(options, cha)
     addBypassLogic(options, analysisScope, cha)
@@ -94,7 +93,10 @@ abstract class Client(appPath : String, libPath : Option[String], mainClass : St
     val instancePolicy =
       if (Options.PRIM_ARRAY_SENSITIVITY) defaultInstancePolicy
       else (defaultInstancePolicy | ZeroXInstanceKeys.SMUSH_PRIMITIVE_HOLDERS)
-    new ImprovedZeroXContainerCFABuilder(cha, options, cache, null, null, instancePolicy)
+    new ImprovedZeroXContainerCFABuilder(cha, options, cache, null, null, instancePolicy)*/
+
+    com.ibm.wala.ipa.callgraph.impl.Util.makeZeroOneContainerCFABuilder(options, cache, cha, analysisScope)
+
   }
   
   def makeOptions(analysisScope : AnalysisScope, entrypoints : Iterable[Entrypoint]) : AnalysisOptions = {
@@ -195,6 +197,12 @@ abstract class Client(appPath : String, libPath : Option[String], mainClass : St
         analysisScope.addToScope(analysisScope.getPrimordialLoader(), new JarFile(libFile))
       case None => sys.error("Can't find path to Java libraries. Exiting.")
     }
+
+    // add WALA stubs
+    getWALAStubs match {
+      case Some(stubFile) => analysisScope.addToScope(analysisScope.getPrimordialLoader, new JarFile(stubFile))
+      case None => sys.error("Can't find WALA stubs. Exiting.")
+    }
     
     val THRESHER_ASSERTS_AND_ANNOTATIONS_PATH = "../thresher/bin/edu/colorado/thresher/external"
     
@@ -233,6 +241,11 @@ abstract class Client(appPath : String, libPath : Option[String], mainClass : St
   def getJVMLibFile : Option[File] = {    
     val PATH = System.getProperty("java.home")
     List(new File(PATH + "/lib/rt.jar"), new File(PATH + "/../Classes/classes.jar")).find(f => f.exists())
+  }
+
+  def getWALAStubs : Option[File] = {
+    val f = new File("lib/primordial.jar.model")
+    if (f.exists()) Some(f) else None
   }
     
 }
