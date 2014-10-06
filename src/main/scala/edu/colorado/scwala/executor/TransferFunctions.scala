@@ -1161,7 +1161,9 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph, _hm : HeapModel,
               val indexVar = getArrayIndexVar(s, qry)
               val (arrConstraints, mustEq) = getRelevantArrayEdges(qry, ptY, indexVar)
 
-              def processArrConstraint(e : ArrayPtEdge, anyArrConstraint : ArrayPtEdge = null) : List[Qry] = (e.snk, xEdge.snk) match {
+              def processArrConstraint(e : ArrayPtEdge,
+                                       l : List[Qry],
+                                       anyArrConstraint : ArrayPtEdge = null) : List[Qry] = (e.snk, xEdge.snk) match {
                 case (ptYi@ObjVar(rgnYi), ptX@ObjVar(rgnX)) =>                  
                   val rgnInter = rgnX.intersect(rgnYi) // do pt(x) \cap pt(y[i])
                   if (rgnInter.isEmpty) l
@@ -1170,10 +1172,10 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph, _hm : HeapModel,
                     val interVar = ObjVar(rgnInter)                                          
                     // if ptYi[i] -> A is not already in our constraints, add it
                     if ((e eq anyArrConstraint) && !newQuery.addHeapConstraint(PtEdge.make(e.src, e.fld, interVar))) l
-                    else 
+                    else
                       if (newQuery.substitute(interVar, ptYi, hg) && newQuery.substitute(interVar, ptX, hg)) newQuery :: l
-                      else l                    
-                    }
+                      else l // refuted by infeasible substitution
+                  }
                 case (ptYi@ObjVar(_), pureX@PureVar(_)) =>
                   // e != anyArrConstraint check to account for the possibility that ptYi is a null value
                   if (qry.isNull(pureX) && e != anyArrConstraint) l // refuted
@@ -1201,12 +1203,12 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph, _hm : HeapModel,
               if (mustEq) {
                 assert (arrConstraints.size == 1)
                 // read had to have come from arrConstraints.head
-                processArrConstraint(arrConstraints.head)
+                processArrConstraint(arrConstraints.head, l)
               } else {
                 // need to do case splits for each may eq edge AND consider the possibility that the read came from elsewhere 
                 // get a pt constraint expressing that arr can point to anything in its points-to set (a "read from elsewhere" case split)
                 val anyArrConstraint = getPtArr(ptY, indexVar, hg, hm, cha)
-                (anyArrConstraint :: arrConstraints).foldLeft (l) ((l, e) => processArrConstraint(e, anyArrConstraint))                                  
+                (anyArrConstraint :: arrConstraints).foldLeft (l) ((l, e) => processArrConstraint(e, l, anyArrConstraint))
               }
             })
          
