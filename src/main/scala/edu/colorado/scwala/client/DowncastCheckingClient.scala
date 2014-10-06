@@ -110,7 +110,6 @@ class DowncastCheckingClient(appPath : String, libPath : Option[String], mainCla
           node.getIR() match {
             case null => quad
             case ir =>
-              println("Checking method " + ClassUtil.pretty(node.getMethod))
               ir.getInstructions().view.zipWithIndex.foldLeft (quad) ((quad, pair) => { 
                 val method = node.getMethod().getReference()
                 val (numSafe, numMightFail, numThresherProvedSafe, total) = quad

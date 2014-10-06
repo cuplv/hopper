@@ -7,6 +7,7 @@ import com.ibm.wala.analysis.pointers.HeapGraph
 import com.ibm.wala.classLoader.{BinaryDirectoryTreeModule, IClass, IMethod}
 import com.ibm.wala.ipa.callgraph.AnalysisOptions.ReflectionOptions
 import com.ibm.wala.ipa.callgraph.impl.{ArgumentTypeEntrypoint, DefaultEntrypoint}
+import com.ibm.wala.ipa.callgraph.propagation.cfa.ZeroXInstanceKeys
 import com.ibm.wala.ipa.callgraph.propagation.{HeapModel, PointerAnalysis, PointerKey}
 import com.ibm.wala.ipa.callgraph.{AnalysisCache, AnalysisOptions, AnalysisScope, CGNode, CallGraph, CallGraphBuilder, CallGraphStats, Entrypoint}
 import com.ibm.wala.ipa.cha.{ClassHierarchy, IClassHierarchy}
@@ -83,7 +84,7 @@ abstract class Client(appPath : String, libPath : Option[String], mainClass : St
       
   def makeCallGraphBuilder(options : AnalysisOptions, cache : AnalysisCache, cha : IClassHierarchy, 
                            analysisScope : AnalysisScope, isRegression : Boolean) : CallGraphBuilder = {
-    /*assert(options.getMethodTargetSelector() == null, "Method target selector should not be set at this point.")
+    assert(options.getMethodTargetSelector() == null, "Method target selector should not be set at this point.")
     assert(options.getClassTargetSelector() == null, "Class target selector should not be set at this point.")
     com.ibm.wala.ipa.callgraph.impl.Util.addDefaultSelectors(options, cha)
     addBypassLogic(options, analysisScope, cha)
@@ -93,10 +94,7 @@ abstract class Client(appPath : String, libPath : Option[String], mainClass : St
     val instancePolicy =
       if (Options.PRIM_ARRAY_SENSITIVITY) defaultInstancePolicy
       else (defaultInstancePolicy | ZeroXInstanceKeys.SMUSH_PRIMITIVE_HOLDERS)
-    new ImprovedZeroXContainerCFABuilder(cha, options, cache, null, null, instancePolicy)*/
-
-    com.ibm.wala.ipa.callgraph.impl.Util.makeZeroOneContainerCFABuilder(options, cache, cha, analysisScope)
-
+    new ImprovedZeroXContainerCFABuilder(cha, options, cache, null, null, instancePolicy)
   }
   
   def makeOptions(analysisScope : AnalysisScope, entrypoints : Iterable[Entrypoint]) : AnalysisOptions = {
