@@ -1818,7 +1818,7 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph, _hm : HeapModel,
         case Some(e) => dropLocalConstraint(e, qry, loopDrop)
         case None => ()
       }
-    }  
+    }
     
   def dropHeapConstraintsFromInstruction(i : SSAInstruction, n : CGNode, qry : Qry, 
                                          modRef : java.util.Map[CGNode,com.ibm.wala.util.intset.OrdinalSet[PointerKey]],

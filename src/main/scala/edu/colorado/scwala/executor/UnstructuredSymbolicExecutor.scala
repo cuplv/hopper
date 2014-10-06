@@ -27,15 +27,22 @@ object UnstructuredSymbolicExecutor {
   private[executor] val PRINT_IR = false
   // save invariant maps that lead to refutations
   private val SAVE_INVARIANT_MAPS = false
-  
+
+  // add path constraints from switch upon entering block rather than upon crossing case expression
   private val PRE_CONSTRAIN_SWITCHES = true
+
+  private val KEEP_LOOP_CONSTRAINTS = false
   private val timekeeper = new Timer
 }
 
-class DefaultSymbolicExecutor(override val tf : TransferFunctions) extends UnstructuredSymbolicExecutor {}
+class DefaultSymbolicExecutor(override val tf : TransferFunctions,
+                              override val keepLoopConstraints : Boolean = false) extends UnstructuredSymbolicExecutor {}
 
 trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
   val tf : TransferFunctions
+
+  // if true, keep path constraints from loop heads. otherwise, drop them
+  val keepLoopConstraints : Boolean
   
   object WitnessFoundException extends Exception 
   object BudgetExceededException extends Exception
@@ -149,7 +156,7 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
     }
   }
   
-  def executeBlkInstrs(p : Path) : List[Path] = {
+  def executeBlkInstrs(p : Path, isLoopBlk : Boolean) : List[Path] = {
     if (TRACE) logMethodAndTime("executeBlkInstrs")
     // TODO: all paths should have the same index here -- should do quick check for -1 index
     val pathIndex = p.index
@@ -182,11 +189,13 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
           }
         case instr : SSAPhiInstruction => paths // skip phis here, we deal with them while branching to preds //sys.error("phi " + instr)
         case instr : SSAConditionalBranchInstruction =>
-          paths.foldLeft (List.empty[Path]) ((paths, p) =>
-            // might add a constraint that we would prefer not to pick up here, but we can hopefully eliminate it at the join point
-            if (p.addConstraintFromConditional(instr, isThenBranch = p.lastBlk == CFGUtil.getThenBranch(blk, cfg), tf)) p :: paths
-            else paths
-          )
+          if (!isLoopBlk || keepLoopConstraints)
+            paths.foldLeft (List.empty[Path]) ((paths, p) =>
+              // might add a constraint that we would prefer not to pick up here, but we can hopefully eliminate it at the join point
+              if (p.addConstraintFromConditional(instr, isThenBranch = p.lastBlk == CFGUtil.getThenBranch(blk, cfg), tf)) p :: paths
+              else paths
+            )
+          else paths
         case instr : SSASwitchInstruction => handleSwitch(paths, instr, blk, cfg)
         case instr =>
           paths.foldLeft (List.empty[Path]) ((paths, p) => p.executeInstr(instr, tf) match {
@@ -380,8 +389,6 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
     loopHeader.foreach(loopHeader => 
       if (CFGUtil.endsWithConditionalInstr(startBlk)) {
         if (DEBUG) println("at loop head BB" + loopHeader.getNumber() + " on path " + p)
-        val thenBranch = CFGUtil.getThenBranch(startBlk, p.node.getIR().getControlFlowGraph())
-
         // don't do the loop invariant check if we're coming from outside the loop
         if ((LoopUtil.getLoopBody(loopHeader, ir).contains(p.lastBlk)|| LoopUtil.isDoWhileLoop(loopHeader, ir)) &&
           invariantImpliesPath(p)) return (passPaths, failPaths)
@@ -389,7 +396,7 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
                  invariantImpliesPath(p)) return (passPaths, failPaths)
     )
       
-    val instrPaths = executeBlkInstrs(p)    
+    val instrPaths = executeBlkInstrs(p, loopHeader.isDefined)
     if (instrPaths.isEmpty) (passPaths, failPaths)
     else {
       // if single predecessor, go to pred

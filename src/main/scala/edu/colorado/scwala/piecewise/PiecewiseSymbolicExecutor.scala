@@ -25,7 +25,9 @@ object PiecewiseSymbolicExecutor {
   private def DEBUG = true
 }
 
-class DefaultPiecewiseSymbolicExecutor(override val tf : TransferFunctions, override val rr : RelevanceRelation) 
+class DefaultPiecewiseSymbolicExecutor(override val tf : TransferFunctions,
+                                       override val rr : RelevanceRelation,
+                                       override val keepLoopConstraints : Boolean = false)
   extends PiecewiseSymbolicExecutor {}
 
 //class PiecewiseSymbolicExecutor(tf : TransferFunctions, val rr : RelevanceRelation) extends DefaultSymbolicExecutor(tf) { 
@@ -37,10 +39,10 @@ trait PiecewiseSymbolicExecutor extends UnstructuredSymbolicExecutor {
   // exposed to allow subclasses to eliminate or conditionalize the unproduceable constraint check
   def hasUnproduceableConstraint(p : Path) : Boolean = rr.hasUnproduceableConstraint(p)
   
-  override def executeBlkInstrs(p : Path) : List[Path] = {
+  override def executeBlkInstrs(p : Path, isLoopBlock : Boolean) : List[Path] = {
     // disallowing nested jumps for now
     if (hasUnproduceableConstraint(p) || (!p.isInJump && piecewiseJumpRefuted(p))) List.empty[Path]
-    else super.executeBlkInstrs(p)    
+    else super.executeBlkInstrs(p, isLoopBlock)
   }  
   
   var piecewiseInvMap = new InvariantMap[(CGNode,WalaBlock,Int)]

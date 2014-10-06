@@ -1,33 +1,29 @@
 package edu.colorado.scwala.client.bounds
 
-import scala.collection.JavaConversions._
-import edu.colorado.scwala.util.LoopUtil
-import edu.colorado.thresher.core.Options
 import com.ibm.wala.ipa.cfg.ExceptionPrunedCFG
+import com.ibm.wala.ssa.{ISSABasicBlock, SSAPhiInstruction}
+import edu.colorado.scwala.client.bounds.ArrayBoundsSymbolicExecutor._
+import edu.colorado.scwala.executor.{TransferFunctions, UnstructuredSymbolicExecutor}
+import edu.colorado.scwala.piecewise.{PiecewiseSymbolicExecutor, RelevanceRelation}
 import edu.colorado.scwala.state.Path
-import com.ibm.wala.ssa.SSAPhiInstruction
-import com.ibm.wala.ssa.ISSABasicBlock
-import com.ibm.wala.ssa.SSAInstruction
-import edu.colorado.scwala.executor.TransferFunctions
-import edu.colorado.scwala.executor.UnstructuredSymbolicExecutor
-import edu.colorado.scwala.translate.WalaBlock.fromISSABasicBlock
-import edu.colorado.scwala.translate.WalaBlock.fromWalaBlock
-import ArrayBoundsSymbolicExecutor._
-import com.ibm.wala.ssa.SSAConditionalBranchInstruction
-import edu.colorado.scwala.util.CFGUtil
-import edu.colorado.scwala.executor.DefaultSymbolicExecutor
-import edu.colorado.scwala.piecewise.RelevanceRelation
-import edu.colorado.scwala.piecewise.PiecewiseSymbolicExecutor
+import edu.colorado.scwala.translate.WalaBlock.{fromISSABasicBlock, fromWalaBlock}
+import edu.colorado.scwala.util.{CFGUtil, LoopUtil}
+import edu.colorado.thresher.core.Options
+
+import scala.collection.JavaConversions._
 
 object ArrayBoundsSymbolicExecutor {
   private val DEBUG = Options.SCALA_DEBUG
   private val TRACE = false
 }
 
-class PiecewiseArrayBoundsSymbolicExecutor(override val tf : TransferFunctions, override val rr : RelevanceRelation) 
+class PiecewiseArrayBoundsSymbolicExecutor(override val tf : TransferFunctions,
+                                           override val rr : RelevanceRelation,
+                                           override val keepLoopConstraints : Boolean = true)
   extends PiecewiseSymbolicExecutor with ArrayBoundsSymbolicExecutor
 
-class DefaultArrayBoundsSymbolicExecutor(override val tf : TransferFunctions) extends ArrayBoundsSymbolicExecutor
+class DefaultArrayBoundsSymbolicExecutor(override val tf : TransferFunctions,
+                                         override val keepLoopConstraints : Boolean = true) extends ArrayBoundsSymbolicExecutor
   
 /** New symbolic executor that doesn't always drop pure constraints. instead, it uses Z3 to help infer loop invariants */
 trait ArrayBoundsSymbolicExecutor extends UnstructuredSymbolicExecutor {
@@ -56,7 +52,7 @@ trait ArrayBoundsSymbolicExecutor extends UnstructuredSymbolicExecutor {
                  invariantImpliesPath(p)) return (passPaths, failPaths)     
     )
     
-    val instrPaths = executeBlkInstrs(p)    
+    val instrPaths = executeBlkInstrs(p, true)
     if (instrPaths.isEmpty) (passPaths, failPaths)
     else {
       // if single predecessor, go to pred
