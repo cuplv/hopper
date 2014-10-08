@@ -34,7 +34,7 @@ class DowncastCheckingClient(appPath : String, libPath : Option[String], mainCla
     if (new File(fileName).exists()) {
       val f  = Source.fromFile(fileName)
       val casts = f.getLines.foldLeft (Set.empty[String]) ((set, line) => {
-        assert(!set.contains(line), "DUPLICATE: " + line)
+        //assert(!set.contains(line), "DUPLICATE: " + line)
         set + line
       })
       f.close

@@ -8,7 +8,7 @@ import com.ibm.wala.shrikeBT.IBinaryOpInstruction.Operator._
 import com.ibm.wala.shrikeBT.IConditionalBranchInstruction.Operator._
 import com.ibm.wala.shrikeBT.IShiftInstruction.Operator._
 import com.ibm.wala.shrikeBT.IUnaryOpInstruction.Operator._
-import com.ibm.wala.ssa.{IR, SSAAbstractInvokeInstruction, SSAArrayLengthInstruction, SSAArrayLoadInstruction, SSAArrayStoreInstruction, SSABinaryOpInstruction, SSACheckCastInstruction, SSAConditionalBranchInstruction, SSAGetInstruction, SSAInstanceofInstruction, SSAInstruction, SSANewInstruction, SSAPhiInstruction, SSAPutInstruction, SSAReturnInstruction, SSAUnaryOpInstruction}
+import com.ibm.wala.ssa._
 import com.ibm.wala.types.{ClassLoaderReference, MethodReference, TypeName, TypeReference}
 
 object ClassUtil {
@@ -47,7 +47,12 @@ object ClassUtil {
     case key : AllocationSiteInNode => pretty(key.getNode()) + "-" + key.getSite().toString()
     case _ => key.toString()
   }
-  
+
+  def isInnerClassThis(f : IField) : Boolean = {
+    val fldName = f.getName.toString
+    fldName.startsWith("this") && fldName.contains("$")
+  }
+
   def isInnerOrEnum(c : IClass) : Boolean = c.getName().toString().contains('$')
   
   // TODO: Can we use WALA's StringStuff class to do some of these?
@@ -138,7 +143,10 @@ object ClassUtil {
             case op => print(op)
           }
           print(v(i.getUse(1)))
-        case i : SSAUnaryOpInstruction =>         
+        case i : SSAPiInstruction =>
+          print(v(i.getDef) + assign + " pi " + v(i.getVal) + " filter ")
+          pp_instr(i.getCause, ir)
+        case i : SSAUnaryOpInstruction =>
           print(v(i.getDef()) + assign)
           i.getOpcode() match {
             case NEG => print('!')

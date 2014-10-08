@@ -223,7 +223,7 @@ trait PiecewiseSymbolicExecutor extends UnstructuredSymbolicExecutor {
         // x.f = null. instead, drop such constraints and keep ones we're likely to find refutations with
         val singletonPointsToConstraints = q.heapConstraints.filter(e => e match {
           case ObjPtEdge(ObjVar(srcRgn), InstanceFld(fld), ObjVar(snkRgn)) =>
-            snkRgn.size == 1 && flds.contains(fld) &&PtUtil.getPtI(srcRgn, fld, tf.hg).size == 1
+            snkRgn.size == 1 && flds.contains(fld) && PtUtil.getPtI(srcRgn, fld, tf.hg).size == 1
           case _ => false
         })
 

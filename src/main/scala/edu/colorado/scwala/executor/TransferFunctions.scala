@@ -7,7 +7,7 @@ import com.ibm.wala.ipa.callgraph.propagation.{ConcreteTypeKey, HeapModel, Insta
 import com.ibm.wala.ipa.callgraph.{CGNode, CallGraph}
 import com.ibm.wala.ipa.cha.IClassHierarchy
 import com.ibm.wala.ipa.modref.DelegatingExtendedHeapModel
-import com.ibm.wala.ssa.{ISSABasicBlock, SSAArrayLengthInstruction, SSAArrayLoadInstruction, SSAArrayReferenceInstruction, SSAArrayStoreInstruction, SSABinaryOpInstruction, SSACFG, SSACheckCastInstruction, SSAComparisonInstruction, SSAConditionalBranchInstruction, SSAConversionInstruction, SSAGetCaughtExceptionInstruction, SSAGetInstruction, SSAGotoInstruction, SSAInstanceofInstruction, SSAInstruction, SSAInvokeInstruction, SSALoadMetadataInstruction, SSAMonitorInstruction, SSANewInstruction, SSAPhiInstruction, SSAPutInstruction, SSAReturnInstruction, SSAThrowInstruction, SSAUnaryOpInstruction}
+import com.ibm.wala.ssa._
 import com.ibm.wala.types.TypeReference
 import com.ibm.wala.util.graph.traverse.DFS
 import com.ibm.wala.util.intset.OrdinalSet
@@ -1541,18 +1541,34 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph, _hm : HeapModel,
           } else sys.error("non-null constraint")
         case None => true
       }
+
+    case s : SSAPiInstruction => // x = pi y for BLK, cause INSTR
+      // this instruction means assign x to y filtered by the predicate in INSTR or its negation, depending on whether
+      // BLK is the true branch target or false branch target
+      getConstraintEdgeForDef(s, qry.localConstraints, n) match {
+        case Some(e@LocalPtEdge(_, snk)) =>
+          qry.removeLocalConstraint(e)
+          // TODO: filter pt(y) by T or !T here instead of waiting. would get a refutation a bit faster by doing so
+          /*s.getCause match {
+            case i : SSAInstanceofInstruction => // y instanceof T
+            case i => sys.error(s"Unimplemented cause instr $i")
+          }*/
+          qry.addLocalConstraint(PtEdge.make(Var.makeLPK(s.getVal, n, hm), snk))
+          true
+        case None => true
+      }
       
     case s : SSAUnaryOpInstruction => // x = op y where op is !
       getConstraintEdgeForDef(s, qry.localConstraints, n) match {
         case Some(edge) =>
           if (Pure.isNegateOp(s.getOpcode())) {
             val rhs = getPureExprForLocal(s.getUse(0), qry, n, hm)
-            qry.addPureConstraint(Pure.makeNeConstraint(edge.snk.asInstanceOf[PureExpr], rhs))            
+            qry.addPureConstraint(Pure.makeNeConstraint(edge.snk.asInstanceOf[PureExpr], rhs))
           } else{
             println(s"Unexpected negation operator ${s.getOpcode()} in instruction $s ir ${n.getIR()}; dropping constraints")
-            qry.localConstraints.remove(edge)
+            qry.removeLocalConstraint(edge)
             true
-          }  
+          }
         case None => true
       }
       
