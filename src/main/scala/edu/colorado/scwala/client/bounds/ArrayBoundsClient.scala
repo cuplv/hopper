@@ -17,6 +17,9 @@ import scala.io.Source
 class ArrayBoundsClient(appPath : String, libPath : Option[String], mainClass : String, mainMethod : String, 
     isRegression : Boolean = false) extends Client(appPath, libPath, mainClass, mainMethod, isRegression) {
 
+  // if true, report accesses as safe if they are guarded by an appropriate catch block
+  val suppressCaughtExceptions = false
+
   def parseProveList(fileName : String) : Set[Int] = 
     if (new File(fileName).exists()) {
       val f  = Source.fromFile(fileName)
@@ -70,7 +73,7 @@ class ArrayBoundsClient(appPath : String, libPath : Option[String], mainClass : 
           else if (proveSet.contains(countPair._2)) {
             println(s"Skipping possible bounds fail # ${countPair._2 + 1} due to prove set")
             (countPair._1 + 1, countPair._2 + 1)
-          } else if (Options.SOUND_EXCEPTIONS && {
+          } else if (Options.SOUND_EXCEPTIONS && suppressCaughtExceptions && {
             val startBlk = ir.getBasicBlockForInstruction(instr)
             CFGUtil.isProtectedByCatchBlockInterprocedural(startBlk, n,
               TypeReference.JavaLangNullPointerException, cg, this.cha)

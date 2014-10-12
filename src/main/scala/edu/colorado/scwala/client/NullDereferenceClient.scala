@@ -18,8 +18,11 @@ import scala.io.Source
 
 class NullDereferenceClient(appPath : String, libPath : Option[String], mainClass : String, mainMethod : String, 
     isRegression : Boolean = false) extends Client(appPath, libPath, mainClass, mainMethod, isRegression) {
-  
-   def parseProveList(fileName : String) : Set[Int] = 
+
+   // if true, report derefs as safe if they are guarded by an appropriate catch block
+   val suppressCaughtExceptions = false
+
+   def parseProveList(fileName : String) : Set[Int] =
     if (new File(fileName).exists()) {
       val f  = Source.fromFile(fileName)
       val proven = f.getLines.foldLeft (Set.empty[Int]) ((set, line) => 
@@ -95,7 +98,7 @@ class NullDereferenceClient(appPath : String, libPath : Option[String], mainClas
       if (proveSet.contains(count)) { 
         println(s"Skipping possible null deref # ${count} due to prove set")
         false
-      } else if (Options.SOUND_EXCEPTIONS && {
+      } else if (Options.SOUND_EXCEPTIONS && suppressCaughtExceptions && {
           val ir = n.getIR
           val startBlk = ir.getBasicBlockForInstruction(i)
           CFGUtil.isProtectedByCatchBlockInterprocedural(startBlk, n,

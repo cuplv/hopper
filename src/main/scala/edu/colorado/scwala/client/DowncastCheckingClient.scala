@@ -29,7 +29,10 @@ class CastCheckingResults(val numSafe : Int, val numMightFail : Int, val numThre
 
 class DowncastCheckingClient(appPath : String, libPath : Option[String], mainClass : String, mainMethod : String, 
     isRegression : Boolean = false) extends Client(appPath, libPath, mainClass, mainMethod, isRegression) {
- 
+
+  // if true, report casts as safe if they are guarded by an appropriate catch block
+  val suppressCaughtExceptions = false
+
   def parseCastList(fileName : String) : Set[String] = 
     if (new File(fileName).exists()) {
       val f  = Source.fromFile(fileName)
@@ -152,7 +155,7 @@ class DowncastCheckingClient(appPath : String, libPath : Option[String], mainCla
                         println("CAST_ID: " + castId)
                         checked = checked + castId
                         (numSafe + 1, numMightFail, numThresherProvedSafe, total + 1)
-                      } else if (Options.SOUND_EXCEPTIONS && {
+                      } else if (Options.SOUND_EXCEPTIONS && suppressCaughtExceptions && {
                         val startBlk = ir.getBasicBlockForInstruction(castInstr)
                         CFGUtil.isProtectedByCatchBlockInterprocedural(startBlk, node,
                                                                        TypeReference.JavaLangClassCastException, cg, cha)
