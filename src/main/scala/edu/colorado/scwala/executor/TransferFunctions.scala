@@ -13,11 +13,11 @@ import com.ibm.wala.util.graph.traverse.DFS
 import com.ibm.wala.util.intset.OrdinalSet
 import edu.colorado.scwala.executor.TransferFunctions._
 import edu.colorado.scwala.solver.UnknownSMTResult
-import edu.colorado.scwala.state.{CallStackFrame, ObjPtEdge, _}
+import edu.colorado.scwala.state._
 import edu.colorado.scwala.synthesis.InterfaceMethodField
 import edu.colorado.scwala.util.PtUtil._
 import edu.colorado.scwala.util.Types._
-import edu.colorado.scwala.util.{ClassUtil, Util}
+import edu.colorado.scwala.util.{PtUtil, ClassUtil, Util}
 import edu.colorado.thresher.core.Options
 
 import scala.collection.JavaConversions._
@@ -1478,6 +1478,12 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph, _hm : HeapModel,
       }
       
     case s : SSACheckCastInstruction => // x = (T) y
+      val types = s.getDeclaredResultTypes()
+      assert(types.length == 1) // in Java, this should be true
+      val castType = cha.lookupClass(types(0))
+      def filterByCastType(rgn : Set[InstanceKey]) =
+        rgn.filter(k => cha.isAssignableFrom(castType, k.getConcreteType()))
+
       getConstraintEdgeForDef(s, qry.localConstraints, n) match {
         case Some(e@LocalPtEdge(_, ptX@ObjVar(xRgn))) => // found edge x -> A          
           qry.removeLocalConstraint(e)
@@ -1485,12 +1491,8 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph, _hm : HeapModel,
           
           def handleObjY(ptY : ObjVar, yEdge : Option[LocalPtEdge]) : Boolean = {
             // TODO: implement option to add constraints from checking casts
-            // filter ptY by cast type T
-            val types = s.getDeclaredResultTypes()
-            assert(types.length == 1) // in Java, this should be true           
-            val castType = cha.lookupClass(types(0))
-            // for each key k in ptY, keep only k's such that type(k) <: T
-            val filteredYRgn = ptY.rgn.filter(k => cha.isAssignableFrom(castType, k.getConcreteType()))
+            // filter ptY by cast type T; for each key k in ptY, keep only k's such that type(k) <: T
+            val filteredYRgn = filterByCastType(ptY.rgn)
             // do pt(x) \cap (ptY f filtered by T)          
             val rgnInter = xRgn.intersect(filteredYRgn)
             if (rgnInter.isEmpty) {                    
@@ -1539,7 +1541,23 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph, _hm : HeapModel,
                 true
             }
           } else sys.error("non-null constraint")
-        case None => true
+        case None =>
+          val y = Var.makeLPK(s.getVal, n, hm)
+          val yRgn = PtUtil.getPt(y, hg)
+          // TODO: do this for local constraints too?
+          // we will choose to add a constraint on this cast succeeding if the target may-alias something else in our
+          // constraints that has an incompatible type with the cast type T
+          qry.heapConstraints.forall(e => e match {
+            case ObjPtEdge(_, _, o@ObjVar(rgn)) if !rgn.intersect(yRgn).isEmpty && filterByCastType(rgn).isEmpty =>
+              // yRgn and rgn overlap. filter yRgn by type and add x -> ObjVar(yRgn) constraint
+              val filteredYRgn = filterByCastType(yRgn)
+              if (!filteredYRgn.isEmpty) false // refuted by definitely failing cast
+              else {
+                qry.addLocalConstraint(PtEdge.make(y, ObjVar(filteredYRgn)))
+                true
+              }
+            case _ => true
+          })
       }
 
     case s : SSAPiInstruction => // x = pi y for BLK, cause INSTR

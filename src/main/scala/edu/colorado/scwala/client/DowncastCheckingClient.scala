@@ -260,7 +260,8 @@ object DowncastCheckingClientTests extends ClientTests {
                      "HashtableEnumeratorNoRefute",
                      "HashtableEnumeratorRefute",
                      "IsInstanceRefute", "IsInstanceNoRefute",
-                     "InstrOpcodeIndexSensitivePiecewiseRefute", "InstrOpcodeIndexSensitivePiecewiseNoRefute")
+                     "InstrOpcodeIndexSensitivePiecewiseRefute", "InstrOpcodeIndexSensitivePiecewiseNoRefute",
+                     "DominatingCastRefute")
                         //"CallTypeRefute", "CallTypeNoRefute") // will fix these later; results are sound, but not precise
 
     val exceptionTests =
@@ -279,6 +280,7 @@ object DowncastCheckingClientTests extends ClientTests {
           //new CastCheckingResults(2, 3, 0) else new CastCheckingResults(4, 1, 0))
     resultsMap.put("HashtableEnumeratorRefute", new CastCheckingResults(0, 2, 2))
     resultsMap.put("HashtableEnumeratorNoRefute", new CastCheckingResults(0, 2, 1))
+    resultsMap.put("DominatingCastRefute", new CastCheckingResults(0, 2, 1))
     resultsMap.put("CatchNoRefute", new CastCheckingResults(0, 1, 0))
     resultsMap.put("CatchRefute", new CastCheckingResults(1, 0, 0))
 
