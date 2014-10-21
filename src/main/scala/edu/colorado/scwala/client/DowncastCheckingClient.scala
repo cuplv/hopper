@@ -11,9 +11,14 @@ import com.ibm.wala.types.{ClassLoaderReference, TypeReference}
 import edu.colorado.scwala.state.{ObjVar, PtEdge, Qry}
 import edu.colorado.scwala.util._
 import edu.colorado.thresher.core.{DemandCastChecker, Options}
-
+import DowncastCheckingClient._
 import scala.collection.JavaConversions.iterableAsScalaIterable
 import scala.io.Source
+
+object DowncastCheckingClient {
+  // if true, report casts as safe if they are guarded by an appropriate catch block
+  val suppressCaughtExceptions = false
+}
 
 class CastCheckingResults(val numSafe : Int, val numMightFail : Int, val numThresherProvedSafe : Int) {
   
@@ -29,9 +34,6 @@ class CastCheckingResults(val numSafe : Int, val numMightFail : Int, val numThre
 
 class DowncastCheckingClient(appPath : String, libPath : Option[String], mainClass : String, mainMethod : String, 
     isRegression : Boolean = false) extends Client(appPath, libPath, mainClass, mainMethod, isRegression) {
-
-  // if true, report casts as safe if they are guarded by an appropriate catch block
-  val suppressCaughtExceptions = false
 
   def parseCastList(fileName : String) : Set[String] = 
     if (new File(fileName).exists()) {
@@ -265,7 +267,7 @@ object DowncastCheckingClientTests extends ClientTests {
       Set("CatchNoRefute", "CatchRefute", "CatchNoRefuteLocal", "CatchRefuteLocal", "CatchNoRefuteLocal2",
           "CatchNoRefuteInterproc", "CatchRefuteInterproc", "CatchThrowNoRefute", "CatchThrowRefute")
 
-    val tests = standardTests ++ exceptionTests
+    val tests = if (suppressCaughtExceptions) standardTests ++ exceptionTests else standardTests
 
     // results for tests whose casts are not all safe or all unsafe, or platform-specific
     val resultsMap = Util.makeMap[String,CastCheckingResults]

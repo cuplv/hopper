@@ -192,7 +192,7 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
           if (!isLoopBlk || keepLoopConstraints)
             paths.foldLeft (List.empty[Path]) ((paths, p) =>
               // might add a constraint that we would prefer not to pick up here, but we can hopefully eliminate it at the join point
-              if (p.addConstraintFromConditional(instr, isThenBranch = p.lastBlk == CFGUtil.getThenBranch(blk, cfg), tf)) p :: paths
+              if (p.addConstraintFromConditional(instr, isThenBranch = (p.lastBlk == CFGUtil.getThenBranch(blk, cfg)), tf)) p :: paths
               else paths
             )
           else paths
@@ -395,8 +395,13 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
       } else if (LoopUtil.isExplicitlyInfiniteLoop(loopHeader, ir) && // won't have any conditional branch instruction in this case
                  invariantImpliesPath(p)) return (passPaths, failPaths)
     )
-      
-    val instrPaths = executeBlkInstrs(p, loopHeader.isDefined)
+
+    val isLoopBlk = loopHeader match {
+      case Some(loopHeader) => loopHeader == p.blk
+      case None => false
+    }
+
+    val instrPaths = executeBlkInstrs(p, isLoopBlk)
     if (instrPaths.isEmpty) (passPaths, failPaths)
     else {
       // if single predecessor, go to pred
