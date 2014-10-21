@@ -1,6 +1,7 @@
 package edu.colorado.thresher.core;
 
 import com.ibm.wala.classLoader.CallSiteReference;
+import com.ibm.wala.classLoader.IClass;
 import com.ibm.wala.classLoader.IMethod;
 import com.ibm.wala.ipa.callgraph.CGNode;
 import com.ibm.wala.ipa.callgraph.Context;
@@ -32,6 +33,13 @@ public class ImprovedContainerContextSelector extends ContainerContextSelector {
   public Context getCalleeTarget(CGNode caller, CallSiteReference site, IMethod callee, InstanceKey[] keys) {
     if (isAccessMethod( callee.getReference())) return new CallerSiteContext(caller, site);
     return super.getCalleeTarget(caller, site, callee, keys);
+  }
+
+  @Override
+  public boolean isContainer(IClass c) {
+   return super.isContainer(c) ||
+     // hack to detect custom collections that don't extend java.util.Collection
+     c.getName().toString().contains("collection");
   }
 
 }
