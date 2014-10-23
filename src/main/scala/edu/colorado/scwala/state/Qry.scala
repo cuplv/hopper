@@ -451,22 +451,30 @@ class Qry(val heapConstraints : MSet[HeapPtEdge], val pureConstraints : MSet[Pur
   }
   
   // @return if we can view *all* the local and heap constraints as a linear sequence A.f -> B, B.g -> C, etc., return the sequence of heap constraints
-  def constraintsAsLinearSequence : Option[List[HeapPtEdge]] = if (this.localConstraints.size == 1 && this.heapConstraints.size >= 1) {
-    localConstraints.head.snk match {
-      case snk@ObjVar(_) =>
-        @annotation.tailrec
-        def buildSequenceRec(matchVar : ObjVar, matchedList : List[HeapPtEdge]) : Option[List[HeapPtEdge]] = 
-          if (matchedList.size == this.heapConstraints.size) Some(matchedList.reverse)
-          else heapConstraints.find(e => e.src == matchVar) match {
-            case Some(e@ObjPtEdge(_, _, snk@ObjVar(_))) => buildSequenceRec(snk, e :: matchedList)
-            case Some(e@ArrayPtEdge(_, _, snk@ObjVar(_))) => buildSequenceRec(snk, e :: matchedList)
-            case _ => None
-          }
+  def constraintsAsLinearSequence : Option[List[HeapPtEdge]] = {
+    @annotation.tailrec
+    def buildSequenceRec(matchVar: ObjVar, matchedList: List[HeapPtEdge]): Option[List[HeapPtEdge]] =
+      if (matchedList.size == this.heapConstraints.size) Some(matchedList.reverse)
+      else heapConstraints.find(e => e.src == matchVar) match {
+        case Some(e@ObjPtEdge(_, _, snk@ObjVar(_))) => buildSequenceRec(snk, e :: matchedList)
+        case Some(e@ArrayPtEdge(_, _, snk@ObjVar(_))) => buildSequenceRec(snk, e :: matchedList)
+        case _ => None
+      }
 
+    if (this.localConstraints.size == 1 && this.heapConstraints.size >= 1) localConstraints.head.snk match {
+      case snk@ObjVar(_) =>
         buildSequenceRec(snk, Nil)
       case _ => None
-    }    
-  } else None
+    } else if (localConstraints.isEmpty && this.heapConstraints.size >= 1)
+      this.heapConstraints.foldLeft(None: Option[List[HeapPtEdge]])((l, e) =>
+        if (l.isDefined) l
+        else e.snk match {
+          case o@ObjVar(_) => buildSequenceRec(o, List(e))
+          case _ => None
+        }
+      )
+    else None
+  }
    
   /*
   // TODO: this name is dumb

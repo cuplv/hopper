@@ -1551,7 +1551,7 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph, _hm : HeapModel,
             case ObjPtEdge(_, _, o@ObjVar(rgn)) if !rgn.intersect(yRgn).isEmpty && filterByCastType(rgn).isEmpty =>
               // yRgn and rgn overlap. filter yRgn by type and add x -> ObjVar(yRgn) constraint
               val filteredYRgn = filterByCastType(yRgn)
-              if (!filteredYRgn.isEmpty) false // refuted by definitely failing cast
+              if (filteredYRgn.isEmpty) false // refuted by definitely failing cast
               else {
                 qry.addLocalConstraint(PtEdge.make(y, ObjVar(filteredYRgn)))
                 true

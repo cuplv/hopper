@@ -2,22 +2,13 @@ package edu.colorado.scwala.piecewise
 
 import com.ibm.wala.classLoader.IField
 import com.ibm.wala.ipa.callgraph.CGNode
-import com.ibm.wala.ssa.ISSABasicBlock
-import edu.colorado.scwala.executor.TransferFunctions
-import edu.colorado.scwala.executor.UnstructuredSymbolicExecutor
-import edu.colorado.scwala.state.InstanceFld
-import edu.colorado.scwala.state.ObjPtEdge
-import edu.colorado.scwala.state.ObjVar
-import edu.colorado.scwala.state.PureVar
-import edu.colorado.scwala.state.Qry
-import edu.colorado.scwala.translate.InvariantMap
-import edu.colorado.scwala.state.Path
-import edu.colorado.scwala.translate.WalaBlock
-import edu.colorado.scwala.util.{PtUtil, ClassUtil, Util}
+import com.ibm.wala.ssa.{IR, ISSABasicBlock}
+import edu.colorado.scwala.executor.{TransferFunctions, UnstructuredSymbolicExecutor}
+import edu.colorado.scwala.piecewise.PiecewiseSymbolicExecutor._
+import edu.colorado.scwala.state.{InstanceFld, ObjPtEdge, ObjVar, Path, PureVar, Qry}
+import edu.colorado.scwala.translate.{InvariantMap, WalaBlock}
 import edu.colorado.scwala.util.Types.MSet
-import PiecewiseSymbolicExecutor._
-import edu.colorado.scwala.executor.UnstructuredSymbolicExecutor
-import edu.colorado.scwala.executor.DefaultSymbolicExecutor
+import edu.colorado.scwala.util.{ClassUtil, PtUtil, Util}
 
 object PiecewiseSymbolicExecutor {
   // if true, when we do a piecewise jump and fail, we will continue doing path-based execution
@@ -39,11 +30,19 @@ trait PiecewiseSymbolicExecutor extends UnstructuredSymbolicExecutor {
   // exposed to allow subclasses to eliminate or conditionalize the unproduceable constraint check
   def hasUnproduceableConstraint(p : Path) : Boolean = rr.hasUnproduceableConstraint(p)
   
-  override def executeBlkInstrs(p : Path, isLoopBlock : Boolean) : List[Path] = {
+  /*override def executeBlkInstrs(p : Path, isLoopBlock : Boolean) : List[Path] = {
     // disallowing nested jumps for now
     if (hasUnproduceableConstraint(p) || (!p.isInJump && piecewiseJumpRefuted(p))) List.empty[Path]
     else super.executeBlkInstrs(p, isLoopBlock)
-  }  
+  }*/
+
+  override def forkToPredecessorBlocks(instrPaths : List[Path], startBlk : ISSABasicBlock, loopHeader : Option[ISSABasicBlock],
+                                       ir : IR, passPaths : List[Path], failPaths : List[Path], test : Path => Boolean) =
+   // disallowing nested jumps for now
+   if (instrPaths.forall(p => hasUnproduceableConstraint(p) || (!p.isInJump && piecewiseJumpRefuted(p))))
+     (passPaths, failPaths)
+   else
+     super.forkToPredecessorBlocks(instrPaths, startBlk, loopHeader, ir, passPaths, failPaths, test)
   
   var piecewiseInvMap = new InvariantMap[(CGNode,WalaBlock,Int)]
   
@@ -65,7 +64,7 @@ trait PiecewiseSymbolicExecutor extends UnstructuredSymbolicExecutor {
    * @return true if performing a piecewise jump refuted p
    * @return false if we decided not to jump or if jump failed to give us a refutation 
    */
-  def piecewiseJumpRefuted(p : Path) : Boolean = {
+  def piecewiseJumpRefuted(p : Path) : Boolean =
     shouldJump(p) match {
         case Some((jmpPath, isProducedCallback, failCallback)) =>
           assert(!(jmpPath eq p)) // jmpPath should be a copy of p
@@ -102,7 +101,6 @@ trait PiecewiseSymbolicExecutor extends UnstructuredSymbolicExecutor {
           } 
         case None => false // shouldJump() decided not to jump
       }
-  }  
   
   override def executeBackward(qry : Qry, test : Option[Path => Boolean]) : Iterable[Path] = {
     // prevent clients from using test() filtering predicate with piecewise execution, since it doesn't work after a jump    
@@ -258,19 +256,24 @@ trait PiecewiseSymbolicExecutor extends UnstructuredSymbolicExecutor {
   private val neverProducedCallback : Qry => Boolean = ((q : Qry) => false) 
   
   def contextSensitiveTemplate(p : Path) : Option[(Path, Qry => Boolean, Any => Unit)] = {
+    def tryWriteConstraintsAsLinearSequence() = {
+      p.qry.constraintsAsLinearSequence match {
+        case Some(seq) => // can write *all* constraints as x -> A, A.f -> B, B.g -> C, ...
+          println("Matched context-sensitive template!")
+          val q = p.qry.clone
+          q.dropConstraintsNotReachableFrom(Set(seq.last)) // drop all constraints but the last in the sequence
+          Some((p.deepCopy(q), neverProducedCallback, (_ : Any) => ()))
+        case None => None
+      }
+    }
+
     val localConstraints = p.qry.localConstraints
-    if (localConstraints.size == 1 && p.qry.heapConstraints.size > 1) localConstraints.head.snk match {
-      case PureVar(_) => None
-      case o@ObjVar(_) =>
-        p.qry.constraintsAsLinearSequence match {
-          case Some(seq) => // can write *all* constraints as x -> A, A.f -> B, B.g -> C, ...
-            println("Matched context-sensitive template!")
-            val q = p.qry.clone
-            val last = seq.last
-            q.dropConstraintsNotReachableFrom(Set(seq.last)) // drop all constraints but the last in the sequence
-            Some(p.deepCopy(q), neverProducedCallback, Util.NOP)        
-          case None => None
-        }
+    if (p.qry.heapConstraints.size > 1 && localConstraints.size <= 1) {
+      if (localConstraints.isEmpty) tryWriteConstraintsAsLinearSequence()
+      else localConstraints.head.snk match {
+        case PureVar(_) => None
+        case ObjVar(_) => tryWriteConstraintsAsLinearSequence()
+      }
     } else None
   }
   

@@ -379,21 +379,21 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
     val ir = p.node.getIR()
 
     // loop header--see if the invariant says we can stop executing
-    def invariantImpliesPath(p : Path) : Boolean = {
+    def invariantImpliesPath(p: Path): Boolean = {
       val res = loopInvMap.pathEntailsInv(p.callStack.stack.map(f => (f.node, f.blk)), p)
       if (DEBUG && res) println("Hit fixed point at loop head  " + startBlk)
       res
     }
-    
+
     val loopHeader = LoopUtil.findRelatedLoopHeader(startBlk, ir)
-    loopHeader.foreach(loopHeader => 
+    loopHeader.foreach(loopHeader =>
       if (CFGUtil.endsWithConditionalInstr(startBlk)) {
         if (DEBUG) println("at loop head BB" + loopHeader.getNumber() + " on path " + p)
         // don't do the loop invariant check if we're coming from outside the loop
-        if ((LoopUtil.getLoopBody(loopHeader, ir).contains(p.lastBlk)|| LoopUtil.isDoWhileLoop(loopHeader, ir)) &&
+        if ((LoopUtil.getLoopBody(loopHeader, ir).contains(p.lastBlk) || LoopUtil.isDoWhileLoop(loopHeader, ir)) &&
           invariantImpliesPath(p)) return (passPaths, failPaths)
       } else if (LoopUtil.isExplicitlyInfiniteLoop(loopHeader, ir) && // won't have any conditional branch instruction in this case
-                 invariantImpliesPath(p)) return (passPaths, failPaths)
+        invariantImpliesPath(p)) return (passPaths, failPaths)
     )
 
     val isLoopBlk = loopHeader match {
@@ -403,88 +403,91 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
 
     val instrPaths = executeBlkInstrs(p, isLoopBlk)
     if (instrPaths.isEmpty) (passPaths, failPaths)
-    else {
-      // if single predecessor, go to pred
-      // if multiple predecessors, identify join point and execute each side until join point is reached      
-      val cfg = ir.getControlFlowGraph()
+    else forkToPredecessorBlocks(instrPaths, startBlk, loopHeader, ir, passPaths, failPaths, test)
+  }
 
-      if (Options.SOUND_EXCEPTIONS && startBlk.isCatchBlock) {
-        // if we are going backward from a catch block, mark all paths as exceptional
-        val caughtExceptionTypes = startBlk.getCaughtExceptionTypes.toSet
-        if (DEBUG) println(s"setting path ${p.id} to exceptional; types are $caughtExceptionTypes")
-        instrPaths.foreach(p => p.setExceptionTypes(caughtExceptionTypes, cha))
-        instrPaths.foreach(p => assert(p.isExceptional))
-      }
+  def forkToPredecessorBlocks(instrPaths : List[Path], startBlk : ISSABasicBlock, loopHeader : Option[ISSABasicBlock],
+                              ir : IR, passPaths : List[Path], failPaths : List[Path], test : Path => Boolean) = {
+    // if single predecessor, go to pred
+    // if multiple predecessors, identify join point and execute each side until join point is reached
+    val cfg = ir.getControlFlowGraph()
 
-      val preds =
-        if (Options.SOUND_EXCEPTIONS && instrPaths.exists(p => p.isExceptional)) cfg.getPredNodes(startBlk).toList
-        else cfg.getNormalPredecessors(startBlk).toList
-      if (DEBUG) println("done with " + startBlk + ", getting preds")
+    if (Options.SOUND_EXCEPTIONS && startBlk.isCatchBlock) {
+      // if we are going backward from a catch block, mark all paths as exceptional
+      val caughtExceptionTypes = startBlk.getCaughtExceptionTypes.toSet
+      if (DEBUG) println(s"setting paths to exceptional; types are $caughtExceptionTypes")
+      instrPaths.foreach(p => p.setExceptionTypes(caughtExceptionTypes, cha))
+      instrPaths.foreach(p => assert(p.isExceptional))
+    }
+
+    val preds =
+      if (Options.SOUND_EXCEPTIONS && instrPaths.exists(p => p.isExceptional)) cfg.getPredNodes(startBlk).toList
+      else cfg.getNormalPredecessors(startBlk).toList
+    if (DEBUG) println("done with " + startBlk + ", getting preds")
       
       // dropping constraints here ensures that we never carry on the loop condition. this is desirable for many clients
-      // that do not require precise reasoning about loop conditions, since we will never waste effort trying to refute based on
-      // constraints involving the loop condition. on the other hand, this is NOT desirable for clients that do require
-      // precise reasoning about the loop condition. this is why clients such as array bounds implement a special 
-      // symbolic executor that chooses to do something different here
+      // that do not require precise reasoning about loop conditions, since we will never waste effort trying to refute
+      // based on constraints involving the loop condition. on the other hand, this is NOT desirable for clients that do
+      // require precise reasoning about the loop condition. this is why clients such as array bounds implement a
+      // variation on this symbolic executor that chooses to do something different here
       loopHeader.foreach(loopHeader => {
         if (DEBUG) println("Found related loop head BB" + loopHeader.getNumber() + "; dropping constraints")
         instrPaths.foreach(p => p.dropLoopProduceableConstraints(loopHeader, tf))
-      }) 
-    
-      preds.size match {
-        case 0 =>
-          if (DEBUG) println("0 preds, doing return")
-          if (!cfg.getExceptionalPredecessors(startBlk).isEmpty()) {
-            // have no normal predecessors, but do have exceptional ones. refute based on thrown exception. note that
-            // this branch will never be entered in SOUND_EXCEPTIONS mode
-            if (Options.PRINT_REFS) println("refuted by thrown exception!")
-            (passPaths, failPaths)
-          } else {
-            // TODO: returnToCaller filters by test, but after setting new block. 
-            // we do it here to handle the case where we want to return before setting a new block
-            // TODO: this is more than a bit weird--we should do something for the case where newPassPaths
-            // is a non-empty subset of instrPaths
-            val (newPassPaths, newFailPaths) = filterFailPaths(instrPaths, passPaths, failPaths, test)
-            if (newPassPaths.isEmpty) (newPassPaths, newFailPaths)
-            else returnToCaller(instrPaths, passPaths, failPaths, test)
-          }
-        case 1 => 
-          assert (!instrPaths.head.blk.iteratePhis().hasNext(), "block " + instrPaths.head.blk + " has unexpected phis! " + p.node.getIR)
-          val pred = preds.head
-          if (DEBUG) println("single pred BB" + pred.getNumber())
-          instrPaths.foreach(p => p.setBlk(pred))
-          filterFailPaths(instrPaths, passPaths, failPaths, test)          
-        case n => 
-          if (DEBUG) { print(" > 1 pred "); preds.foreach(p => print(" BB" + p.getNumber())); println }
-          val p = instrPaths.head
-          val blk = p.blk
-          val phis = p.blk.iteratePhis().toIterable
-                  
-          // push all paths up to the join
-          val initCallStackSize = p.callStackSize
-          val (prunedCFG, predList) =
-            if (Options.SOUND_EXCEPTIONS) (cfg, preds)
-            else {
-              val prunedCFG = ExceptionPrunedCFG.make(cfg)
-              if (prunedCFG.getNumberOfNodes() == 0) (cfg, preds)
-              else (prunedCFG, preds.filter(blk => prunedCFG.containsNode(blk)))
-            }
-          // this is a weird case that arises with explicitly infinite loops or ony exceptional predecessors
-          // refute, since there's no way we ever could have gotten here
-          if (predList.isEmpty) (passPaths, failPaths)
+      })
+
+    preds.size match {
+      case 0 =>
+        if (DEBUG) println("0 preds, doing return")
+        if (!cfg.getExceptionalPredecessors(startBlk).isEmpty()) {
+          // have no normal predecessors, but do have exceptional ones. refute based on thrown exception. note that
+          // this branch will never be entered in SOUND_EXCEPTIONS mode
+          if (Options.PRINT_REFS) println("refuted by thrown exception!")
+          (passPaths, failPaths)
+        } else {
+          // TODO: returnToCaller filters by test, but after setting new block.
+          // we do it here to handle the case where we want to return before setting a new block
+          // TODO: this is more than a bit weird--we should do something for the case where newPassPaths
+          // is a non-empty subset of instrPaths
+          val (newPassPaths, newFailPaths) = filterFailPaths(instrPaths, passPaths, failPaths, test)
+          if (newPassPaths.isEmpty) (newPassPaths, newFailPaths)
+          else returnToCaller(instrPaths, passPaths, failPaths, test)
+        }
+      case 1 =>
+        assert (!instrPaths.head.blk.iteratePhis().hasNext(), s"block ${instrPaths.head.blk} has unexpected phis! $ir")
+        val pred = preds.head
+        if (DEBUG) println("single pred BB" + pred.getNumber())
+        instrPaths.foreach(p => p.setBlk(pred))
+        filterFailPaths(instrPaths, passPaths, failPaths, test)
+      case n =>
+        if (DEBUG) { print(" > 1 pred "); preds.foreach(p => print(" BB" + p.getNumber())); println }
+        val p = instrPaths.head
+        val blk = p.blk
+        val phis = p.blk.iteratePhis().toIterable
+
+        // push all paths up to the join
+        val initCallStackSize = p.callStackSize
+        val (prunedCFG, predList) =
+          if (Options.SOUND_EXCEPTIONS) (cfg, preds)
           else {
-            val domInfo = getDominators(prunedCFG)          
-            val loopHeader = None//LoopUtil.findRelatedLoopHeader(startBlk, ir)
-            //if (DEBUG && loopHeader.isDefined) println("At loop head BB" + startBlk.getNumber())
-            val forkMap = getForkMap(blk, predList, instrPaths, phis, domInfo, ir, loopHeader)                    
-            if (!forkMap.isEmpty) {
-              if (DEBUG) checkPathMap(forkMap)
-              val paths = executeToJoin(blk, predList.reverse, forkMap, domInfo, initCallStackSize, cfg)
-              filterFailPaths(paths, passPaths, failPaths, test)
-            } else (passPaths, failPaths)
+            val prunedCFG = ExceptionPrunedCFG.make(cfg)
+            if (prunedCFG.getNumberOfNodes() == 0) (cfg, preds)
+            else (prunedCFG, preds.filter(blk => prunedCFG.containsNode(blk)))
           }
-       }
-    }
+        // this is a weird case that arises with explicitly infinite loops or ony exceptional predecessors
+        // refute, since there's no way we ever could have gotten here
+        if (predList.isEmpty) (passPaths, failPaths)
+        else {
+          val domInfo = getDominators(prunedCFG)
+          val loopHeader = None//LoopUtil.findRelatedLoopHeader(startBlk, ir)
+          //if (DEBUG && loopHeader.isDefined) println("At loop head BB" + startBlk.getNumber())
+          val forkMap = getForkMap(blk, predList, instrPaths, phis, domInfo, ir, loopHeader)
+          if (!forkMap.isEmpty) {
+            if (DEBUG) checkPathMap(forkMap)
+            val paths = executeToJoin(blk, predList.reverse, forkMap, domInfo, initCallStackSize, cfg)
+            filterFailPaths(paths, passPaths, failPaths, test)
+          } else (passPaths, failPaths)
+        }
+     }
   }
   
   // DEBUG only

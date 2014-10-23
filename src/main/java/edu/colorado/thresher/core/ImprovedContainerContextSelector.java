@@ -35,11 +35,21 @@ public class ImprovedContainerContextSelector extends ContainerContextSelector {
     return super.getCalleeTarget(caller, site, callee, keys);
   }
 
+  private final String[] CONTAINER_KEYWORDS_ARR =
+    new String[] { "collection", "linkedlist", "arraylist", "stack", "queue", "hashmap", "hashtable" };
+
+  // hack to detect custom collections that don't extend java.util.Collection
+  private final boolean hasContainerKeywordInName(IClass c) {
+    String className = c.getName().toString().toLowerCase();
+    for (String keyword : CONTAINER_KEYWORDS_ARR) {
+      if (className.contains(keyword)) return true;
+    }
+    return false;
+  }
+
   @Override
   public boolean isContainer(IClass c) {
-   return super.isContainer(c) ||
-     // hack to detect custom collections that don't extend java.util.Collection
-     c.getName().toString().contains("collection");
+   return super.isContainer(c) || hasContainerKeywordInName(c);
   }
 
 }
