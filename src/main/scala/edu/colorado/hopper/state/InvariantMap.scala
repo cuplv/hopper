@@ -1,8 +1,7 @@
-package edu.colorado.hopper.translate
+package edu.colorado.hopper.state
 
 import com.twitter.util.LruMap
-import InvariantMap._
-import edu.colorado.hopper.state.Path
+import edu.colorado.hopper.state.InvariantMap._
 
 object InvariantMap {
   val DEBUG = false

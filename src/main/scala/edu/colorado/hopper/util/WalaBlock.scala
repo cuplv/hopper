@@ -1,9 +1,8 @@
-package edu.colorado.hopper.translate
+package edu.colorado.hopper.util
+
+import com.ibm.wala.ssa.{ISSABasicBlock, SSACFG, SSAInstruction}
 
 import scala.language.implicitConversions
-import com.ibm.wala.ssa.ISSABasicBlock
-import com.ibm.wala.ssa.SSACFG
-import com.ibm.wala.ssa.SSAInstruction
 
 
 object WalaBlock {

@@ -8,7 +8,6 @@ import com.ibm.wala.util.graph.{Graph, NumberedGraph}
 import com.ibm.wala.util.graph.dominators.Dominators
 import com.ibm.wala.util.graph.impl.GraphInverter
 import com.ibm.wala.util.graph.traverse.{BFSPathFinder, DFS}
-import edu.colorado.hopper.translate.WalaBlock
 import edu.colorado.thresher.core.WALACFGUtil
 
 import scala.collection.JavaConversions.{collectionAsScalaIterable, iterableAsScalaIterable, _}

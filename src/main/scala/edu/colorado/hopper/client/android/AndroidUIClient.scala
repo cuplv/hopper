@@ -3,6 +3,8 @@ package edu.colorado.hopper.client.android
 import java.io.File
 import java.util.jar.JarEntry
 import java.util.jar.JarFile
+import edu.colorado.hopper.util._
+
 import scala.collection.JavaConversions._
 import scala.io.Source
 import scala.sys.process._
@@ -37,15 +39,9 @@ import edu.colorado.hopper.piecewise.RelevanceRelation
 import edu.colorado.hopper.state.Qry
 import edu.colorado.hopper.state.Var
 import edu.colorado.hopper.state.Path
-import edu.colorado.hopper.translate.WalaBlock.fromWalaBlock
+import WalaBlock.fromWalaBlock
 import edu.colorado.hopper.util.CHAUtil
-import edu.colorado.hopper.util.ClassUtil
-import edu.colorado.hopper.util.IRUtil
-import edu.colorado.hopper.util.JavaUtil
-import edu.colorado.hopper.util.PtUtil
-import edu.colorado.hopper.util.Timer
 import edu.colorado.hopper.util.Types._
-import edu.colorado.hopper.util.Util
 import edu.colorado.thresher.core.Options
 import java.io.PrintWriter
 import com.ibm.wala.ssa.SSAGetInstruction

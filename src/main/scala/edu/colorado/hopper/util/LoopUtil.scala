@@ -9,9 +9,8 @@ import com.ibm.wala.util.graph.Acyclic
 import com.ibm.wala.util.graph.dominators.Dominators
 import com.ibm.wala.util.intset.IntPair
 import com.ibm.wala.ssa.ISSABasicBlock
-import edu.colorado.hopper.translate.WalaBlock
 
-object LoopUtil {  
+object LoopUtil {
   val DEBUG = false
   
   type MSet[T] = scala.collection.mutable.Set[T]

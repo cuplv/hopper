@@ -7,7 +7,6 @@ import com.ibm.wala.ipa.callgraph.propagation.{HeapModel, InstanceKey}
 import com.ibm.wala.ssa.{ISSABasicBlock, SSAInstruction}
 import edu.colorado.hopper.solver.{UnknownSMTResult, Solver, Z3Solver}
 import edu.colorado.hopper.state.Qry._
-import edu.colorado.hopper.translate.Concretizable
 import edu.colorado.hopper.util.Types._
 import edu.colorado.hopper.util.{CFGUtil, CGNodeUtil, IRUtil, PtUtil, Util}
 import edu.colorado.thresher.core.Options

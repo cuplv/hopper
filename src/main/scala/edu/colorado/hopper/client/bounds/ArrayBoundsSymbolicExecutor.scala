@@ -6,7 +6,8 @@ import edu.colorado.hopper.client.bounds.ArrayBoundsSymbolicExecutor._
 import edu.colorado.hopper.executor.{TransferFunctions, UnstructuredSymbolicExecutor}
 import edu.colorado.hopper.piecewise.{PiecewiseSymbolicExecutor, RelevanceRelation}
 import edu.colorado.hopper.state.Path
-import edu.colorado.hopper.translate.WalaBlock.{fromISSABasicBlock, fromWalaBlock}
+import edu.colorado.hopper.util.{WalaBlock, CFGUtil, LoopUtil}
+import WalaBlock.{fromISSABasicBlock, fromWalaBlock}
 import edu.colorado.hopper.util.{CFGUtil, LoopUtil}
 import edu.colorado.thresher.core.Options
 

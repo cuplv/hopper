@@ -12,10 +12,10 @@ import com.ibm.wala.types.{MethodReference, TypeReference}
 import com.ibm.wala.util.graph.dominators.Dominators
 import com.twitter.util.LruMap
 import edu.colorado.hopper.executor.UnstructuredSymbolicExecutor._
-import edu.colorado.hopper.state.{Path, Qry}
-import edu.colorado.hopper.translate.WalaBlock.{fromISSABasicBlock, fromWalaBlock}
-import edu.colorado.hopper.translate.{InvariantMap, MinSet, WalaBlock}
-import edu.colorado.hopper.util.{CFGUtil, CGNodeUtil, ClassUtil, LoopUtil, Timer, Util}
+import edu.colorado.hopper.state.{InvariantMap, MinSet, Path, Qry}
+import edu.colorado.hopper.util._
+import WalaBlock.{fromISSABasicBlock, fromWalaBlock}
+import edu.colorado.hopper.util._
 import edu.colorado.thresher.core.Options
 
 import scala.collection.JavaConversions.{asScalaBuffer, asScalaIterator, asScalaSet, collectionAsScalaIterable, mapAsJavaMap}

@@ -1,5 +1,7 @@
 package edu.colorado.hopper.state
 
+import edu.colorado.hopper.util._
+
 import scala.collection.JavaConversions._
 import com.ibm.wala.analysis.pointers.HeapGraph
 import com.ibm.wala.ipa.callgraph.CGNode
@@ -14,22 +16,15 @@ import com.ibm.wala.ssa.SSAInvokeInstruction
 import com.ibm.wala.ssa.SSAPhiInstruction
 import com.ibm.wala.ssa.SSAPutInstruction
 import edu.colorado.hopper.executor.TransferFunctions
-import edu.colorado.hopper.translate.WalaBlock.fromISSABasicBlock
-import edu.colorado.hopper.translate.WalaBlock.fromWalaBlock
-import edu.colorado.hopper.util.CFGUtil
-import edu.colorado.hopper.util.CGNodeUtil
-import edu.colorado.hopper.util.ClassUtil
-import edu.colorado.hopper.util.PtUtil
-import edu.colorado.hopper.util.Util
+import WalaBlock.fromISSABasicBlock
+import WalaBlock.fromWalaBlock
+import edu.colorado.hopper.util._
 import Path._
 import edu.colorado.thresher.core.Options
 import com.ibm.wala.classLoader.{IClass, IMethod}
 import com.ibm.wala.types.MethodReference
 import com.ibm.wala.types.TypeReference
 import com.ibm.wala.types.ClassLoaderReference
-import edu.colorado.hopper.translate.Concretizable
-import edu.colorado.hopper.translate.MinSet
-import edu.colorado.hopper.translate.WalaBlock
 
 object Path {
   val methodNameBlacklist = Set("toString", "equals", "hash", "println", "print", "indexOf", "append", "charAt", "hashCode", "intValue", "parseInt", "eq")
