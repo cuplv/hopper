@@ -229,7 +229,10 @@ class DowncastCheckingClient(appPath : String, libPath : Option[String], mainCla
     println("Checking all casts took " + castTimer.time + " seconds")
 
     val diff = chordQueries diff checked
-    if (!chordQueries.isEmpty && !diff.isEmpty) println(s"WARNING: did not check $diff")
+    if (!diff.isEmpty) {
+      println("Safe due to being unreachable:")
+      diff.foreach(q => printlnln(s"CAST_ID: $q"))
+    }
 
     new CastCheckingResults(numSafe, numMightFail, numThresherProvedSafe)
   }        
