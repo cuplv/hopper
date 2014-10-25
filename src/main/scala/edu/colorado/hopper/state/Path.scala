@@ -334,8 +334,11 @@ class Path(val qry : Qry, var lastBlk : WalaBlock = null,
 
   def clearExceptionTypes() : Unit = this.exceptionTypes = Nil
 
-  def setExceptionTypes(exceptionTypeRefs : Iterable[TypeReference], cha : IClassHierarchy) = {
-    this.exceptionTypes = exceptionTypeRefs.map(typ => cha.lookupClass(typ))
+  def setExceptionTypes(exceptionTypeRefs : Set[TypeReference], cha : IClassHierarchy) = {
+    this.exceptionTypes = exceptionTypeRefs.flatMap(typ => cha.lookupClass(typ) match {
+      case null => Set.empty[IClass]
+      case typ => Set(typ)
+    })
   }
 
   def setBlk(newBlk : WalaBlock) : Unit = {
