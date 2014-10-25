@@ -130,16 +130,14 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
             if (Path.methodBlacklistContains(callee.getMethod())) { // skip method if it is in our blacklist
               calleePath.dropReturnValueConstraints(i, caller, tf)
               (enterPaths, if (skipPaths.contains(calleePath)) skipPaths else calleePath :: skipPaths)
-            } else if (calleePath.callStackSize >= Path.MAX_CALLSTACK_DEPTH || callee.getIR() == null || callee.equals(caller)) {
+            } else if (calleePath.callStackSize >= Options.MAX_CALLSTACK_DEPTH ||
+                       callee.getIR() == null ||
+                       callee.equals(caller)) {
                if (DEBUG) println("skipping call to " + callee.getMethod.getName() + " due to " +
-                   (if (calleePath.callStackSize >= Path.MAX_CALLSTACK_DEPTH) "depth-out" else "blacklist") + "; max depth is " + Path.MAX_CALLSTACK_DEPTH)
+                   (if (calleePath.callStackSize >= Options.MAX_CALLSTACK_DEPTH) "depth-out" else "blacklist") +
+                   "; max depth is " + Options.MAX_CALLSTACK_DEPTH)
                 calleePath.dropConstraintsProduceableInCall(i, caller, callee, tf)
                 (enterPaths, if (skipPaths.contains(calleePath)) skipPaths else calleePath :: skipPaths)
-              //} else if (callee == caller) { // max call stack depth handles this case for us; basically get limited to MAX_CALL_STACK_DEPTH iterations
-                // TODO: need special handling for mutual recursion? haven't really stress-tested this
-                //if (UnstructuredSymbolicExecutor.DEBUG) println("skipping recursive call " + callee.getMethod.getName())
-                //p.dropConstraintsProduceableInCall(i, caller, callee)
-                //(enterPaths, if (skipPaths.contains(p)) skipPaths else p :: skipPaths)
               } else if (calleePath.isCallRelevant(i, caller, callee, tf) || mayDirectlyCallExitMethod) 
                 // calling enterCallee pushes callee onto call stack
                 (if (calleePath.enterCallee(i, callee, tf)) calleePath :: enterPaths else enterPaths, skipPaths) 

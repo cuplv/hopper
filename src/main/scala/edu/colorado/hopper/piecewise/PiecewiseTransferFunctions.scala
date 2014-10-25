@@ -1,27 +1,20 @@
 package edu.colorado.hopper.piecewise
 
-import scala.collection.JavaConversions._
 import com.ibm.wala.analysis.pointers.HeapGraph
-import com.ibm.wala.ipa.callgraph.CGNode
-import com.ibm.wala.ipa.callgraph.CallGraph
-import com.ibm.wala.ipa.callgraph.propagation.HeapModel
-import com.ibm.wala.ipa.callgraph.propagation.PointerKey
+import com.ibm.wala.ipa.callgraph.{CGNode, CallGraph}
+import com.ibm.wala.ipa.callgraph.propagation.{HeapModel, PointerKey}
 import com.ibm.wala.ipa.cha.IClassHierarchy
 import com.ibm.wala.ssa.SSAInvokeInstruction
-import com.ibm.wala.util.graph.traverse.DFS
-import edu.colorado.hopper.executor.TransferFunctions
-import edu.colorado.hopper.state.LocalVar
-import edu.colorado.hopper.state.Qry
-import edu.colorado.hopper.state.Var
-import edu.colorado.hopper.util.ClassUtil
-import edu.colorado.hopper.util.GraphUtil
-import edu.colorado.thresher.core.Options
-import PiecewiseTransferFunctions._
-import TransferFunctions._
-import edu.colorado.hopper.util.Util
-import com.ibm.wala.util.graph.traverse.BFSPathFinder
+import com.ibm.wala.util.graph.traverse.{BFSPathFinder, DFS}
 import com.ibm.wala.util.intset.OrdinalSet
-import edu.colorado.hopper.state.Path
+import edu.colorado.hopper.executor.TransferFunctions
+import edu.colorado.hopper.executor.TransferFunctions._
+import edu.colorado.hopper.piecewise.PiecewiseTransferFunctions._
+import edu.colorado.hopper.state.{LocalVar, Qry, Var}
+import edu.colorado.hopper.util.{ClassUtil, GraphUtil}
+import edu.colorado.thresher.core.Options
+
+import scala.collection.JavaConversions._
 
 
 object PiecewiseTransferFunctions {
@@ -41,7 +34,7 @@ class PiecewiseTransferFunctions(cg : CallGraph, hg : HeapGraph, hm : HeapModel,
     // TODO: use mods first, then use prods to decide whether to drop or not. only compute prods for an individual constraint
     if (AGGRESSIVE_CALLEE_CONSTRAINT_DROPPING) {
       // +1 to account for the fact that callee has not been added to the call stack yet 
-      val k = Path.MAX_CALLSTACK_DEPTH - (qry.callStack.size + 1)
+      val k = Options.MAX_CALLSTACK_DEPTH - (qry.callStack.size + 1)
       assert(k >= 0)
       
       // purposely getting producers rather than modifiers; we need to drop all constraints with producers in the callee in order to be sound, 

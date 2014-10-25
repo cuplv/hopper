@@ -79,8 +79,8 @@ public class Options {
   public static boolean FULL_WITNESSES = false;
 
   @intOpt(description = "if the call stack is larger than this, we drop constraints that can be produced in callees rather than exploring them",
-          _default = 3)
-  public static int MAX_CALLSTACK_DEPTH = 3;
+          _default = 4)
+  public static int MAX_CALLSTACK_DEPTH = 4;
   
   @boolOpt(description = "do index-sensitive reasoning", _default = false)
   public static boolean INDEX_SENSITIVITY = false;

@@ -32,8 +32,6 @@ import edu.colorado.hopper.translate.MinSet
 import edu.colorado.hopper.translate.WalaBlock
 
 object Path {
-  val MAX_CALLSTACK_DEPTH = Options.MAX_CALLSTACK_DEPTH + 1
-  
   val methodNameBlacklist = Set("toString", "equals", "hash", "println", "print", "indexOf", "append", "charAt", "hashCode", "intValue", "parseInt", "eq")
   val classNameBlacklist = Set("Ljava/io/PrintWriter", "Ljava/lang/String", "Ljava/security/AccessController", "Ljava/lang/Character", "Lsun/misc/VM",
                                "Ljava/lang/Class", "Ljava/io/BufferedReader", "Ljava/lang/Float")  
