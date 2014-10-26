@@ -394,10 +394,10 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
         invariantImpliesPath(p)) return (passPaths, failPaths)
     )
 
-    val isLoopBlk = loopHeader match {
+    val isLoopBlk = loopHeader.isDefined/*loopHeader match {
       case Some(loopHeader) => loopHeader == p.blk
       case None => false
-    }
+    }*/
 
     val instrPaths = executeBlkInstrs(p, isLoopBlk)
     if (instrPaths.isEmpty) (passPaths, failPaths)
