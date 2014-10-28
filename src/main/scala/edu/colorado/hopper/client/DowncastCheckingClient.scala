@@ -67,30 +67,30 @@ class DowncastCheckingClient(appPath : String, libPath : Option[String], mainCla
         fails
       } else java.util.Collections.EMPTY_SET
 
-    val proveSetFile =
-      if (Options.FLOW_INSENSITIVE_ONLY && !Options.USE_DEMAND_CAST_CHECKER) "none.txt" // don't use prove set
-      else if (Options.USE_DEMAND_CAST_CHECKER) "prove_casts_fi.txt" // use casts proven by flow-insensitive analysis
-      else if (Options.PIECEWISE_EXECUTION) "prove_casts_th.txt" // use casts proven by regular Thresher
-      else "prove_casts_dc.txt" // regular Thresher case; use casts proven by demand cast checker
-
-    /*  
-    val pwProveSet = parseCastList(Options.APP + "prove_casts_pw.txt")
-    val thProveSet = parseCastList(Options.APP + "prove_casts_th.txt")
-    val pwMinusTh = pwProveSet.diff(thProveSet) // run on each of the casts that piecewise can prove, but Thresher can't
-    println("pwMinusTh is " + pwMinusTh)
-    */
-
     // for Chord only
-    val chordQueryPath = s"${Options.APP.replace("classes", "")}/queries.txt"
+    val appPath = Options.APP.replace("/classes", "")
+    val chordQueryPath = s"$appPath/queries.txt"
     println(s"Checking $chordQueryPath for Chord queries")
     val chordQueries = parseCastList(chordQueryPath)
     var checked = Set.empty[String]
     println(s"Solving ${chordQueries.size} queries from Chord")
 
     // for dacapo only
-    val benchPath = Options.APP.substring(0, Options.APP.lastIndexOf('/') + 1)
-    println(s"$benchPath")
-    val proveSet = parseCastList(benchPath + proveSetFile)
+    val benchPath = appPath.substring(appPath.lastIndexOf('/') + 1)
+    val proveSetFile =
+      if (Options.FLOW_INSENSITIVE_ONLY && !Options.USE_DEMAND_CAST_CHECKER) "none.txt" // don't use prove set
+      else if (Options.USE_DEMAND_CAST_CHECKER) "prove_casts_fi.txt" // use casts proven by flow-insensitive analysis
+      else if (Options.PIECEWISE_EXECUTION) s"prove_casts_${benchPath}_th.txt" // use casts proven by regular Thresher
+      else "prove_casts_dc.txt" // regular Thresher case; use casts proven by demand cast checker
+    println("Prove set file is " + proveSetFile)
+    val proveSet = parseCastList(proveSetFile)
+
+    /*  
+    val pwProveSet = parseCastList(Options.APP + "prove_casts_pw.txt")
+    val thProveSet = parseCastList(Options.APP + "prove_casts_th.txt")
+    val pwMinusTh = pwProveSet.diff(thProveSet) // run on each of the casts that piecewise can prove, but Thresher can't
+    println("pwMinusTh is " + pwMinusTh)
+    */   
 
     println("proveSet size is " + proveSet.size)
     val alreadyRefuted = Util.makeSet[Int]

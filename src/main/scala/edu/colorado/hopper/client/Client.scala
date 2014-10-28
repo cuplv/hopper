@@ -236,9 +236,11 @@ abstract class Client(appPath : String, libPath : Option[String], mainClass : St
                                                                    walaRes.modRef))
     else new DefaultSymbolicExecutor(makeTransferFunctions(walaRes))
   
-  def getJVMLibFile : Option[File] = {    
-    val PATH = System.getProperty("java.home")
-    List(new File(PATH + "/lib/rt.jar"), new File(PATH + "/../Classes/classes.jar")).find(f => f.exists())
+   def getJVMLibFile : Option[File] = new File(Options.JAVA_LIB) match {
+    case f if f.exists() => Some(f)
+    case _ =>
+      val PATH = System.getProperty("java.home")
+      List(new File(PATH + "/lib/rt.jar"), new File(PATH + "/../Classes/classes.jar")).find(f => f.exists())
   }
 
   def getWALAStubs : Option[File] = {
