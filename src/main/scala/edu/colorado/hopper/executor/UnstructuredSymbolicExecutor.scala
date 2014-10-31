@@ -415,7 +415,7 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
       val caughtExceptionTypes = startBlk.getCaughtExceptionTypes.toSet
       if (DEBUG) println(s"setting paths to exceptional; types are $caughtExceptionTypes")
       instrPaths.foreach(p => p.setExceptionTypes(caughtExceptionTypes, cha))
-      instrPaths.foreach(p => assert(p.isExceptional))
+      if (DEBUG && !caughtExceptionTypes.isEmpty) instrPaths.foreach(p => assert(p.isExceptional))
     }
 
     val preds =
