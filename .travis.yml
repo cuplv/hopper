@@ -5,9 +5,10 @@
    - "git clone https://github.com/cuplv/droidel.git"
    - "cd droidel/lib && ./install_deps.sh"   
    - "cd .. && sbt publishLocal && cd .."
-   - "wget https://www.cs.colorado.edu/~sabl4745/private/com.microsoft.z3.jar"
-   - "wget https://www.cs.colorado.edu/~sabl4745/private/libz3.so"
-   - "wget https://www.cs.colorado.edu/~sabl4745/private/libz3java.so"
+   - "wget https://www.dropbox.com/s/eqf45mlixg1bnri/com.microsoft.z3.jar"
+   - "wget https://www.dropbox.com/s/qcjzpltjpih3s1z/libz3.so"
+   - "wget https://www.dropbox.com/s/lx23mupkw48dke9/libz3java.so"
+   - "wget https://www.dropbox.com/s/pv8r9mcd3dbl9vu/primordial.jar.model"
    - "cd .."
  script: export LD_LIBRARY_PATH=lib:$LD_LIBRARY_PATH && sbt "run -regressions -piecewise_execution"
  scala:
