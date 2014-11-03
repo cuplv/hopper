@@ -1,0 +1,16 @@
+ language: scala
+ before_install:
+   - "mkdir -p lib"
+   - "cd lib"   
+   - "git clone https://github.com/cuplv/droidel.git"
+   - "cd droidel/lib && ./install_deps.sh"   
+   - "cd .. && sbt publishLocal && cd .."
+   - "wget https://www.cs.colorado.edu/~sabl4745/private/com.microsoft.z3.jar"
+   - "wget https://www.cs.colorado.edu/~sabl4745/private/libz3.so"
+   - "wget https://www.cs.colorado.edu/~sabl4745/private/libz3java.so"
+   - "cd .."
+ script: export LD_LIBRARY_PATH=lib:$LD_LIBRARY_PATH && sbt "run -regressions -piecewise_execution"
+ scala:
+   - "2.10.2"
+ jdk:
+   - openjdk7
