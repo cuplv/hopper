@@ -93,7 +93,7 @@ class AndroidUIClient(appPath : String, androidLib : File) {
     def isInterestingPair(pair : (CGNode, CGNode)) : Boolean = pair._2.getMethod().getName().toString() == "takePicture"
         
     // generate stubs and a specialized harness for the app
-    val transformer = new AndroidAppTransformer(appPath, androidLib, useJPhantom = true, cleanupGeneratedFiles = true)
+    val transformer = new AndroidAppTransformer(appPath, androidLib, droidelHome = "lib/droidel")
     // assume app has already been transformed by Droidel
     // TODO: validate by checking for bin/droidel_classes directory
     // transformer.transformApp
