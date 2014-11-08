@@ -124,6 +124,9 @@ public class Options {
   
   @stringOpt(description = "List of classes to excluse from analysis", _default = "config/exclusions.txt")
   public static String EXCLUSIONS = "config/exclusions.txt";
+
+  @stringOpt(description = "List of queries to answer", _default = "")
+  public static String QUERIES = "";
   
   @stringOpt(description = "run a particular test", _default = "")
   public static String TEST;

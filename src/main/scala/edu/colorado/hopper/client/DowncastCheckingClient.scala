@@ -38,10 +38,7 @@ class DowncastCheckingClient(appPath : String, libPath : Option[String], mainCla
   def parseCastList(fileName : String) : Set[String] = 
     if (new File(fileName).exists()) {
       val f  = Source.fromFile(fileName)
-      val casts = f.getLines.foldLeft (Set.empty[String]) ((set, line) => {
-        //assert(!set.contains(line), "DUPLICATE: " + line)
-        set + line
-      })
+      val casts = f.getLines.foldLeft (Set.empty[String]) ((set, line) => set + line)
       f.close
       casts
     }
@@ -67,40 +64,10 @@ class DowncastCheckingClient(appPath : String, libPath : Option[String], mainCla
         fails
       } else java.util.Collections.EMPTY_SET
 
-    // for Chord only
-    val appPath = Options.APP.replace("/classes", "")
-    val chordQueryPath = s"$appPath/queries.txt"
-    println(s"Checking $chordQueryPath for Chord queries")
-    val chordQueries = parseCastList(chordQueryPath)
-    var checked = Set.empty[String]
-    println(s"Solving ${chordQueries.size} queries from Chord")
-
-    // for dacapo only
-    val benchPath = appPath.substring(appPath.lastIndexOf('/') + 1)
-    val proveSetFile =
-      if (Options.FLOW_INSENSITIVE_ONLY && !Options.USE_DEMAND_CAST_CHECKER) "none.txt" // don't use prove set
-      else if (Options.USE_DEMAND_CAST_CHECKER) "prove_casts_fi.txt" // use casts proven by flow-insensitive analysis
-      else if (Options.PIECEWISE_EXECUTION) s"prove_casts_${benchPath}_th.txt" // use casts proven by regular Thresher
-      else "prove_casts_dc.txt" // regular Thresher case; use casts proven by demand cast checker
-    println("Prove set file is " + proveSetFile)
-    val proveSet = parseCastList(proveSetFile)
-
-    /*  
-    val pwProveSet = parseCastList(Options.APP + "prove_casts_pw.txt")
-    val thProveSet = parseCastList(Options.APP + "prove_casts_th.txt")
-    val pwMinusTh = pwProveSet.diff(thProveSet) // run on each of the casts that piecewise can prove, but Thresher can't
-    println("pwMinusTh is " + pwMinusTh)
-    */   
-
-    println("proveSet size is " + proveSet.size)
-    val alreadyRefuted = Util.makeSet[Int]
-    //val NUM_ITERS = 1 // allow multiple runs to exploit recomputed invariant map
-    //val ITER_1_BUDGET = 10
-    //val ITER_2_BUDGET = 10
-    //for (i <- 1 to NUM_ITERS) {
-    //if (i == 1) Options.TIMEOUT = ITER_1_BUDGET
-    //else if (i == 2) Options.TIMEOUT = ITER_2_BUDGET
-    //println("doing iter " + i + " using timeout budget " + Options.TIMEOUT)
+    // see if a list of cast queries was specified on the command line
+    val queries = if (Options.QUERIES.isEmpty) Set.empty[String] else parseCastList(Options.QUERIES)
+    if (!queries.isEmpty) println(s"Solving ${queries.size} queries from ${Options.QUERIES}")
+    var checkedQueries = Set.empty[String]
 
     val exec = makeSymbolicExecutor(walaRes)
     castTimer.start
@@ -146,16 +113,13 @@ class DowncastCheckingClient(appPath : String, libPath : Option[String], mainCla
                                                                                         key.getConcreteType()))
 
                       badKeys.foreach(k => assert(k.getConcreteType() != declaredResultClass, "types " + declaredResultClass + " the same!"))
-                      if (!chordQueries.isEmpty && !chordQueries.contains(castId)) {
+                      if (!queries.isEmpty && !queries.contains(castId)) {
                         println("This query not specified by Chord; skipping")
                         (numSafe, numMightFail, numThresherProvedSafe, total)
-                      } else if (badKeys.isEmpty ||
-                        proveSet.contains(castId)) {
-                        //!pwMinusTh.contains(castId)) {
-                        //proveSet.contains(castId) || total < 1178) { // TMP for focusing on a specific cast!
+                      } else if (badKeys.isEmpty) {
                         println("Points-to analysis proved cast #" + total + " safe.")
                         println("CAST_ID: " + castId)
-                        checked = checked + castId
+                        checkedQueries = checkedQueries + castId
                         (numSafe + 1, numMightFail, numThresherProvedSafe, total + 1)
                       } else if (Options.SOUND_EXCEPTIONS && suppressCaughtExceptions && {
                         val startBlk = ir.getBasicBlockForInstruction(castInstr)
@@ -163,20 +127,16 @@ class DowncastCheckingClient(appPath : String, libPath : Option[String], mainCla
                                                                        TypeReference.JavaLangClassCastException, cg, cha)
                       }) {
                         println("Exception analysis proved cast safe.")
-                        checked = checked + castId
+                        checkedQueries = checkedQueries + castId
                         (numSafe + 1, numMightFail, numThresherProvedSafe, total + 1)
                       } else {
                         println("According to point-to analysis, cast #" + total + " may fail.")
-                        checked = checked + castId
+                        checkedQueries = checkedQueries + castId
                         if (Options.USE_DEMAND_CAST_CHECKER && !demandFails.contains(castId)) {
                           println("Demand cast checker proved cast #" + total + " safe.")
                           println("CAST_ID: " + castId)
                           (numSafe + 1, numMightFail, numThresherProvedSafe, total + 1)                        
                         } else if (!Options.FLOW_INSENSITIVE_ONLY) {
-                          if (alreadyRefuted.contains(total)) {
-                            println("previous iter already refuted cast " + total)
-                            (numSafe, numMightFail + 1, numThresherProvedSafe + 1, total + 1)
-                          } else {
                           // invoke Thresher, try to show that failure can't happen
                           // query (informally): when cast occurs, local var cast doesn't point to a bad key
                           // for instr v0 = checkcast v1 T, query is v1 -> a && (a from badKeys)
@@ -202,7 +162,6 @@ class DowncastCheckingClient(appPath : String, libPath : Option[String], mainCla
                           
                           println("Checking cast took " + singleCastTimer.time)
                           if (!foundWitness) {
-                            alreadyRefuted.add(total)
                             println("Thresher proved cast #" + total + " safe.")
                             println("CAST_ID: " + castId)
                             (numSafe, numMightFail + 1, numThresherProvedSafe + 1, total + 1)
@@ -211,7 +170,6 @@ class DowncastCheckingClient(appPath : String, libPath : Option[String], mainCla
                             ClassUtil.pp_instr(castInstr, node.getIR()); println
                             println(s"Not safe: $castId $castDescr")
                             (numSafe, numMightFail + 1, numThresherProvedSafe, total + 1)
-                          }
                           }
                         } else (numSafe, numMightFail + 1, numThresherProvedSafe, total + 1)
                       }                        
@@ -228,7 +186,7 @@ class DowncastCheckingClient(appPath : String, libPath : Option[String], mainCla
     castTimer.stop
     println("Checking all casts took " + castTimer.time + " seconds")
 
-    val diff = chordQueries diff checked
+    val diff = queries diff checkedQueries
     if (!diff.isEmpty) {
       println("Safe due to being unreachable:")
       diff.foreach(q => println(s"CAST_ID: $q"))
