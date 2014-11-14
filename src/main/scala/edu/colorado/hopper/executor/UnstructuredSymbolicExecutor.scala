@@ -31,7 +31,6 @@ object UnstructuredSymbolicExecutor {
   // add path constraints from switch upon entering block rather than upon crossing case expression
   private val PRE_CONSTRAIN_SWITCHES = true
 
-  private val KEEP_LOOP_CONSTRAINTS = false
   private val timekeeper = new Timer
 }
 
@@ -516,7 +515,9 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
                   if (DEBUG) sys.error("Couldn't find constraining instr for " + blk + " default is " + defaultBlk + " switch blk is " + goalBlk + " ir " + ir)
                   true
                 }
-              case keys => p.constrainBasedOnSwitchCases(keys.flatMap(k => switchMap(k)), tf) // normal switch case                              
+              case keys =>
+                tf.constrainBasedOnSwitchCases(keys.flatMap(k => switchMap(k)), p.qry, p.node) // normal switch case
+                //p.constrainBasedOnSwitchCases(keys.flatMap(k => switchMap(k)), tf) // normal switch case
             }
           }
           
@@ -648,7 +649,7 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
                          
   
   // TODO: cache this
-  def getSwitchMap(switchInstr : SSASwitchInstruction, ir : IR) : Map[Int,List[SSAConditionalBranchInstruction]]= {
+  def getSwitchMap(switchInstr : SSASwitchInstruction, ir : IR) : Map[Int,List[SSAConditionalBranchInstruction]] = {
     val tbl = ir.getSymbolTable
     val cfg = ir.getControlFlowGraph
     val matched = switchInstr.getUse(0)
@@ -663,7 +664,7 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
       if (index % 2 == 0 && casesAndLabels(index + 1) != switchInstr.getDefault()) {
         val (_case, target) = (casesAndLabels(index), cfg.getBlockForInstruction(casesAndLabels(index + 1)).getNumber())
         // check for blocks we've already translated so we can group cases
-        val cond = new SSAConditionalBranchInstruction(EQ, TypeReference.Int, matched, tbl.getConstant(_case), -1)
+        val cond = new SSAConditionalBranchInstruction(index, EQ, TypeReference.Int, matched, tbl.getConstant(_case), -1)
         map + (target -> (cond :: map.getOrElse(target, List.empty[SSAConditionalBranchInstruction])))
       } else map
     )

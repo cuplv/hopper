@@ -85,7 +85,7 @@ object TransferFunctions {
 }
 
 /** implements the |- {R} c {Q} judgement from Section 3.2 of Thresher: Precise Refutations for Heap Reachability (PLDI 2013) */
-class TransferFunctions(val cg : CallGraph, val hg : HeapGraph, _hm : HeapModel, val cha : IClassHierarchy, val modRef : java.util.Map[CGNode, OrdinalSet[PointerKey]]) {
+class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm : HeapModel, val cha : IClassHierarchy, val modRef : java.util.Map[CGNode, OrdinalSet[PointerKey]]) {
   val hm = new DelegatingExtendedHeapModel(_hm)    
   
   /** look up the lhs of @param s in @param localConstraints, @return matching rhs var and edge if we find it */
@@ -228,8 +228,9 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph, _hm : HeapModel,
         p
       case e => sys.error("Unexpected edge " + e)
     }
-    val disjunctiveCaseConstraint = Pure.makePureDisjunctiveConstraint(cases.foldLeft (Set.empty[PureAtomicConstraint]) ((s, _case) => 
-      s + Pure.makeEqConstraint(pureSnk , Pure.makePureVal(tbl, _case.getUse(1)))))        
+    val disjunctiveCaseConstraint =
+      Pure.makePureDisjunctiveConstraint(cases.foldLeft (Set.empty[PureAtomicConstraint]) ((s, _case) =>
+        s + Pure.makeEqConstraint(pureSnk , Pure.makePureVal(tbl, _case.getUse(1)))))
     qry.addPureConstraint(disjunctiveCaseConstraint)
   }
   

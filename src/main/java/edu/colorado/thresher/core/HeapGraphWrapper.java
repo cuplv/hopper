@@ -1,19 +1,16 @@
 package edu.colorado.thresher.core;
 
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.List;
-
 import com.ibm.wala.analysis.pointers.BasicHeapGraph;
 import com.ibm.wala.ipa.callgraph.CallGraph;
 import com.ibm.wala.ipa.callgraph.propagation.PointerAnalysis;
 import com.ibm.wala.util.debug.Assertions;
 import com.ibm.wala.util.intset.BasicNaturalRelation;
 import com.ibm.wala.util.intset.IBinaryNaturalRelation;
-import com.ibm.wala.util.intset.IntIterator;
 import com.ibm.wala.util.intset.IntSet;
-import com.ibm.wala.util.intset.MutableIntSet;
-import com.ibm.wala.util.intset.MutableSparseIntSet;
+
+import java.util.Iterator;
+import java.util.LinkedList;
+import java.util.List;
 
 /**
  * A wrapper of WALA's HeapGraph that allows us to

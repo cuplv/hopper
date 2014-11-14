@@ -32,7 +32,7 @@ object RelevanceRelation {
   val CACHE_SIZE = 100 
 }
 
-class RelevanceRelation(val cg : CallGraph, val hg : HeapGraph, val hm : HeapModel, val cha : IClassHierarchy,
+class RelevanceRelation(val cg : CallGraph, val hg : HeapGraph[InstanceKey], val hm : HeapModel, val cha : IClassHierarchy,
   val cgTransitiveClosure : java.util.Map[CGNode,OrdinalSet[CGNode]] = null) { // TODO: extract relevance relation that doesn't need this
   val producerCache = new LruMap[PtEdge, List[(CGNode,SSAInstruction)]](CACHE_SIZE) 
  
@@ -557,8 +557,8 @@ class RelevanceRelation(val cg : CallGraph, val hg : HeapGraph, val hm : HeapMod
         if (ir != null) {
           val tbl = ir.getSymbolTable()
           // edge can be produced by x.f := y where x -> A0 and y -> A1
-          IRUtil.getAllInstructions(node).foldLeft (lst) ((lst, instr) => instr match {        
-            case i : SSAPutInstruction if (cha.resolveField(i.getDeclaredField()) == fld && 
+          IRUtil.getAllInstructions(node).foldLeft (lst) ((lst, instr) => instr match {
+            case i : SSAPutInstruction if (!i.isStatic() && cha.resolveField(i.getDeclaredField()) == fld &&
               lhsPreds.contains(Var.makeLPK(i.getRef(), node, hm)) &&
               rhsMayEqCheck(snk, i.getVal(), node, tbl, qry, heapCheck, getModifiers)) => (node, i) :: lst
             case _ => lst

@@ -6,7 +6,7 @@ import scala.collection.JavaConversions._
 import com.ibm.wala.analysis.pointers.HeapGraph
 import com.ibm.wala.ipa.callgraph.CGNode
 import com.ibm.wala.ipa.callgraph.CallGraph
-import com.ibm.wala.ipa.callgraph.propagation.HeapModel
+import com.ibm.wala.ipa.callgraph.propagation.{InstanceKey, HeapModel}
 import com.ibm.wala.ipa.cha.IClassHierarchy
 import com.ibm.wala.ssa.ISSABasicBlock
 import com.ibm.wala.ssa.SSAArrayStoreInstruction
@@ -53,8 +53,8 @@ object Path {
   /**
    * @return list of paths representing the result of pushing @param p to each instruction in @param instrs
    */
-  def fork(p : Path, node : CGNode, instrs : Set[SSAInstruction], jmpNum : Int, cg : CallGraph, hg : HeapGraph, hm : HeapModel, cha : IClassHierarchy, 
-           paths : List[Path] = Nil) : List[Path] = {   
+  def fork(p : Path, node : CGNode, instrs : Set[SSAInstruction], jmpNum : Int, cg : CallGraph,
+           hg : HeapGraph[InstanceKey], hm : HeapModel, cha : IClassHierarchy, paths : List[Path] = Nil) : List[Path] = {
     val alreadyDidInitCase = Util.makeSet[CGNode]
     //val fakeWorldClinit = WALACFGUtil.getFakeWorldClinitNode(cg) 
     val fakeWorldClinit = CGNodeUtil.getFakeWorldClinitNode(cg).get
@@ -100,7 +100,8 @@ object Path {
     })  
   }
   
-  def setupJumpPath(p : Path, instr : SSAInstruction, node : CGNode, hm : HeapModel, hg : HeapGraph, cha : IClassHierarchy, jmpNum : Int = 0) : Unit = {
+  def setupJumpPath(p : Path, instr : SSAInstruction, node : CGNode, hm : HeapModel, hg : HeapGraph[InstanceKey],
+                    cha : IClassHierarchy, jmpNum : Int = 0) : Unit = {
     val (blk, index) = CFGUtil.findInstr(node, instr) match {
       case Some(p) => p
       case None => sys.error("Couldn't find instr " + instr + " in node " + node)
@@ -109,7 +110,7 @@ object Path {
   }
   
   def setupJumpPath(p : Path, i : SSAInstruction, blk : ISSABasicBlock, index : Int, node : CGNode, hm : HeapModel,
-                    hg : HeapGraph, cha : IClassHierarchy, jmpNum : Int) = {
+                    hg : HeapGraph[InstanceKey], cha : IClassHierarchy, jmpNum : Int) = {
     val qry = p.qry
     require(qry.callStack.isEmpty)      
    
@@ -195,6 +196,7 @@ class Path(val qry : Qry, var lastBlk : WalaBlock = null,
     // copy jump map
     this.jumpMap.foreach(kvPair => path.jumpMap += kvPair)
     assert(this.jumpMap.size == path.jumpMap.size)
+    //this.jumpHistory.foreach(frame => path.jumpHistory += frame)
     this.switchConstraintsAdded.foreach(blk => path.switchConstraintsAdded += blk)    
 
     if (DEBUG) {
@@ -240,21 +242,12 @@ class Path(val qry : Qry, var lastBlk : WalaBlock = null,
     
   def isCallRelevant(i : SSAInvokeInstruction, caller : CGNode, callee : CGNode, tf : TransferFunctions) : Boolean = {
     val res0 = tf.isCallRelevant(i, caller, callee, qry)
-    //assert(res0 == res1, 
-    //assert(Util.implies(res1, res0), "old says " + res1 + " new says " + res0) 
     res0
   }
     
   // TODO: redo this the right way when we're no longer using old queries
   def dropConstraintsProduceableInCall(invoke : SSAInvokeInstruction, caller : CGNode, callee : CGNode, tf : TransferFunctions) : Unit = {
-    val cg = tf.cg
     tf.dropConstraintsFromInstructions(List(invoke), caller, qry, Some(callee))
-    
-    //this.qry.dropReturnValueConstraintsForCall(invoke, caller)
-    // this check doesn't account for return values, so we drop them above 
-    //if (this.qry.getRelevantNodes().values().flatten.toSet.contains(callee)) {
-      //this.qry.dropConstraintsProduceableInCall(invoke, caller, callee, true)
-    //}   
   }
   
   def executePhi(phi : SSAPhiInstruction, phiIndex : Int, tf : TransferFunctions) : Boolean = {
@@ -295,7 +288,6 @@ class Path(val qry : Qry, var lastBlk : WalaBlock = null,
     jumpMap -= jmpNum 
   }
   
-  //def jumpHistoryContains(f : StackFrame2) : Boolean = this.jumpHistory.contains(f)
   def jumpHistoryContains(f : CallStackFrame) : Boolean = this.jumpHistory.contains(f)
   
   
@@ -357,13 +349,9 @@ class Path(val qry : Qry, var lastBlk : WalaBlock = null,
     val res0 = tf.executeCond(i, qry, node, isThenBranch)
     res0
   }
-  
-  def constrainBasedOnSwitchCases(cases : Iterable[SSAConditionalBranchInstruction], tf : TransferFunctions) : Boolean = {
-    tf.constrainBasedOnSwitchCases(cases, qry, node)
-  }
  
   def addConstraintFromSwitch(i : SSAConditionalBranchInstruction, tf : TransferFunctions, negated : Boolean = false) : Boolean = {
-    val res0 = tf.executeCond(i, qry, node, !negated)    
+    val res0 = tf.executeCond(i, qry, node, !negated)
     res0
   }
 
@@ -465,7 +453,7 @@ class Path(val qry : Qry, var lastBlk : WalaBlock = null,
   
   /**
    * @return true if this path entails other, false otherwise
-   * @param this path entails the @param other path if the concretization of the other query is larger
+   * this entails the @param other path if the concretization of the other query is larger
    * than the concretization of this query
    * 
    * qry1.contains(qry2) returns true if qry1 has *all* of qry2's points-to edges
@@ -482,7 +470,7 @@ class Path(val qry : Qry, var lastBlk : WalaBlock = null,
   
   /**
    * @return true if this path entails set, false otherwise
-   * @param this path entails @param set if the concretization of the the set is larger than or equal to
+   * this entails @param set if the concretization of the the set is larger than or equal to
    * the concretization of this query
    */
   override def |=(set : MinSet[Concretizable]) : Boolean = set.exists(p => this |= p)

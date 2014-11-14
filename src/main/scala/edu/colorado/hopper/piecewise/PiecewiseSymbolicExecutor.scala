@@ -65,41 +65,36 @@ trait PiecewiseSymbolicExecutor extends UnstructuredSymbolicExecutor {
    */
   def piecewiseJumpRefuted(p : Path) : Boolean =
     shouldJump(p) match {
-        case Some((jmpPath, isProducedCallback, failCallback)) =>
-          assert(!(jmpPath eq p)) // jmpPath should be a copy of p
-          val curJmp = { jmpNum += 1; jmpNum }    
-          //val jmpPath = preparePathForJump(p)// this call copies p, which is important in case we backtrack
-          rr.getPiecewisePaths(jmpPath, curJmp) match { 
-            case Some(unfilteredPiecewisePaths) =>            
-              val oldInvMaps = cloneInvariantMaps
-              // TODO: may need to recognize when to widen here. right now we do no widening, which could lead to nontermination
-              // TODO: the commented-out code is not sound! the problem is that a path can jump back around and refute itself
-              // TODO: there might be some sound way to create sound summaries in this setting, but I haven't figured it out yet.
-              val piecewisePaths = unfilteredPiecewisePaths.filter(p => 
-                p.jumpHistoryContains(p.callStack.top) ||
-                !piecewiseInvMap.pathEntailsInv((p.node, p.blk, p.index), p))
-              if (DEBUG) {
-                println("got " + piecewisePaths.size + " piecewise paths:") 
-                piecewisePaths.foreach(p => print(p.id + "X :" + ClassUtil.pretty(p.node) + ",\n" + p)); println                                                         
-              }
+      case Some((jmpPath, isProducedCallback, failCallback)) =>
+        assert(!(jmpPath eq p)) // jmpPath should be a copy of p
+        val curJmp = { jmpNum += 1; jmpNum }
+        rr.getPiecewisePaths(jmpPath, curJmp) match {
+          case Some(unfilteredPiecewisePaths) =>
+            val oldInvMaps = cloneInvariantMaps
+            val piecewisePaths =
+              unfilteredPiecewisePaths.filter(p => !p.jumpHistoryContains(p.callStack.top) ||
+                                                   !piecewiseInvMap.pathEntailsInv((p.node, p.blk, p.index), p))
+            if (DEBUG) {
+              println("got " + unfilteredPiecewisePaths.size + " unfiltered paths")
+              unfilteredPiecewisePaths.foreach(p => print(p.id + "X :" + ClassUtil.pretty(p.node) + ",\n" + p)); println
+              println("got " + piecewisePaths.size + " piecewise paths:")
+              piecewisePaths.foreach(p => print(p.id + "X :" + ClassUtil.pretty(p.node) + ",\n" + p)); println
+            }
      
-              piecewisePaths.isEmpty || {
-                println("Performing piecewise jump " + curJmp + " from starting point " + ClassUtil.pretty(p.node)); 
-                //if (DEBUG) { println("\n starting path " + p + " call stack depth " + p.callStackSize); println } 
-                //refuteMustNotRefutePaths(jmpPath, piecewisePaths, curJmp, oldInvMaps) || {
-                
-                  // push all piecewise paths backward, taking note of when the invariant the jump was based on is produced
-                refutePiecewisePaths(piecewisePaths, 
-                  // this purposely drops the old test() on the floor. this is part of losing all context when we jump,
-                  // since test() may tell us to stop when we reach a certain basic block (or something similar).
-                  // however, this may have unexpected results in the case that the user specified test() manually
-                  p => { if (p.containsJump(curJmp) && isProducedCallback(p.qry)) { p.removeJump(curJmp) }; true }, 
-                        curJmp, failCallback, oldInvMaps)
-              }
-            case None => false // relevance graph decided not to jump
-          } 
-        case None => false // shouldJump() decided not to jump
-      }
+            piecewisePaths.isEmpty || {
+              println("Performing piecewise jump " + curJmp + " from starting point " + ClassUtil.pretty(p.node));
+              // push all piecewise paths backward, taking note of when the invariant the jump was based on is produced
+              refutePiecewisePaths(piecewisePaths,
+                // this purposely drops the old test() on the floor. this is part of losing all context when we jump,
+                // since test() may tell us to stop when we reach a certain basic block (or something similar).
+                // however, this may have unexpected results in the case that the user specified test() manually
+                p => { if (p.containsJump(curJmp) && isProducedCallback(p.qry)) { p.removeJump(curJmp) }; true },
+                     curJmp, failCallback, oldInvMaps)
+            }
+          case None => false // relevance graph decided not to jump
+        }
+      case None => false // shouldJump() decided not to jump
+    }
   
   override def executeBackward(qry : Qry, test : Option[Path => Boolean]) : Iterable[Path] = {
     // prevent clients from using test() filtering predicate with piecewise execution, since it doesn't work after a jump    

@@ -1,19 +1,25 @@
 package edu.colorado.thresher.core;
 
-import java.io.InputStream;
-import java.util.Map;
-
-import com.ibm.wala.classLoader.*;
+import com.ibm.wala.classLoader.CallSiteReference;
+import com.ibm.wala.classLoader.IClass;
+import com.ibm.wala.classLoader.IMethod;
+import com.ibm.wala.classLoader.NewSiteReference;
 import com.ibm.wala.ipa.callgraph.*;
-import com.ibm.wala.ipa.callgraph.impl.*;
-import com.ibm.wala.ipa.callgraph.impl.Util;
-import com.ibm.wala.ipa.callgraph.propagation.*;
-import com.ibm.wala.ipa.callgraph.propagation.cfa.*;
-import com.ibm.wala.ipa.cha.*;
-import com.ibm.wala.ipa.summaries.MethodSummary;
-import com.ibm.wala.ipa.summaries.XMLMethodSummaryReader;
-import com.ibm.wala.types.*;
-import com.ibm.wala.util.intset.*;
+import com.ibm.wala.ipa.callgraph.impl.ClassHierarchyClassTargetSelector;
+import com.ibm.wala.ipa.callgraph.impl.Everywhere;
+import com.ibm.wala.ipa.callgraph.propagation.InstanceKey;
+import com.ibm.wala.ipa.callgraph.propagation.ReceiverInstanceContext;
+import com.ibm.wala.ipa.callgraph.propagation.SSAContextInterpreter;
+import com.ibm.wala.ipa.callgraph.propagation.SSAPropagationCallGraphBuilder;
+import com.ibm.wala.ipa.callgraph.propagation.cfa.ZeroXContainerCFABuilder;
+import com.ibm.wala.ipa.callgraph.propagation.cfa.ZeroXInstanceKeys;
+import com.ibm.wala.ipa.cha.IClassHierarchy;
+import com.ibm.wala.types.ClassLoaderReference;
+import com.ibm.wala.types.TypeName;
+import com.ibm.wala.types.TypeReference;
+import com.ibm.wala.util.intset.EmptyIntSet;
+import com.ibm.wala.util.intset.IntSet;
+import com.ibm.wala.util.intset.IntSetUtil;
 
 /** special context-sensitivity policy for test purposes only 
  * 
@@ -112,6 +118,7 @@ public class FakeMapContextSelector implements ContextSelector {
       throw new IllegalArgumentException("options is null");
     }
     com.ibm.wala.ipa.callgraph.impl.Util.addDefaultSelectors(options, cha);
+    com.ibm.wala.ipa.callgraph.impl.Util.setNativeSpec("config/natives.xml");
     com.ibm.wala.ipa.callgraph.impl.Util.addDefaultBypassLogic(options, scope, com.ibm.wala.ipa.callgraph.impl.Util.class.getClassLoader(), cha);
     ContextSelector appSelector = null;
     SSAContextInterpreter appInterpreter = null;

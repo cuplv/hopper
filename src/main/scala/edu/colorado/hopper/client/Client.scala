@@ -8,7 +8,7 @@ import com.ibm.wala.classLoader.{BinaryDirectoryTreeModule, IClass, IMethod}
 import com.ibm.wala.ipa.callgraph.AnalysisOptions.ReflectionOptions
 import com.ibm.wala.ipa.callgraph.impl.{ArgumentTypeEntrypoint, DefaultEntrypoint}
 import com.ibm.wala.ipa.callgraph.propagation.cfa.ZeroXInstanceKeys
-import com.ibm.wala.ipa.callgraph.propagation.{HeapModel, PointerAnalysis, PointerKey}
+import com.ibm.wala.ipa.callgraph.propagation.{HeapModel, InstanceKey, PointerKey}
 import com.ibm.wala.ipa.callgraph.{AnalysisCache, AnalysisOptions, AnalysisScope, CGNode, CallGraph, CallGraphBuilder, CallGraphStats, Entrypoint}
 import com.ibm.wala.ipa.cha.{ClassHierarchy, IClassHierarchy}
 import com.ibm.wala.ipa.modref.ModRef
@@ -30,10 +30,10 @@ object Client {
 }
 
 // simple struct to hold output of up-front WALA analysis
-class WalaAnalysisResults(val cg : CallGraph, val hg : HeapGraph, val hm : HeapModel,
+class WalaAnalysisResults(val cg : CallGraph, val hg : HeapGraph[InstanceKey], val hm : HeapModel,
                           val modRef : java.util.Map[CGNode, OrdinalSet[PointerKey]]) {
-  val cha : IClassHierarchy = cg.getClassHierarchy()
-  val pa : PointerAnalysis = hg.getPointerAnalysis()
+  val cha = cg.getClassHierarchy()
+  val pa = hg.getPointerAnalysis()
 }
 
 abstract class Client(appPath : String, libPath : Option[String], mainClass : String, mainMethod : String,
@@ -74,13 +74,15 @@ abstract class Client(appPath : String, libPath : Option[String], mainClass : St
     val modRef = ModRef.make
     val modRefMap = modRef.computeMod(cg, pa)    
     SameReceiverEntrypoint.clearCachedArgs()
-    new WalaAnalysisResults(cg, hg, hm, modRefMap)
+    new WalaAnalysisResults(cg, hg.asInstanceOf[HeapGraph[InstanceKey]], hm, modRefMap)
   }
   
   // add bypass logic that delegates to stubs if applicable
-  def addBypassLogic(options : AnalysisOptions, analysisScope : AnalysisScope, cha : IClassHierarchy) : Unit = 
+  def addBypassLogic(options : AnalysisOptions, analysisScope : AnalysisScope, cha : IClassHierarchy) : Unit = {
+    com.ibm.wala.ipa.callgraph.impl.Util.setNativeSpec("config/natives.xml")
     com.ibm.wala.ipa.callgraph.impl.Util.addDefaultBypassLogic(options, analysisScope,
       classOf[com.ibm.wala.ipa.callgraph.impl.Util].getClassLoader(), cha)
+  }
       
   def makeCallGraphBuilder(options : AnalysisOptions, cache : AnalysisCache, cha : IClassHierarchy, 
                            analysisScope : AnalysisScope, isRegression : Boolean) : CallGraphBuilder = {

@@ -32,6 +32,12 @@ class DummyIMethod(m : IMethod, c : DummyIClass, cha : IClassHierarchy) extends 
   override def isNative() : Boolean = false 
   override def isSynthetic() : Boolean = true
 
+  var dummyIndexCounter = 0
+  def getDummyIndex() : Int = {
+    dummyIndexCounter += 1
+    dummyIndexCounter
+  }
+
   // for a method whose return type is T, generate the dummy IR "return new T()"
   // generate a dummy IR that allocates an instance of the type of the return value of the method and returns it
   // if the return type is a primitive type generate an empty IR
@@ -40,7 +46,7 @@ class DummyIMethod(m : IMethod, c : DummyIClass, cha : IClassHierarchy) extends 
       // TODO: return arbitrary primitive type? will this cause exceptions?
       null
     } else {
-      val clazz = cha.lookupClass(m.getReturnType())    
+      val clazz = cha.lookupClass(m.getReturnType())
       val retTypeClass = if (clazz.isInterface() || clazz.isAbstract()) // can't allocate an instance of clazz
         if (clazz == m.getDeclaringClass()) c // clazz is the type that we are already synthesizing a dummy impl for. return our dummy impl
         else DummyIClass.findOrCreateDummySubclass(clazz, cha) // need to synthesize a dummy subclass for clazz
@@ -51,7 +57,6 @@ class DummyIMethod(m : IMethod, c : DummyIClass, cha : IClassHierarchy) extends 
       def mkFreshValueNum() : Int = { freshValueNumCounter += 1; freshValueNumCounter }
       
       val instrs =
-        //if (false) {
         if (retTypeClass.getReference() == TypeReference.JavaLangObject) {
           // inserted special hack here for Nick. when the return type is Object and we downcast it (for example, if we cast the result of
           // iterator.next() to some non-Object type T via the instruction x = (T) iterator.next(), then the variable x will always be
@@ -60,25 +65,20 @@ class DummyIMethod(m : IMethod, c : DummyIClass, cha : IClassHierarchy) extends 
           // a smarter thing to do would be to find all cast instructions and return a phi of all types T involved in downcasts
           val subs = if (retTypeClass.isInterface()) cha.getImplementors(retTypeClass.getReference()) else cha.computeSubClasses(retTypeClass.getReference())
           val concreteSubs = subs.filter(c => !c.isAbstract() && !c.isInterface())
-          //val concreteSubs = List(TypeReference.JavaLangString) 
-          //val concreteSubs = List(TypeReference.findOrCreate(ClassLoaderReference.Primordial, "LFakeMap$FakeMapEntry"), 
-            //                      TypeReference.JavaLangObject,
-              //                    TypeReference.JavaLangString)
           concreteSubs.foldLeft (List.empty[SSAInstruction]) ((instrs, c) => {
             // allocate an instance whose type is the return value of the method          
             val defNum = mkFreshValueNum// get fresh value number for def (make sure not to use one of the param value numbers)
-            val newSite = new NewSiteReference(defNum, c.getReference())     
-            //val newSite = new NewSiteReference(defNum, c)     
-            val newInstr = IRUtil.factory.NewInstruction(defNum, newSite)
-            val retInstr = IRUtil.factory.ReturnInstruction(defNum, false)
+            val newSite = new NewSiteReference(defNum, c.getReference())
+            val newInstr = IRUtil.factory.NewInstruction(getDummyIndex(), defNum, newSite)
+            val retInstr = IRUtil.factory.ReturnInstruction(getDummyIndex(), defNum, false)
             newInstr :: retInstr :: instrs
           })
         } else {
           // allocate an instance whose type is the return value of the method
           val newSite = new NewSiteReference(0, retTypeClass.getReference())          
           val newDef = mkFreshValueNum 
-          val newInstr = IRUtil.factory.NewInstruction(newDef, newSite)
-          val retInstr = IRUtil.factory.ReturnInstruction(newDef, false)
+          val newInstr = IRUtil.factory.NewInstruction(getDummyIndex(), newDef, newSite)
+          val retInstr = IRUtil.factory.ReturnInstruction(getDummyIndex(), newDef, false)
           List(newInstr, retInstr)
         }                
      

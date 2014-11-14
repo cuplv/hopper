@@ -287,10 +287,11 @@ class Qry(val heapConstraints : MSet[HeapPtEdge], val pureConstraints : MSet[Pur
   
   //def getRelatedPureConstraints(p : PureVar) : MSet[PureConstraint] = pureConstraints.filter(c => c.lhs == p || c.rhs == p)
   
-  def intersectAndSubstitute(o1 : ObjVar, rgn : Set[InstanceKey], hg : HeapGraph) : Option[ObjVar] =
+  def intersectAndSubstitute(o1 : ObjVar, rgn : Set[InstanceKey], hg : HeapGraph[InstanceKey]) : Option[ObjVar] =
     intersectAndSubstitute(o1, ObjVar(rgn), hg, subO2 = false)
   
-  def intersectAndSubstitute(o1 : ObjVar, o2 : ObjVar, hg : HeapGraph, subO2 : Boolean = true) : Option[ObjVar] =
+  def intersectAndSubstitute(o1 : ObjVar, o2 : ObjVar, hg : HeapGraph[InstanceKey],
+                             subO2 : Boolean = true) : Option[ObjVar] =
     if (o1 == o2) Some(o1)
     else if (Var.canAlias(o1, o2)) {
       val rgnInter = o1.rgn.intersect(o2.rgn)
@@ -310,8 +311,7 @@ class Qry(val heapConstraints : MSet[HeapPtEdge], val pureConstraints : MSet[Pur
       None
     }
   /** substitute symbolic object @param toSub for symbolic object @param subFor in our constraints*/
-  def substitute(toSub : ObjVar, subFor : ObjVar, hg : HeapGraph) : Boolean = {
-    /*if (DEBUG) println("subbing " + toSub + " for " + subFor + " in " + id)*/
+  def substitute(toSub : ObjVar, subFor : ObjVar, hg : HeapGraph[InstanceKey]) : Boolean = {
     
     def substituteInternal(subMap : Map[ObjVar,ObjVar]) : Boolean = {
       def substituteLocals(localConstraints : MSet[LocalPtEdge]) =

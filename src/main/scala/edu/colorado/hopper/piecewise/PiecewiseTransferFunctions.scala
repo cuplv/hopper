@@ -2,7 +2,7 @@ package edu.colorado.hopper.piecewise
 
 import com.ibm.wala.analysis.pointers.HeapGraph
 import com.ibm.wala.ipa.callgraph.{CGNode, CallGraph}
-import com.ibm.wala.ipa.callgraph.propagation.{HeapModel, PointerKey}
+import com.ibm.wala.ipa.callgraph.propagation.{InstanceKey, HeapModel, PointerKey}
 import com.ibm.wala.ipa.cha.IClassHierarchy
 import com.ibm.wala.ssa.SSAInvokeInstruction
 import com.ibm.wala.util.graph.traverse.{BFSPathFinder, DFS}
@@ -24,7 +24,8 @@ object PiecewiseTransferFunctions {
 }
 
 /** extension of ordinary Thresher transfer functions using the relevance relation to do some things more precisely/efficiently */
-class PiecewiseTransferFunctions(cg : CallGraph, hg : HeapGraph, hm : HeapModel, cha : IClassHierarchy, modRef : java.util.Map[CGNode, OrdinalSet[PointerKey]], 
+class PiecewiseTransferFunctions(cg : CallGraph, hg : HeapGraph[InstanceKey], hm : HeapModel, cha : IClassHierarchy,
+                                 modRef : java.util.Map[CGNode, OrdinalSet[PointerKey]],
   val rr : RelevanceRelation) extends TransferFunctions(cg, hg, hm, cha, modRef) {  
   
   private def doesCalleeModifyHeap(callee : CGNode, qry : Qry) : Boolean = {

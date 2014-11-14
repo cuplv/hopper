@@ -4,9 +4,7 @@ import com.ibm.wala.analysis.pointers.HeapGraph
 import com.ibm.wala.analysis.typeInference.TypeInference
 import com.ibm.wala.ipa.callgraph.CGNode
 import com.ibm.wala.ipa.callgraph.CallGraph
-import com.ibm.wala.ipa.callgraph.propagation.HeapModel
-import com.ibm.wala.ipa.callgraph.propagation.LocalPointerKey
-import com.ibm.wala.ipa.callgraph.propagation.PointerKey
+import com.ibm.wala.ipa.callgraph.propagation.{InstanceKey, HeapModel, LocalPointerKey, PointerKey}
 import com.ibm.wala.ipa.cha.IClassHierarchy
 import com.ibm.wala.ssa.SSAInvokeInstruction
 import com.ibm.wala.util.intset.OrdinalSet
@@ -18,7 +16,7 @@ import edu.colorado.hopper.state.Qry
 import edu.colorado.hopper.state.Var
 import edu.colorado.hopper.util.PtUtil
 
-class SynthesisTransferFunctions(cg : CallGraph, hg : HeapGraph, _hm : HeapModel, cha : IClassHierarchy, modRef : java.util.Map[CGNode, OrdinalSet[PointerKey]]) 
+class SynthesisTransferFunctions(cg : CallGraph, hg : HeapGraph[InstanceKey], _hm : HeapModel, cha : IClassHierarchy, modRef : java.util.Map[CGNode, OrdinalSet[PointerKey]])
   extends TransferFunctions(cg, hg, _hm, cha, modRef) {
   
    // we choose *not* to refute based on empty PT sets

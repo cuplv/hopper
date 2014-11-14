@@ -22,7 +22,13 @@ import com.ibm.wala.classLoader.IBytecodeMethod
 
 object IRUtil {
   
-  val factory = new JavaLanguage.JavaInstructionFactory  
+  val factory = new JavaLanguage.JavaInstructionFactory
+
+  var dummyIndexCounter = 0
+  def getDummyIndex() : Int = {
+    dummyIndexCounter += 1
+    dummyIndexCounter
+  }
 
   def makeIR(m : MethodReference, cha : IClassHierarchy) : IR = makeIR(cha.resolveMethod(m), None)
   
@@ -73,17 +79,17 @@ object IRUtil {
   def addDefaultValueAssignmentsForStaticFields(instrs : List[SSAInstruction], ir : IR) = {
     require(ir.getMethod().isClinit())
     val tbl = ir.getSymbolTable()
-    def mkInstr (valu : Int, ref : FieldReference) : SSAPutInstruction = factory.PutInstruction(valu, ref)
+    def mkInstr (valu : Int, ref : FieldReference) : SSAPutInstruction = factory.PutInstruction(getDummyIndex(), valu, ref)
     ir.getMethod().getDeclaringClass().getAllStaticFields().foldLeft (instrs) ((instrs, fld) => getDefaultAssignment(fld, tbl, mkInstr) :: instrs)
   }
   
   // generate default value assignment for a *particular* field. needed in the deviant case where WALA generates no class initializer for a class
   def getDefaultValueAssignmentForStaticField(f : StaticFieldKey) : SSAPutInstruction = 
-    factory.PutInstruction(0, f.getField().getReference())
-  
+    factory.PutInstruction(getDummyIndex(), 0, f.getField().getReference())
+
   // given an array write, generate a write to the same array, same index, but writing the default value 0
   def getDefaultValueAssigmentForArrayIndex(i : SSAArrayStoreInstruction) : SSAArrayStoreInstruction = 
-    factory.ArrayStoreInstruction(i.getArrayRef(), i.getIndex(), 0, i.getElementType()) 
+    factory.ArrayStoreInstruction(getDummyIndex(), i.getArrayRef(), i.getIndex(), 0, i.getElementType())
    
   def getDefaultAssignment(fld : IField, tbl : SymbolTable, mkInstr : (Int, FieldReference) => SSAPutInstruction) : SSAPutInstruction = {
     // TODO: something smarter here?
