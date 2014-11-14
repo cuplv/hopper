@@ -15,7 +15,7 @@ object GraphUtil {
     l
   }
   
-  /** @return true in a node in @param snks is reachable from @params src in @param k steps or less, false otherwise */
+  /** @return true in a node in @param snks is reachable from @param src in @param k steps or less, false otherwise */
   def reachableInKSteps[T](g : Graph[T], src : T, snks : Set[T], k : Int) : Boolean = {
     val bfsIter = new BoundedBFSIterator(g, src, k)
     while (bfsIter.hasNext()) {
