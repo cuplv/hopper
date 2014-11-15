@@ -332,7 +332,6 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
       if (callee.equals(fakeClinit) || 
           callee.getMethod().isClinit() || path.node.equals(cg.getFakeRootNode())) {
         // special case for fakeWorldClinit
-        //assert(callee != fakeClinit, " cur frame " + path.callStack.top)
         paths.foreach(p => if (p.foundWitness) throw WitnessFoundException)
         if (callee.getMethod.isClinit()) {
           assert(path.initializeStaticFieldsToDefaultValues)

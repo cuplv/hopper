@@ -21,7 +21,7 @@ import com.ibm.wala.types.MethodReference
 import com.ibm.wala.classLoader.IBytecodeMethod
 
 object IRUtil {
-  
+
   val factory = new JavaLanguage.JavaInstructionFactory
 
   var dummyIndexCounter = 0
@@ -72,15 +72,19 @@ object IRUtil {
     require(ir.getMethod().isInit())
     val tbl = ir.getSymbolTable()
     val thisVar = 1
-    def mkInstr (valu : Int, ref : FieldReference) : SSAPutInstruction = factory.PutInstruction(thisVar, valu, ref)
-    ir.getMethod().getDeclaringClass().getDeclaredInstanceFields().foldLeft (instrs) ((instrs, fld) => getDefaultAssignment(fld, tbl, mkInstr) :: instrs)
+    def mkInstr (valu : Int, ref : FieldReference) : SSAPutInstruction =
+      factory.PutInstruction(getDummyIndex(), thisVar, valu, ref)
+    ir.getMethod().getDeclaringClass().getDeclaredInstanceFields().foldLeft (instrs) ((instrs, fld) =>
+      getDefaultAssignment(fld, tbl, mkInstr) :: instrs)
   }
   
   def addDefaultValueAssignmentsForStaticFields(instrs : List[SSAInstruction], ir : IR) = {
     require(ir.getMethod().isClinit())
     val tbl = ir.getSymbolTable()
-    def mkInstr (valu : Int, ref : FieldReference) : SSAPutInstruction = factory.PutInstruction(getDummyIndex(), valu, ref)
-    ir.getMethod().getDeclaringClass().getAllStaticFields().foldLeft (instrs) ((instrs, fld) => getDefaultAssignment(fld, tbl, mkInstr) :: instrs)
+    def mkInstr (valu : Int, ref : FieldReference) : SSAPutInstruction =
+      factory.PutInstruction(getDummyIndex(), valu, ref)
+    ir.getMethod().getDeclaringClass().getAllStaticFields().foldLeft (instrs) ((instrs, fld) =>
+      getDefaultAssignment(fld, tbl, mkInstr) :: instrs)
   }
   
   // generate default value assignment for a *particular* field. needed in the deviant case where WALA generates no class initializer for a class

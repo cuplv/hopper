@@ -11,7 +11,7 @@ import edu.colorado.hopper.util.{WalaBlock, ClassUtil, PtUtil, Util}
 
 object PiecewiseSymbolicExecutor {
   // if true, when we do a piecewise jump and fail, we will continue doing path-based execution
-  private val BACKTRACK = true
+  private val BACKTRACK = true // TODO: don't use this, currently unsound in a subtle way
   private def DEBUG = true
 }
 
@@ -20,7 +20,6 @@ class DefaultPiecewiseSymbolicExecutor(override val tf : TransferFunctions,
                                        override val keepLoopConstraints : Boolean = false)
   extends PiecewiseSymbolicExecutor {}
 
-//class PiecewiseSymbolicExecutor(tf : TransferFunctions, val rr : RelevanceRelation) extends DefaultSymbolicExecutor(tf) { 
 trait PiecewiseSymbolicExecutor extends UnstructuredSymbolicExecutor {
   val rr : RelevanceRelation
   
@@ -28,12 +27,6 @@ trait PiecewiseSymbolicExecutor extends UnstructuredSymbolicExecutor {
   
   // exposed to allow subclasses to eliminate or conditionalize the unproduceable constraint check
   def hasUnproduceableConstraint(p : Path) : Boolean = rr.hasUnproduceableConstraint(p)
-  
-  /*override def executeBlkInstrs(p : Path, isLoopBlock : Boolean) : List[Path] = {
-    // disallowing nested jumps for now
-    if (hasUnproduceableConstraint(p) || (!p.isInJump && piecewiseJumpRefuted(p))) List.empty[Path]
-    else super.executeBlkInstrs(p, isLoopBlock)
-  }*/
 
   override def forkToPredecessorBlocks(instrPaths : List[Path], startBlk : ISSABasicBlock, loopHeader : Option[ISSABasicBlock],
                                        ir : IR, passPaths : List[Path], failPaths : List[Path], test : Path => Boolean) =
@@ -70,19 +63,16 @@ trait PiecewiseSymbolicExecutor extends UnstructuredSymbolicExecutor {
         val curJmp = { jmpNum += 1; jmpNum }
         rr.getPiecewisePaths(jmpPath, curJmp) match {
           case Some(unfilteredPiecewisePaths) =>
-            val oldInvMaps = cloneInvariantMaps
+            val oldInvMaps = if (BACKTRACK) cloneInvariantMaps else Nil
             val piecewisePaths =
-              unfilteredPiecewisePaths.filter(p => !p.jumpHistoryContains(p.callStack.top) ||
-                                                   !piecewiseInvMap.pathEntailsInv((p.node, p.blk, p.index), p))
+              unfilteredPiecewisePaths.filter(p => !piecewiseInvMap.pathEntailsInv((p.node, p.blk, p.index), p))
             if (DEBUG) {
-              println("got " + unfilteredPiecewisePaths.size + " unfiltered paths")
-              unfilteredPiecewisePaths.foreach(p => print(p.id + "X :" + ClassUtil.pretty(p.node) + ",\n" + p)); println
               println("got " + piecewisePaths.size + " piecewise paths:")
               piecewisePaths.foreach(p => print(p.id + "X :" + ClassUtil.pretty(p.node) + ",\n" + p)); println
             }
      
             piecewisePaths.isEmpty || {
-              println("Performing piecewise jump " + curJmp + " from starting point " + ClassUtil.pretty(p.node));
+              println("Performing piecewise jump " + curJmp + " from starting point " + ClassUtil.pretty(p.node))
               // push all piecewise paths backward, taking note of when the invariant the jump was based on is produced
               refutePiecewisePaths(piecewisePaths,
                 // this purposely drops the old test() on the floor. this is part of losing all context when we jump,
@@ -126,45 +116,14 @@ trait PiecewiseSymbolicExecutor extends UnstructuredSymbolicExecutor {
     }  
   }
   
-  /** return @true if there is some constraint that can only be produced in a single method, but is not produced */
-  /*def refuteMustNotRefutePaths(p : Path, piecewisePaths : List[Path], curJmp : Int, oldInvMaps : List[InvariantMap2[_]]) : Boolean = {
-    // if some constraint can only be produced in one method and we refute all paths that jump to that method that contain only
-    // that constraint, we have a refutation regardless of what happens on the other paths because that constraint can never be produced
-    // TODO: generalize this reasoning; this is just the easiest case
-    val prodMap = rr.getConstraintProducerMap(p.qry)
-    println("here, p is " + p)
-    // map from CGNode's to constraints that can only be produced at that CGNode
-    val loneProducerMap = prodMap.foldLeft (Map.empty[CGNode,List[PtEdge]]) ((map, pair) => {
-      val nodes = pair._2.map(pair => pair._1)
-      if (nodes.size == 1) {
-        val loneProducer = nodes.head
-        println(pair._1 + " can only be produced in " + loneProducer)
-        Util.updateLMap(map, loneProducer, pair._1)
-      }
-      else map
-    }) 
-    !loneProducerMap.isEmpty && {      
-      val mustNotRefutePaths = 
-        piecewisePaths.foldLeft (List.empty[Path]) ((paths, p) => {
-          if (loneProducerMap.contains(p.node)) sys.error("FIXME")//p.deepCopy(loneProducerMap(p.node).toSet) :: paths
-          else paths
-        })
-      println("got " + mustNotRefutePaths.size + " mustNotRefutePaths " + mustNotRefutePaths)
-       
-      sys.error("fixMe")
-      // if we can refute any mustNotRefutePath, we refute everything but p had some constraint that can never be produced      
-      //mustNotRefutePaths.exists(mustNotRefutePath => refutePiecewisePaths(List(mustNotRefutePath), p => p.qry.constraints().hasNext(), curJmp, Util.NOP, oldInvMaps))
-    }
-  }*/
-  
   def handleFailedJump(oldInvMaps : List[InvariantMap[_ <: Any]], callback : Unit => Any, curJmp : Int) : Boolean = {
     if (BACKTRACK) {
-       println("backtracking after failed piecewise jump " + curJmp)
-       // need to reset invariant maps before backtracking or we may get unsound refutations
-       this.resetInvariantMaps(oldInvMaps)
-       callback() // invoke callback passed to us by shouldJump()
-       false
-     } else throw WitnessFoundException
+      println("backtracking after failed piecewise jump " + curJmp)
+      // need to reset invariant maps before backtracking or we may get unsound refutations
+      this.resetInvariantMaps(oldInvMaps)
+      callback() // invoke callback passed to us by shouldJump()
+      false
+    } else throw WitnessFoundException
   }
 
   // TODO: cache sets of constraints we've already checked

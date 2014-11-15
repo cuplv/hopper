@@ -34,7 +34,6 @@ object Path {
   val SYSTEM_EXIT = MethodReference.findOrCreate(TypeReference.findOrCreate(ClassLoaderReference.Primordial, "Ljava/lang/System"), "exit", "(I)V")
   
   def methodBlacklistContains(method : IMethod) : Boolean = {
-    //ClassUtil.isLibrary(method) || // TODO: TMP!
     methodNameBlacklist.contains(method.getName().toString()) ||
     classNameBlacklist.contains(method.getDeclaringClass().getName().toString())
   }
@@ -47,7 +46,7 @@ object Path {
   
   def ppPaths(paths : List[Path]) : Unit = { paths.foreach(p => print(p.id + " ")); println }
   
-  private val DEBUG = false  
+  private val DEBUG = false
   
    // TODO: this shouldn't live here. find someplace reasonable to putit
   /**
@@ -287,22 +286,11 @@ class Path(val qry : Qry, var lastBlk : WalaBlock = null,
     if (DEBUG) println("On path " + id + "X, removing jump " + jmpNum)
     jumpMap -= jmpNum 
   }
-  
-  def jumpHistoryContains(f : CallStackFrame) : Boolean = this.jumpHistory.contains(f)
-  
-  
-  def foundWitness : Boolean = {    
-    val res0 = qry.foundWitness//qry.foundWitness
-    //if(res0 != res1) println("disagreement: old " + res1 + " new " + res0+ " old " + qry + " new " + qry)
-    res0
-  }
 
-  def initializeStaticFieldsToDefaultValues : Boolean = {
-    // TODO: for testing qry!
-    val res0 = TransferFunctions.initializeStaticFieldsToDefaultValues(qry, this.node)
-    //assert(res0 == res1, "new and old query disagree old " + res1 + " new " + res0 + " qry " + qry)
-    res0
-  }
+  def foundWitness : Boolean = qry.foundWitness
+
+  def initializeStaticFieldsToDefaultValues : Boolean =
+    TransferFunctions.initializeStaticFieldsToDefaultValues(qry, this.node)
   
   def setIndex(newIndex : Int) : Unit = callStack.top.index = newIndex
   

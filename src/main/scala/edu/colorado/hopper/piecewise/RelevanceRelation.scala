@@ -551,6 +551,7 @@ class RelevanceRelation(val cg : CallGraph, val hg : HeapGraph[InstanceKey], val
     case e@ObjPtEdge(ObjVar(rgnLhs), InstanceFld(fld), snk) => // edge A0.f -> A1
       val lhsPreds = PtUtil.getLocalPreds(rgnLhs, hg)
       val (producerOrModifierNodes, heapCheck) = getProducerOrModifierNodesAndHeapCheck(rgnLhs, snk, getModifiers)
+
       // final instance fields can only be written in constructors
       producerOrModifierNodes.foldLeft (List.empty[(CGNode,SSAInstruction)]) ((lst, node) => if (!fld.isFinal() || node.getMethod().isInit()) { 
         val ir = node.getIR()
