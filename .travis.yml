@@ -9,7 +9,7 @@
    - "wget https://www.dropbox.com/s/qcjzpltjpih3s1z/libz3.so"
    - "wget https://www.dropbox.com/s/lx23mupkw48dke9/libz3java.so"
    - "cd .."
- script: export LD_LIBRARY_PATH=lib:$LD_LIBRARY_PATH && sbt "run -regressions -piecewise_execution"
+   - "sbt compile"
  scala:
    - "2.10.2"
  jdk:
