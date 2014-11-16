@@ -1,19 +1,15 @@
 package edu.colorado.thresher.core;
 
-import java.util.Collections;
-import java.util.List;
-
 import com.ibm.wala.classLoader.IClass;
-import com.ibm.wala.ipa.callgraph.propagation.ArrayContentsKey;
-import com.ibm.wala.ipa.callgraph.propagation.InstanceFieldKey;
-import com.ibm.wala.ipa.callgraph.propagation.InstanceKey;
-import com.ibm.wala.ipa.callgraph.propagation.PointerKey;
-import com.ibm.wala.ipa.callgraph.propagation.StaticFieldKey;
+import com.ibm.wala.ipa.callgraph.propagation.*;
 import com.ibm.wala.ipa.cha.IClassHierarchy;
 import com.ibm.wala.types.ClassLoaderReference;
 import com.ibm.wala.types.TypeReference;
 import com.ibm.wala.util.collections.CollectionFilter;
 import com.ibm.wala.util.graph.traverse.BFSPathFinder;
+
+import java.util.Collections;
+import java.util.List;
 
 public class AndroidLeakClient {
   
@@ -53,7 +49,7 @@ public class AndroidLeakClient {
         }
       }
       if (!foundWeakRef) {
-        if (Options.DEBUG) {
+        if (Options.SCALA_DEBUG) {
           System.out.println("<FIELD PATH Length: " + path.size());
           for (int i = path.size() - 1; i >= 0; i--)
             System.out.println(path.get(i) + " (" + path.get(i).getClass() + ")");

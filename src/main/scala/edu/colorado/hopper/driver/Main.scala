@@ -21,7 +21,7 @@ object Main {
     else if (target.equals(REGRESSION)) {
             
       val clientTests = 
-        if (Options.ANDROID_LEAK) List(AndroidLeakClientTests)
+        if (Options.CHECK_ANDROID_LEAKS) List(AndroidLeakClientTests)
         else if (Options.CHECK_CASTS) List(DowncastCheckingClientTests)
         else if (Options.CHECK_ASSERTS) List(AssertionCheckingClientTests)
         else if (Options.CHECK_ARRAY_BOUNDS) List(ArrayBoundsClientTests)
@@ -54,7 +54,7 @@ object Main {
       Options.EXIT_ON_FAIL = false
       new DowncastCheckingClient(Options.APP, Util.strToOption(Options.LIB), Options.MAIN_CLASS, Options.MAIN_METHOD)
       .checkCasts()
-    } else if (Options.ANDROID_LEAK)      
+    } else if (Options.CHECK_ANDROID_LEAKS)
       new AndroidLeakClient(Options.APP, Util.strToOption(Options.LIB), "Landroid/app/Activity", Options.MAIN_METHOD)
       .checkAnnotations
     else if (Options.CHECK_ARRAY_BOUNDS) 
@@ -66,7 +66,7 @@ object Main {
     else if (Options.CHECK_NULLS)
       new NullDereferenceClient(Options.APP, Util.strToOption(Options.LIB), Options.MAIN_CLASS, Options.MAIN_METHOD)
       .checkNullDerefs
-    else if (Options.ANDROID_UI) {
+    else if (Options.CHECK_ANDROID_UI) {
       new AndroidUIClient(Options.APP, new File(Options.ANDROID_JAR))
       .doUICheck
       /*val topLevelAppDir = {
@@ -78,7 +78,6 @@ object Main {
       }
       
       val harness = 
-        // TODO: change default values for these options so someone can use these names
         if (Options.MAIN_CLASS != "Main" && Options.MAIN_METHOD != "main") Some(Options.MAIN_CLASS, Options.MAIN_METHOD)
         else None
       

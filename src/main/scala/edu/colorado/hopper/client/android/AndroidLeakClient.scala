@@ -18,7 +18,7 @@ import edu.colorado.thresher.core.{HeapGraphWrapper, Options}
 
 import scala.collection.JavaConversions.{asJavaCollection, asScalaBuffer, asScalaSet, bufferAsJavaList, collectionAsScalaIterable, iterableAsScalaIterable, mutableSetAsJavaSet, seqAsJavaList}
 
-class AndroidLeakClient(appPath : String, libPath : Option[String], mainClass : String, mainMethod : String, 
+class AndroidLeakClient(appPath : String, libPath : Option[String], mainClass : String, mainMethod : String,
   isRegression : Boolean = false) extends AndroidClient(appPath, libPath, mainClass, mainMethod, isRegression) {
   
   // TODO: richer return type!
@@ -39,7 +39,7 @@ class AndroidLeakClient(appPath : String, libPath : Option[String], mainClass : 
     val snkClasses = {
       val targetClasses = { 
         // add Activity class if this is the leak client
-        if (Options.ANDROID_LEAK) {
+        if (Options.CHECK_ANDROID_LEAKS) {
           val targetClass = cha.lookupClass(TypeReference
               .findOrCreate(ClassLoaderReference.Application, mainClass))
           if (Options.CHECK_ASSERTS) assert(targetClass != null, "couldn't find base class " + targetClass)
