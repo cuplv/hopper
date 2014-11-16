@@ -203,14 +203,7 @@ abstract class Client(appPath : String, libPath : Option[String], mainClass : St
       case Some(stubFile) => analysisScope.addToScope(analysisScope.getPrimordialLoader, new JarFile(stubFile))
       case None => sys.error("Can't find WALA stubs. Exiting.")
     }
-    
-    val THRESHER_ASSERTS_AND_ANNOTATIONS_PATH = "../thresher/bin/edu/colorado/thresher/external"
-    
-    // add Thresher assertions/annotations if appropriate
-    val assertsAndAnnotsFile = new File(THRESHER_ASSERTS_AND_ANNOTATIONS_PATH)
-    if (assertsAndAnnotsFile.exists())
-      analysisScope.addToScope(analysisScope.getPrimordialLoader(),
-                               new BinaryDirectoryTreeModule(assertsAndAnnotsFile))
+
     setExclusions(analysisScope)
     analysisScope
   }

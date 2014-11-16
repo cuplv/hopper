@@ -10,6 +10,7 @@
    - "wget https://www.dropbox.com/s/lx23mupkw48dke9/libz3java.so"
    - "cd .."
    - "sbt compile"
+   - "sbt test:compile"
  scala:
    - "2.10.2"
  jdk:

@@ -213,17 +213,16 @@ object DowncastCheckingClientTests extends ClientTests {
     val standardTests = List("BasicCastRefute", "BasicCastNoRefute", "InstanceOfRefute", "InstanceOfNoRefute",
                      "NegatedInstanceOfRefute", "NegatedInstanceOfNoRefute", "FieldCastRefute", "FieldCastNoRefute",
                      "ArrayListRefute",
-                     "ArrayListNoRefute", 
-                     //"IteratorRefute", // already refuted by pt-analysis with correct context-sensitivity policy; don't need Thresher                        
-                     "IteratorNoRefute", // get different results with different Java version s
-                     "SwitchRefute", "SwitchNoRefute", "InfiniteLoopReturnRefute", "ListContainmentNoRefute", 
-                     "SwitchReturnNoRefute", 
+                     "ArrayListNoRefute",
+                     //"IteratorRefute", // already refuted by pt-analysis with correct context-sensitivity policy; don't need Thresher
+                     "IteratorNoRefute", // get different results with different Java versions
+                     "SwitchRefute", "SwitchNoRefute", "InfiniteLoopReturnRefute", "ListContainmentNoRefute",
+                     "SwitchReturnNoRefute",
                      "HashtableEnumeratorNoRefute",
                      "HashtableEnumeratorRefute",
                      "IsInstanceRefute", "IsInstanceNoRefute",
                      "InstrOpcodeIndexSensitivePiecewiseRefute", "InstrOpcodeIndexSensitivePiecewiseNoRefute",
                      "DominatingCastRefute")
-                        //"CallTypeRefute", "CallTypeNoRefute") // will fix these later; results are sound, but not precise
 
     val exceptionTests =
       Set("CatchNoRefute", "CatchRefute", "CatchNoRefuteLocal", "CatchRefuteLocal", "CatchNoRefuteLocal2",
@@ -233,19 +232,17 @@ object DowncastCheckingClientTests extends ClientTests {
 
     // results for tests whose casts are not all safe or all unsafe, or platform-specific
     val resultsMap = Util.makeMap[String,CastCheckingResults]
-      // more recent versions of Java use reflection that confuses the PT analysis and make it unable to prove the safety of some easy casts
-      // Thresher can't recover the lost precision, so this is now just a soundness test
+    // more recent versions of Java use reflection that confuses the PT analysis and make it unable to prove the safety of some easy casts
+    // Thresher can't recover the lost precision, so this is now just a soundness test
     resultsMap.put("ArrayListRefute", if (javaVersion == J51) new CastCheckingResults(0, 1, 0) else new CastCheckingResults(0, 1, 1))
     resultsMap.put("IteratorNoRefute", new CastCheckingResults(4, 1, 0))
-        //if (javaVersion == J51 || javaVersion == J55 || javaVersion == J67)
-          //new CastCheckingResults(2, 3, 0) else new CastCheckingResults(4, 1, 0))
     resultsMap.put("HashtableEnumeratorRefute", new CastCheckingResults(0, 2, 2))
     resultsMap.put("HashtableEnumeratorNoRefute", new CastCheckingResults(0, 2, 1))
     resultsMap.put("DominatingCastRefute", new CastCheckingResults(0, 2, 1))
     resultsMap.put("CatchNoRefute", new CastCheckingResults(0, 1, 0))
     resultsMap.put("CatchRefute", new CastCheckingResults(1, 0, 0))
 
-    val regressionDir = "../thresher/apps/tests/casts/"
+    val regressionDir = "target/scala-2.10/test-classes/casts/"
     var testNum = 0
     val pwTimeoutOk = List("ArrayListRefute")     
   
@@ -255,14 +252,15 @@ object DowncastCheckingClientTests extends ClientTests {
       println("Running test " + testNum + ": " + test)
       executionTimer.start
       val results = 
-      try {         
+      try {
+        val mainClass = s"Lcasts/$test/Main"
         val path = regressionDir + test
         Options.INDEX_SENSITIVITY = test.contains("IndexSensitive")
         if (!Options.PIECEWISE_EXECUTION && test.contains("Piecewise")) Options.PIECEWISE_EXECUTION = true
         if (Options.PIECEWISE_EXECUTION) Options.PRIM_ARRAY_SENSITIVITY = true
         if (exceptionTests.contains(test)) Options.SOUND_EXCEPTIONS = true
         else Options.SOUND_EXCEPTIONS = false
-        new DowncastCheckingClient(path, Util.strToOption(Options.LIB), "Main", "main", isRegression = true).checkCasts
+        new DowncastCheckingClient(path, Util.strToOption(Options.LIB), mainClass, "main", isRegression = true).checkCasts
       } catch {
         case e : BudgetExceededException =>
           println(s"Exceeded budget. Piecewise? ${Options.PIECEWISE_EXECUTION} $pwTimeoutOk")

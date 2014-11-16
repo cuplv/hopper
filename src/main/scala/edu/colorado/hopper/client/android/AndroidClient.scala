@@ -30,7 +30,8 @@ abstract class AndroidClient(appPath : String, libPath : Option[String], mainCla
     // add Java libraries unless we are running the regression tests (since we use a Jar that has its own Java library implementation)
     val analysisScope = super.makeAnalysisScope(isRegression || addJavaLibs)
     // add Android libraries 
-    val androidJar = if (!new File(Options.ANDROID_JAR).exists()) "../thresher/android/android-2.3_annotated.jar" else Options.ANDROID_JAR      
+    val androidJar = new File(Options.ANDROID_JAR)
+    assert(androidJar.exists(), s"Couldn't find Android JAR file $androidJar")
     analysisScope.addToScope(analysisScope.getPrimordialLoader(), new JarFile(androidJar))
     analysisScope
   }

@@ -172,14 +172,13 @@ object ArrayBoundsClientTests extends ClientTests {
       println(s"Warning: running analysis with untested Java library version $javaVersion. Some tests may fail.")    
       
     val tests =
-      List("Overflow0", "NoOverflow0", "NestedOverflow1", "NestedOverflow2", "NestedOverflow3", 
+      List("Overflow0", "NoOverflow0", "NestedOverflow1", "NestedOverflow2", "NestedOverflow3",
            "NestedNoOverflow", "SwitchedBufsOverflow", "BufParamOverflow", "BufParamNoOverflow",
            "SystemExitNoOverflow", "SystemExitOverflow")
-        //"ReverseOverflow", "ReverseNoOverflow" these don't work because they're *underflow* checks, not overflow checks  
-                        
-    val regressionDir = "../thresher/apps/tests/bounds/"
+        //"ReverseOverflow", "ReverseNoOverflow" these don't work because they're underflow checks, not overflow checks
+
+    val regressionDir = "target/scala-2.10/test-classes/bounds/"
     var testNum = 0
-    val pwTimeoutOk = List("ArrayListRefute")     
   
     val executionTimer = new Timer
   
@@ -187,12 +186,13 @@ object ArrayBoundsClientTests extends ClientTests {
       println("Running test " + testNum + ": " + test)
       executionTimer.start
       val (failCount, total) = 
-        try {         
+        try {
+          val mainClass = s"Lbounds/$test/$test"
           val path = regressionDir + test
           Options.INDEX_SENSITIVITY = test.contains("IndexSensitive")
           if (!Options.PIECEWISE_EXECUTION && test.contains("Piecewise")) Options.PIECEWISE_EXECUTION = true
           if (Options.PIECEWISE_EXECUTION) Options.PRIM_ARRAY_SENSITIVITY = true
-          new ArrayBoundsClient(path, Util.strToOption(Options.LIB), test, "main", isRegression = true)
+          new ArrayBoundsClient(path, Util.strToOption(Options.LIB), mainClass, "main", isRegression = true)
           .checkArrayBounds()
         } catch {      
           case e : Throwable =>

@@ -115,8 +115,8 @@ public class Options {
   @stringOpt(description = "Java library file to use (e.g., rt.jar or classes.jar)", _default = "")
   public static String JAVA_LIB = "";
 
-  @stringOpt(description = "Usage: -android_jar <path to jar file for version of android libraries>", _default = "android/android-2.3_annotated.jar")
-  public static String ANDROID_JAR = "android/android-2.3_annotated.jar";
+  @stringOpt(description = "Usage: -android_jar <path to jar file for version of android libraries>", _default = "config/android-4.4.2_r1.jar")
+  public static String ANDROID_JAR = "config/android-4.4.2_r1.jar";
 
   @stringOpt(description = "Class containing entrypoint method for analysis", _default = "Main")
   public static String MAIN_CLASS = "Main";

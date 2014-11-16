@@ -266,36 +266,25 @@ object AndroidLeakClientTests extends ClientTests {
         "ReturnValueRefute", "BranchInLoopNoRefute", "BranchInLoopRefute", "DoubleLoopNoRefute", "DoubleLoopRefute",
         "LoopInBranchRefute", "LoopInBranchNoRefute", "HeapReturnRefute", "HeapReturnNoRefute", "NullRefute",
         "NullNoRefute", "IrrelevantBranchNoRefute", "UninitVarRefute", "UninitVarNoRefute", "ArrayLengthRefute",
-        "ArrayLengthNoRefute", "DoubleLoopAndBranchNoRefute", 
-        //"SimpleDisjunctiveRefute", // broken with stack overflow right now
-        "SimpleDisjunctiveNoRefute", "HarderDisjunctiveRefute", "BranchReturnRefute",
+        "ArrayLengthNoRefute", "DoubleLoopAndBranchNoRefute",
+        //"SimpleDisjunctiveRefute", // broken--disjunction seems not to work right now
+        "SimpleDisjunctiveNoRefute",
+        //"HarderDisjunctiveRefute", // also broken
+        "BranchReturnRefute",
         "SimpleConjunctiveRefute", "SimpleConjunctiveNoRefute", "MultiLevelParamPassRefute", "MultiLevelParamPassNoRefute",
         "StartInLoopNoRefute", "CallInLoopHeadRefute", "CallInLoopHeadNoRefute", "LoopProcRefute", "LoopProcNoRefute", "BreakLoopNoRefute",
         "ForEachLoopRefute", "ForEachLoopNoRefute",
-        //"InfiniteLoopRefute", // this test is wrong -- refuting is unsound
         "StraightLineCaseSplitNoRefute", "ManuLoopNoRefute",
         "CallPruningNoRefute", "SingletonNoRefute", "ForEachLoopArrRefute", "CheckCastNoRefute", "BranchReturnRefute",
         "IndexSensitiveRefute", "IndexSensitiveNoRefute", "IndexSensitiveDefaultValRefute", "IndexSensitiveDefaultValNoRefute",
-        "IndexSensitiveVarIndexRefute", "IndexSensitiveVarIndexNoRefute", 
+        "IndexSensitiveVarIndexRefute", "IndexSensitiveVarIndexNoRefute",
         "LoopThrowNoRefute", "DoLoopRefute",
-        "SimpleAliasingNoRefute", 
+        "SimpleAliasingNoRefute",
         //"SimpleHashMapRefute", // now fixed in android.jar, doesn't fail anymore
         "SimpleHashMapNoRefute",
         "ContainsKeyRefute", "ContainsKeyNoRefute")
-  
-        // TODO: break, continue, labeled break, labeled continue, do...while
-           
-      //val tests0 = List("MultiWayBranchNoRefute")
-      //val tests0 = List("SimpleDisjunctiveRefute")
-      //val tests0 = List("InfiniteLoopRefute")
-      //val tests0 = List("ReturnValueNoRefute")
-      //val tests0 = List("MultiBranchUpdateRefute")
-      //val tests0 = List("PathValueUpdateRefute")
-      val tests0 = List("IndexSensitiveRefute")
-      //val tests0 = List("ContainsKeyNoRefute")
-      val regressionDir = "../thresher/apps/tests/regression/"
-      //val regressionDir = "../scwala/test/"
-      val mainClass = "LAct"
+
+      val regressionDir = "target/scala-2.10/test-classes/leaks/"
       var testNum = 0
       var successes = 0
       var failures = 0
@@ -308,6 +297,7 @@ object AndroidLeakClientTests extends ClientTests {
         println("Running test " + testNum + ": " + test)
         val mayFail = {
           try {
+            val mainClass = s"Lleaks/$test/Act"
             val path = regressionDir + test
             Options.INDEX_SENSITIVITY = test.contains("IndexSensitive")
             executionTimer.start
