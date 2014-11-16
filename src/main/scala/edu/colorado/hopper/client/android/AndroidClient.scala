@@ -1,20 +1,13 @@
 package edu.colorado.hopper.client.android
 
-import edu.colorado.hopper.client.Client
-import com.ibm.wala.ipa.callgraph.AnalysisCache
-import edu.colorado.thresher.core.FakeMapContextSelector
-import com.ibm.wala.ipa.callgraph.CallGraphBuilder
-import com.ibm.wala.ipa.cha.IClassHierarchy
-import com.ibm.wala.ipa.callgraph.AnalysisOptions
-import com.ibm.wala.ipa.callgraph.AnalysisScope
-import java.util.jar.JarFile
-import edu.colorado.thresher.core.Options
 import java.io.File
-import com.ibm.wala.classLoader.IMethod
-import com.ibm.wala.types.MethodReference
-import com.ibm.wala.classLoader.IClass
-import com.ibm.wala.ipa.callgraph.ContextSelector
-import com.ibm.wala.ipa.callgraph.propagation.SSAContextInterpreter
+import java.util.jar.JarFile
+
+import com.ibm.wala.classLoader.{IClass, IMethod}
+import com.ibm.wala.ipa.callgraph.{AnalysisCache, AnalysisOptions, AnalysisScope, CallGraphBuilder}
+import com.ibm.wala.ipa.cha.IClassHierarchy
+import edu.colorado.hopper.client.Client
+import edu.colorado.thresher.core.{FakeMapContextSelector, Options}
 
 abstract class AndroidClient(appPath : String, libPath : Option[String], mainClass : String, mainMethod : String, 
     isRegression : Boolean = false) extends Client(appPath, libPath, mainClass, mainMethod, isRegression) {

@@ -6,7 +6,7 @@ import com.ibm.wala.ipa.callgraph.CGNode
 import com.ibm.wala.ipa.callgraph.propagation.{ConcreteTypeKey, InstanceKey}
 import com.ibm.wala.ssa.{SSAFieldAccessInstruction, SSAInstruction, SSAInvokeInstruction, SSAPutInstruction, SymbolTable}
 import com.ibm.wala.types.TypeReference
-import edu.colorado.droidel.util.IRUtil
+import edu.colorado.hopper.util.IRUtil
 import edu.colorado.hopper.executor.{DefaultSymbolicExecutor, TransferFunctions}
 import edu.colorado.hopper.piecewise.{DefaultPiecewiseSymbolicExecutor, RelevanceRelation}
 import edu.colorado.hopper.state.{LocalPtEdge, PtEdge, Pure, PureVar, Qry, Var}

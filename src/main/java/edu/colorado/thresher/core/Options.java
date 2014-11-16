@@ -1,6 +1,8 @@
 package edu.colorado.thresher.core;
 
-import java.lang.annotation.*;
+import java.lang.annotation.Annotation;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.lang.reflect.Field;
 
 public class Options {
@@ -49,6 +51,9 @@ public class Options {
   
   @boolOpt(description = "Check for Android Activity leaks", _default = false)
   public static boolean CHECK_ANDROID_LEAKS = false;
+
+  @boolOpt(description = "Check for bugs related to concurrency in Android", _default = false)
+  public static boolean CHECK_ANDROID_RACES = false;
   
   @boolOpt(description = "Check user assrtions", _default = false)
   public static boolean CHECK_ASSERTS = false;
@@ -118,6 +123,9 @@ public class Options {
   
   @stringOpt(description = "Entrypoint method for analysis", _default = "main")
   public static String MAIN_METHOD = "main";
+
+  @stringOpt(description = "Path to home directory of droidel", _default = "../droidel")
+  public static String DROIDEL_HOME = "../droidel";
   
   @stringOpt(description = "List of classes to excluse from analysis", _default = "config/exclusions.txt")
   public static String EXCLUSIONS = "config/exclusions.txt";

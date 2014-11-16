@@ -3,7 +3,7 @@ package edu.colorado.hopper.driver
 import java.io.File
 
 import edu.colorado.hopper.client.{AssertionCheckingClient, AssertionCheckingClientTests, DowncastCheckingClient, DowncastCheckingClientTests, NullDereferenceClient}
-import edu.colorado.hopper.client.android.{AndroidLeakClient, AndroidLeakClientTests, AndroidUIClient}
+import edu.colorado.hopper.client.android._
 import edu.colorado.hopper.client.bounds.{ArrayBoundsClient, ArrayBoundsClientTests}
 import edu.colorado.hopper.util.Util
 import edu.colorado.thresher.core.Options
@@ -66,24 +66,12 @@ object Main {
     else if (Options.CHECK_NULLS)
       new NullDereferenceClient(Options.APP, Util.strToOption(Options.LIB), Options.MAIN_CLASS, Options.MAIN_METHOD)
       .checkNullDerefs
+    else if (Options.CHECK_ANDROID_RACES)
+      new AndroidRacesClient(Options.APP, new File(Options.ANDROID_JAR))
+      .checkForRacingDerefs()
     else if (Options.CHECK_ANDROID_UI) {
       new AndroidUIClient(Options.APP, new File(Options.ANDROID_JAR))
       .doUICheck
-      /*val topLevelAppDir = {
-        val f = new File(Options.APP)        
-         f.getAbsolutePath().replace(f.getParentFile().getAbsolutePath(), "") match {
-           case str if str.startsWith("/") => str.substring(1)
-           case str => str
-        }
-      }
-      
-      val harness = 
-        if (Options.MAIN_CLASS != "Main" && Options.MAIN_METHOD != "main") Some(Options.MAIN_CLASS, Options.MAIN_METHOD)
-        else None
-      
-      val client = new AndroidUIClient(Options.APP, new File(Options.ANDROID_JAR), harness, useJPhantom = true, useGeneratedHarness = Options.USE_GENERATED_HARNESS)
-      val walaRes = client.buildAndroidCG(genHarness = Options.GEN_HARNESS, cleanupGeneratedFiles = false)
-      new Absurdities(client.harnessClassName).getAbsurdities(walaRes, doXmlOutput = true)*/
     } else println("No clients given. Exiting.")
   }         
 }
