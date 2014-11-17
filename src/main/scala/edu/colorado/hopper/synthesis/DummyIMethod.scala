@@ -30,12 +30,6 @@ class DummyIMethod(m : IMethod, c : DummyIClass, cha : IClassHierarchy) extends 
   override def isNative() : Boolean = false 
   override def isSynthetic() : Boolean = true
 
-  var dummyIndexCounter = 0
-  def getDummyIndex() : Int = {
-    dummyIndexCounter += 1
-    dummyIndexCounter
-  }
-
   // for a method whose return type is T, generate the dummy IR "return new T()"
   // generate a dummy IR that allocates an instance of the type of the return value of the method and returns it
   // if the return type is a primitive type generate an empty IR
@@ -67,16 +61,16 @@ class DummyIMethod(m : IMethod, c : DummyIClass, cha : IClassHierarchy) extends 
             // allocate an instance whose type is the return value of the method          
             val defNum = mkFreshValueNum// get fresh value number for def (make sure not to use one of the param value numbers)
             val newSite = new NewSiteReference(defNum, c.getReference())
-            val newInstr = IRUtil.factory.NewInstruction(getDummyIndex(), defNum, newSite)
-            val retInstr = IRUtil.factory.ReturnInstruction(getDummyIndex(), defNum, false)
+            val newInstr = IRUtil.factory.NewInstruction(IRUtil.getDummyIndex(), defNum, newSite)
+            val retInstr = IRUtil.factory.ReturnInstruction(IRUtil.getDummyIndex(), defNum, false)
             newInstr :: retInstr :: instrs
           })
         } else {
           // allocate an instance whose type is the return value of the method
           val newSite = new NewSiteReference(0, retTypeClass.getReference())          
           val newDef = mkFreshValueNum 
-          val newInstr = IRUtil.factory.NewInstruction(getDummyIndex(), newDef, newSite)
-          val retInstr = IRUtil.factory.ReturnInstruction(getDummyIndex(), newDef, false)
+          val newInstr = IRUtil.factory.NewInstruction(IRUtil.getDummyIndex(), newDef, newSite)
+          val retInstr = IRUtil.factory.ReturnInstruction(IRUtil.getDummyIndex(), newDef, false)
           List(newInstr, retInstr)
         }                
      
