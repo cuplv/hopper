@@ -19,7 +19,7 @@ Usage
 -----
 Run 
 
-    `./hopper.sh -app <path_to_bytecodes> -<check>'
+    ./hopper.sh -app <path_to_bytecodes> -<check>
 
 where `<path_to_bytecodes>` is a path to a JAR or directory containing the Java bytecodes to be checked and `<check>` is one of `-check_casts` (check safety of downcasts), `-check_array_bounds` (check for out-of-bounds array accesses), `-check_nulls` (check for null dereferences), or `-check_android_leaks` (check for Android memory leaks).
 
