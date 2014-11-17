@@ -16,8 +16,9 @@ import edu.colorado.hopper.solver.UnknownSMTResult
 import edu.colorado.hopper.state._
 import edu.colorado.hopper.synthesis.InterfaceMethodField
 import edu.colorado.hopper.util.PtUtil._
-import edu.colorado.hopper.util.Types._
-import edu.colorado.hopper.util.{PtUtil, ClassUtil, Util}
+import edu.colorado.hopper.util.PtUtil
+import edu.colorado.walautil.Types._
+import edu.colorado.walautil.{ClassUtil, Util}
 import edu.colorado.thresher.core.Options
 
 import scala.collection.JavaConversions._

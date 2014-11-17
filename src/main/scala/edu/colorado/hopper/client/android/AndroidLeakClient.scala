@@ -12,8 +12,8 @@ import edu.colorado.hopper.client.{ClientTests, WalaAnalysisResults}
 import edu.colorado.hopper.piecewise.RelevanceRelation
 import edu.colorado.hopper.solver.Z3Solver
 import edu.colorado.hopper.state.{CallStack, Fld, HeapPtEdge, ObjVar, Path, PtEdge, PureConstraint, Qry}
-import edu.colorado.hopper.util.Types._
-import edu.colorado.hopper.util.{ClassUtil, LoopUtil, Timer, Util}
+import edu.colorado.walautil.Types._
+import edu.colorado.walautil.{ClassUtil, LoopUtil, Timer, Util}
 import edu.colorado.thresher.core.{HeapGraphWrapper, Options}
 
 import scala.collection.JavaConversions.{asJavaCollection, asScalaBuffer, asScalaSet, bufferAsJavaList, collectionAsScalaIterable, iterableAsScalaIterable, mutableSetAsJavaSet, seqAsJavaList}

@@ -1,6 +1,6 @@
 package edu.colorado.hopper.state
 
-import edu.colorado.hopper.util.Util
+import edu.colorado.walautil.Util
 
 trait Concretizable {
   def |=(other : Concretizable) : Boolean

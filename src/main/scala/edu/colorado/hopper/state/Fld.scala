@@ -8,10 +8,9 @@ import com.ibm.wala.ipa.cha.IClassHierarchy
 import com.ibm.wala.types.ClassLoaderReference
 import com.ibm.wala.types.FieldReference
 import com.ibm.wala.types.TypeReference
-import edu.colorado.hopper.util.ClassUtil
+import edu.colorado.walautil.{ClassUtil,Util}
 import com.ibm.wala.ipa.callgraph.propagation.PointerKey
 import com.ibm.wala.ipa.callgraph.propagation.InstanceFieldKey
-import edu.colorado.hopper.util.Util
 
 sealed trait Fld {
   def isPrimitiveType : Boolean

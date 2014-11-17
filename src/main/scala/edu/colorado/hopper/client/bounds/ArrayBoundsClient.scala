@@ -9,6 +9,7 @@ import edu.colorado.hopper.client.{Client, ClientTests}
 import edu.colorado.hopper.piecewise.RelevanceRelation
 import edu.colorado.hopper.state.{Fld, IntVal, ObjVar, PtEdge, Pure, Qry, Var}
 import edu.colorado.hopper.util._
+import edu.colorado.walautil.{ClassUtil, CFGUtil, IRUtil, Timer, LoopUtil, Util}
 import edu.colorado.thresher.core.Options
 
 import scala.collection.JavaConversions._

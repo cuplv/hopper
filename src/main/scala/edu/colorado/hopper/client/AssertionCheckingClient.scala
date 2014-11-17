@@ -8,30 +8,21 @@ import com.ibm.wala.classLoader.IMethod
 import com.ibm.wala.ipa.callgraph.CallGraph
 import com.ibm.wala.ipa.callgraph.Entrypoint
 import com.ibm.wala.ipa.cha.IClassHierarchy
-import com.ibm.wala.util.strings.Atom
 import AssertionCheckingClient._
-import edu.colorado.hopper.solver.Z3Solver
 import edu.colorado.hopper.state.LocalPtEdge
 import edu.colorado.hopper.state.Pure
 import edu.colorado.hopper.state.Qry
 import edu.colorado.hopper.state.Var
 import edu.colorado.hopper.synthesis.DummyImplGeneratingEntrypoint
 import edu.colorado.hopper.synthesis.InvokeSynthesizerException
-import edu.colorado.hopper.util.ClassUtil
-import edu.colorado.hopper.util.JavaUtil
-import edu.colorado.hopper.util.LoopUtil
-import edu.colorado.hopper.util.Timer
-import edu.colorado.hopper.util.Util
+import edu.colorado.walautil.{ClassUtil,JavaUtil,LoopUtil,Timer,IRUtil,Util}
 import edu.colorado.thresher.core.Options
 import com.ibm.wala.types.TypeReference
 import com.ibm.wala.ssa.SSAInvokeInstruction
-import com.ibm.wala.ssa.SSAThrowInstruction
-import com.ibm.wala.types.MethodReference
 import com.ibm.wala.types.ClassLoaderReference
 import com.ibm.wala.types.TypeName
 import com.ibm.wala.ssa.SSANewInstruction
 import com.ibm.wala.ipa.callgraph.CGNode
-import edu.colorado.hopper.util.IRUtil
 
 object AssertionCheckingClient {
   def removeSynthesizedSourceAndClasses(appPath : String, generatedFiles : Iterable[String], removeSrc : Boolean = true) : Unit = generatedFiles.foreach(f => {

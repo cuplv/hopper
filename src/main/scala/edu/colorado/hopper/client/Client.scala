@@ -20,7 +20,7 @@ import edu.colorado.hopper.client.Client._
 import edu.colorado.hopper.executor.{DefaultSymbolicExecutor, SymbolicExecutor, TransferFunctions}
 import edu.colorado.hopper.piecewise.{DefaultPiecewiseSymbolicExecutor, RelevanceRelation}
 import edu.colorado.hopper.synthesis.{SynthesisSymbolicExecutor, SynthesisTransferFunctions}
-import edu.colorado.hopper.util.{ClassUtil, Timer, Util}
+import edu.colorado.walautil.{ClassUtil, Timer, Util}
 import edu.colorado.thresher.core._
 
 import scala.collection.JavaConversions.{asJavaCollection, collectionAsScalaIterable, iterableAsScalaIterable}

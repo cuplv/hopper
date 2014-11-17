@@ -1,28 +1,14 @@
 package edu.colorado.hopper.client.bounds
 
-import scala.collection.JavaConversions._
-import edu.colorado.hopper.executor.TransferFunctions
-import com.ibm.wala.ipa.callgraph.CallGraph
 import com.ibm.wala.ipa.callgraph.CGNode
-import com.ibm.wala.ipa.cha.IClassHierarchy
-import com.ibm.wala.ipa.callgraph.propagation.HeapModel
-import com.ibm.wala.analysis.pointers.HeapGraph
-import com.ibm.wala.util.intset.OrdinalSet
-import com.ibm.wala.ipa.callgraph.propagation.PointerKey
+import com.ibm.wala.ssa.{ISSABasicBlock, SSACFG, SSAInstruction, SSAInvokeInstruction, SSAPhiInstruction}
 import edu.colorado.hopper.client.WalaAnalysisResults
+import edu.colorado.hopper.executor.TransferFunctions
 import edu.colorado.hopper.state.Qry
-import com.ibm.wala.ssa.SSAInstruction
-import edu.colorado.hopper.util.Util
-import com.ibm.wala.ssa.SSAInvokeInstruction
-import com.ibm.wala.ssa.SSAPhiInstruction
-import ArrayBoundsTransferFunctions._
 import edu.colorado.thresher.core.Options
-import com.ibm.wala.ssa.ISSABasicBlock
-import com.ibm.wala.ssa.SSACFG
+import edu.colorado.walautil.Util
 
-object ArrayBoundsTransferFunctions {
-  private val DEBUG = Options.SCALA_DEBUG
-}
+import scala.collection.JavaConversions._
 
 class ArrayBoundsTransferFunctions(walaRes : WalaAnalysisResults) 
   extends TransferFunctions(walaRes.cg, walaRes.hg, walaRes.hm, walaRes.cha, walaRes.modRef) {

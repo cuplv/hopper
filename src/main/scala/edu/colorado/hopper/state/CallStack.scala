@@ -1,9 +1,9 @@
 package edu.colorado.hopper.state
 
-import edu.colorado.hopper.util.Types._
-import edu.colorado.hopper.util.ClassUtil
+import edu.colorado.walautil.Types._
+import edu.colorado.walautil.ClassUtil
 import com.ibm.wala.ipa.callgraph.CGNode
-import edu.colorado.hopper.util.Util
+import edu.colorado.walautil.Util
 import com.ibm.wala.ssa.SSAInstruction
 import com.ibm.wala.ssa.ISSABasicBlock
 import com.ibm.wala.ssa.SSACFG

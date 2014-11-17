@@ -2,13 +2,14 @@ package edu.colorado.hopper.state
 
 import com.ibm.wala.analysis.pointers.HeapGraph
 import com.ibm.wala.classLoader.IField
-import com.ibm.wala.ipa.callgraph.CGNode
 import com.ibm.wala.ipa.callgraph.propagation.{HeapModel, InstanceKey}
+import com.ibm.wala.ipa.callgraph.{CGNode, ContextKey}
 import com.ibm.wala.ssa.{ISSABasicBlock, SSAInstruction}
-import edu.colorado.hopper.solver.{UnknownSMTResult, Solver, Z3Solver}
+import edu.colorado.hopper.solver.{Solver, UnknownSMTResult, Z3Solver}
 import edu.colorado.hopper.state.Qry._
-import edu.colorado.hopper.util.Types._
-import edu.colorado.hopper.util.{CFGUtil, CGNodeUtil, IRUtil, PtUtil, Util}
+import edu.colorado.walautil.{CFGUtil, Util, IRUtil}
+import edu.colorado.walautil.Types.MSet
+import edu.colorado.hopper.util.PtUtil
 import edu.colorado.thresher.core.Options
 
 object Qry {
@@ -52,15 +53,35 @@ object Qry {
     callStack.push(frame)
     callStack
   }
+
+
+  // TODO: add support for converting other kinds of contextual constraints
+  /** convert contextual constraints from @param n into LocalPtEdge's that Thresher understands */
+  private def getContextualConstraints(n : CGNode, localConstraints : MSet[LocalPtEdge],
+                                       hm : HeapModel) : List[LocalPtEdge] = {
+    val ctx = n.getContext()
+    val RECEIVER_VALUE_NUM = 1
+
+    ctx.get(ContextKey.RECEIVER) match {
+      case i : InstanceKey =>
+        val receiverLHS = Var.makeLocalVar(RECEIVER_VALUE_NUM, n, hm)
+        localConstraints.find(e => e.src == receiverLHS) match {
+          case Some(e) => List(e)
+          case None => List(PtEdge.make(receiverLHS, ObjVar(Set(i))))
+        }
+      case _ => Nil
+    }
+  }
   
-  private def makeLocalAndHeapConstraints(startEdges : Iterable[PtEdge], n : CGNode, hm : HeapModel) : (MSet[LocalPtEdge],MSet[HeapPtEdge]) = {
+  private def makeLocalAndHeapConstraints(startEdges : Iterable[PtEdge], n : CGNode,
+                                          hm : HeapModel) : (MSet[LocalPtEdge],MSet[HeapPtEdge]) = {
     val localConstraints = Util.makeSet[LocalPtEdge]
     val heapConstraints = Util.makeSet[HeapPtEdge]
     startEdges.foreach(e => e match {
       case e : LocalPtEdge => localConstraints += e        
       case e : HeapPtEdge => heapConstraints += e      
     })
-    localConstraints ++= CGNodeUtil.getContextualConstraints(n, localConstraints, hm)
+    localConstraints ++= getContextualConstraints(n, localConstraints, hm)
     (localConstraints, heapConstraints)
   }
   

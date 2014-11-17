@@ -6,11 +6,13 @@ import com.ibm.wala.ipa.callgraph.CGNode
 import com.ibm.wala.ipa.callgraph.propagation.{ConcreteTypeKey, InstanceKey}
 import com.ibm.wala.ssa.{SSAFieldAccessInstruction, SSAInstruction, SSAInvokeInstruction, SSAPutInstruction, SymbolTable}
 import com.ibm.wala.types.TypeReference
-import edu.colorado.hopper.util.IRUtil
+import edu.colorado.walautil.IRUtil
 import edu.colorado.hopper.executor.{DefaultSymbolicExecutor, TransferFunctions}
 import edu.colorado.hopper.piecewise.{DefaultPiecewiseSymbolicExecutor, RelevanceRelation}
 import edu.colorado.hopper.state.{LocalPtEdge, PtEdge, Pure, PureVar, Qry, Var}
-import edu.colorado.hopper.util.{CFGUtil, ClassUtil, PtUtil}
+import edu.colorado.walautil.ClassUtil
+import edu.colorado.walautil.CFGUtil
+import edu.colorado.hopper.util.PtUtil
 import edu.colorado.thresher.core.Options
 
 import scala.collection.JavaConversions._
@@ -129,20 +131,19 @@ class NullDereferenceClient(appPath : String, libPath : Option[String], mainClas
         print(s"Deref # $count "); ClassUtil.pp_instr(i, ir); println(s" at source line $srcLine of ${ClassUtil.pretty(n)} can fail? $foundWitness")
         foundWitness
     }    
-    
-    def isThisVar(useNum : Int) = useNum == 1
-    
+
     // now, every time there is a field read of, field write to, or method call on a value in dangerKeys, we will check it           
     val (proven, total) = filteredCg.foldLeft (0, 0) ((statsPair, n) => {
       val ir = n.getIR
       val instrs = ir.getInstructions().toIterable
       val tbl = ir.getSymbolTable()
       instrs.foldLeft (statsPair) ((statsPair, i) => i match {
-        case i : SSAFieldAccessInstruction if !i.isStatic() && !isThisVar(i.getRef()) && mayHoldDangerKey(i.getRef(), n, tbl) =>
+        case i : SSAFieldAccessInstruction if !i.isStatic() && !IRUtil.isThisVar(i.getRef()) &&
+                                              mayHoldDangerKey(i.getRef(), n, tbl) =>
           val numProven = (if (canBeNullDeref(i.getRef(), i, n, statsPair._2)) 0 else 1) + statsPair._1
           (numProven, statsPair._2 + 1)
-        case i : SSAInvokeInstruction if 
-          !i.isStatic() && !i.getDeclaredTarget().isInit() && !isThisVar(i.getReceiver()) && mayHoldDangerKey(i.getReceiver(), n, tbl) =>
+        case i : SSAInvokeInstruction if !i.isStatic() && !i.getDeclaredTarget().isInit() &&
+                                         !IRUtil.isThisVar(i.getReceiver()) && mayHoldDangerKey(i.getReceiver(), n, tbl) =>
           val numProven = (if (canBeNullDeref(i.getReceiver(), i, n, statsPair._2)) 0 else 1) + statsPair._1
           (numProven, statsPair._2 + 1)
         case _ => statsPair

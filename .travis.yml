@@ -2,6 +2,8 @@
  before_install:
    - "mkdir -p lib"
    - "cd lib"   
+   - "git clone https://github.com/cuplv/walautil.git"
+   - "cd walautil && sbt publishLocal && cd .."
    - "git clone https://github.com/cuplv/droidel.git"
    - "cd droidel/lib && ./install_deps.sh"   
    - "cd .. && sbt publishLocal && cd .."

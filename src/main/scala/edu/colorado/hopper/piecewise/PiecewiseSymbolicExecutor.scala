@@ -6,8 +6,9 @@ import com.ibm.wala.ssa.{IR, ISSABasicBlock}
 import edu.colorado.hopper.executor.{TransferFunctions, UnstructuredSymbolicExecutor}
 import edu.colorado.hopper.piecewise.PiecewiseSymbolicExecutor._
 import edu.colorado.hopper.state._
-import edu.colorado.hopper.util.Types.MSet
-import edu.colorado.hopper.util.{WalaBlock, ClassUtil, PtUtil, Util}
+import edu.colorado.hopper.util.PtUtil
+import edu.colorado.walautil.Types.MSet
+import edu.colorado.walautil.{WalaBlock, ClassUtil, Util}
 
 object PiecewiseSymbolicExecutor {
   // if true, when we do a piecewise jump and fail, we will continue doing path-based execution

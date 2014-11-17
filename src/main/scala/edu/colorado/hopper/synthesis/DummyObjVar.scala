@@ -8,7 +8,7 @@ import com.ibm.wala.ipa.cha.IClassHierarchy
 import com.ibm.wala.ipa.callgraph.CGNode
 import com.ibm.wala.classLoader.NewSiteReference
 import com.ibm.wala.ipa.callgraph.CallGraph
-import edu.colorado.hopper.util.ClassUtil
+import edu.colorado.walautil.ClassUtil
 
 object DummyObjVar {
   

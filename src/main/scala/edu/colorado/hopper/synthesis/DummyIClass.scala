@@ -1,19 +1,13 @@
 package edu.colorado.hopper.synthesis
 
-import java.io.InputStream
-import scala.collection.JavaConversions._
-import com.ibm.wala.classLoader.IClass
-import com.ibm.wala.classLoader.IClassLoader
-import com.ibm.wala.classLoader.IField
-import com.ibm.wala.classLoader.IMethod
+import com.ibm.wala.classLoader.{IClass, IClassLoader, IField, IMethod}
 import com.ibm.wala.ipa.cha.IClassHierarchy
-import com.ibm.wala.types.Selector
-import com.ibm.wala.types.TypeName
-import com.ibm.wala.types.TypeReference
+import com.ibm.wala.types.{Selector, TypeName, TypeReference}
 import com.ibm.wala.types.annotations.Annotation
 import com.ibm.wala.util.strings.Atom
-import edu.colorado.hopper.util.Util
-import edu.colorado.hopper.util.ClassUtil
+import edu.colorado.walautil.ClassUtil
+
+import scala.collection.JavaConversions._
 
 trait DummyIClass extends IClass
 

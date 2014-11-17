@@ -1,6 +1,7 @@
 package edu.colorado.hopper.state
 
 import edu.colorado.hopper.util._
+import edu.colorado.walautil.WalaBlock
 
 import scala.collection.JavaConversions._
 import com.ibm.wala.analysis.pointers.HeapGraph
@@ -18,7 +19,7 @@ import com.ibm.wala.ssa.SSAPutInstruction
 import edu.colorado.hopper.executor.TransferFunctions
 import WalaBlock.fromISSABasicBlock
 import WalaBlock.fromWalaBlock
-import edu.colorado.hopper.util._
+import edu.colorado.walautil._
 import Path._
 import edu.colorado.thresher.core.Options
 import com.ibm.wala.classLoader.{IClass, IMethod}

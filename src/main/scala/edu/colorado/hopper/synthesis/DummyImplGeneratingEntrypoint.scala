@@ -1,36 +1,9 @@
 package edu.colorado.hopper.synthesis
 
-import scala.collection.JavaConversions._
-import edu.colorado.thresher.core.SharedAllocationEntrypoint
-import com.ibm.wala.classLoader.IMethod
+import com.ibm.wala.classLoader.{IClass, IMethod}
 import com.ibm.wala.ipa.cha.IClassHierarchy
-import com.ibm.wala.classLoader.IClass
 import com.ibm.wala.types.TypeReference
-import com.ibm.wala.util.strings.Atom
-import com.ibm.wala.types.TypeName
-import com.ibm.wala.classLoader.IClassLoader
-import com.ibm.wala.types.annotations.Annotation
-import edu.colorado.hopper.util.Util
-import com.ibm.wala.types.Selector
-import java.io.InputStream
-import com.ibm.wala.classLoader.IField
-import com.ibm.wala.types.Descriptor
-import com.ibm.wala.types.MethodReference
-import com.ibm.wala.classLoader.IBytecodeMethod
-import com.ibm.wala.shrikeBT.IndirectionData
-import com.ibm.wala.shrikeBT.IInstruction
-import com.ibm.wala.classLoader.CallSiteReference
-import com.ibm.wala.shrikeBT.ExceptionHandler
-import com.ibm.wala.classLoader.SyntheticMethod
-import com.ibm.wala.ipa.callgraph.Context
-import com.ibm.wala.ssa.SSAOptions
-import com.ibm.wala.ssa.SSAInstruction
-import com.ibm.wala.ssa.IR
-import edu.colorado.hopper.util.IRUtil
-import com.ibm.wala.classLoader.NewSiteReference
-import com.ibm.wala.classLoader.ProgramCounter
-import com.ibm.wala.ipa.summaries.SyntheticIR
-import com.ibm.wala.ipa.callgraph.impl.Everywhere
+import edu.colorado.thresher.core.SharedAllocationEntrypoint
 
  // WALA refuses to treat allocations of interface types as allocation sites, which can lead to wonky results in the points-to analysis
 // typically, we can overcome this by choosing all implementations of the interface type in scope, but sometimes there aren't any

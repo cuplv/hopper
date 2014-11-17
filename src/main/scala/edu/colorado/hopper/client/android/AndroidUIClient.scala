@@ -9,7 +9,9 @@ import edu.colorado.hopper.client.WalaAnalysisResults
 import edu.colorado.hopper.executor.TransferFunctions
 import edu.colorado.hopper.piecewise.{DefaultPiecewiseSymbolicExecutor, PiecewiseTransferFunctions, RelevanceRelation}
 import edu.colorado.hopper.state.{Path, Qry}
-import edu.colorado.hopper.util._
+import edu.colorado.walautil.ClassUtil
+import edu.colorado.walautil.Timer
+import edu.colorado.walautil.Util
 
 import scala.collection.JavaConversions._
 

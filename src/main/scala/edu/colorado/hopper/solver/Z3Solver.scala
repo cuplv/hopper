@@ -14,7 +14,7 @@ import edu.colorado.hopper.state.BoolVal
 import edu.colorado.hopper.state.IntVal
 import edu.colorado.hopper.state.PureVal
 import edu.colorado.hopper.state.PureVar
-import edu.colorado.hopper.util.Types.MMap
+import edu.colorado.walautil.Types.MMap
 import edu.colorado.hopper.state.PureExpr
 
 class Z3Solver extends ModelSolver[AST] {    

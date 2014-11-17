@@ -1,11 +1,8 @@
 package edu.colorado.hopper.state
 
-import com.ibm.wala.ipa.callgraph.propagation.LocalPointerKey
-import com.ibm.wala.ipa.callgraph.propagation.InstanceKey
-import edu.colorado.hopper.util.Util
 import com.ibm.wala.classLoader.IField
-import com.ibm.wala.ipa.callgraph.propagation.ReturnValueKey
-import com.ibm.wala.ipa.callgraph.propagation.StaticFieldKey
+import com.ibm.wala.ipa.callgraph.propagation.{LocalPointerKey, ReturnValueKey, StaticFieldKey}
+import edu.colorado.walautil.Util
 
 trait PtEdge {
   def src : Any // TODO: stronger typing here

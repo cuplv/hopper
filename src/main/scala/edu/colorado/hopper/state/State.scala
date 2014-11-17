@@ -8,8 +8,8 @@ import com.ibm.wala.ipa.callgraph.propagation.{HeapModel, InstanceKey, LocalPoin
 import com.ibm.wala.shrikeBT.{IBinaryOpInstruction, IConditionalBranchInstruction, IShiftInstruction, IUnaryOpInstruction}
 import com.ibm.wala.ssa.{SSAConditionalBranchInstruction, SymbolTable}
 import com.ibm.wala.types.TypeReference
-import edu.colorado.hopper.util.Types._
-import edu.colorado.hopper.util.{ClassUtil, Util}
+import edu.colorado.walautil.Types._
+import edu.colorado.walautil.{ClassUtil, Util}
 
 /**
  * Base components of analysis state--Val's and Var's

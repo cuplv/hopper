@@ -11,7 +11,7 @@ import edu.colorado.hopper.executor.TransferFunctions
 import edu.colorado.hopper.executor.TransferFunctions._
 import edu.colorado.hopper.piecewise.PiecewiseTransferFunctions._
 import edu.colorado.hopper.state.{LocalVar, Qry, Var}
-import edu.colorado.hopper.util.{ClassUtil, GraphUtil}
+import edu.colorado.walautil.{ClassUtil, GraphUtil}
 import edu.colorado.thresher.core.Options
 
 import scala.collection.JavaConversions._
@@ -75,17 +75,6 @@ class PiecewiseTransferFunctions(cg : CallGraph, hg : HeapGraph[InstanceKey], hm
         rel
       }))
     }
-  
-      /*rr.getModifierNodes(qry).exists(node => {
-      val rel = calleeReachable.contains(node)
-      if (rel) {
-        println(s"Callee Relevant: ${ClassUtil.pretty(callee)}, node relevant ${ClassUtil.pretty(node)}")
-        val finder = new BFSPathFinder(cg, callee, node)
-        val path = finder.find()
-        println("Path is: "); path.foreach(n => println(ClassUtil.pretty(n)))
-      }
-      rel
-    })*/ 
   }
   
   override def isCallRelevant(i : SSAInvokeInstruction, caller : CGNode, callee : CGNode, qry : Qry) : Boolean = {    

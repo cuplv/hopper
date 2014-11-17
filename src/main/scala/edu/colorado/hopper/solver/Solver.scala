@@ -3,7 +3,7 @@ package edu.colorado.hopper.solver
 import com.ibm.wala.shrikeBT.{IBinaryOpInstruction, IConditionalBranchInstruction}
 import com.ibm.wala.types.TypeReference
 import edu.colorado.hopper.state.{BoolVal, CharVal, IntVal, PureAtomicConstraint, PureBinExpr, PureConstraint, PureDisjunctiveConstraint, PureExpr, PureVar}
-import edu.colorado.hopper.util.Types._
+import edu.colorado.walautil.Types._
 
 trait Assumptions
 

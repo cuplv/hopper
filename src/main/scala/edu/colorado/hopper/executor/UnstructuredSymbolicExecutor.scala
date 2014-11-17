@@ -13,9 +13,9 @@ import com.ibm.wala.util.graph.dominators.Dominators
 import com.twitter.util.LruMap
 import edu.colorado.hopper.executor.UnstructuredSymbolicExecutor._
 import edu.colorado.hopper.state.{InvariantMap, MinSet, Path, Qry}
-import edu.colorado.hopper.util._
+import edu.colorado.walautil._
+import edu.colorado.walautil.WalaBlock
 import WalaBlock.{fromISSABasicBlock, fromWalaBlock}
-import edu.colorado.hopper.util._
 import edu.colorado.thresher.core.Options
 
 import scala.collection.JavaConversions.{asScalaBuffer, asScalaIterator, asScalaSet, collectionAsScalaIterable, mapAsJavaMap}

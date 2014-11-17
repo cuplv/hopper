@@ -13,9 +13,11 @@ import com.twitter.util.LruMap
 import edu.colorado.hopper.piecewise.RelevanceRelation._
 import edu.colorado.hopper.solver.UnknownSMTResult
 import edu.colorado.hopper.state.{ArrayFld, ArrayPtEdge, Fld, HeapPtEdge, InstanceFld, LocalPtEdge, LocalVar, ObjPtEdge, ObjVar, Path, PtEdge, Pure, PureVar, Qry, ReturnVar, StaticFld, StaticPtEdge, Val, Var}
-import edu.colorado.hopper.util.Types._
-import edu.colorado.hopper.util.{CFGUtil, CGNodeUtil, ClassUtil, IRUtil, PtUtil, Util}
+import edu.colorado.walautil.Types._
+import edu.colorado.walautil.{ClassUtil, IRUtil, Util, CGNodeUtil}
+import edu.colorado.hopper.util.PtUtil
 import edu.colorado.thresher.core.{Options, WALACFGUtil}
+import edu.colorado.walautil.CFGUtil
 
 import scala.collection.JavaConversions._
 

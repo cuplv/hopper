@@ -10,7 +10,11 @@ import edu.colorado.thresher.core.Options
 abstract class DroidelClient(appPath : String,  androidLib : File) {
 
   val appTransformer = new AndroidAppTransformer(appPath, androidLib, droidelHome = Options.DROIDEL_HOME)
-  // TODO: check if app has already been transformed, and perform transformation if not
+  // run Droidel on the app if it hasn't already been transformed
+  if (!appTransformer.isAppDroidelProcessed()) {
+    println("Processing app with Droidel")
+    appTransformer.transformApp()
+  } else println("App has already been Droidel-processed")
 
   lazy val walaRes = {
     val analysisScope = appTransformer.makeAnalysisScope(useHarness = true)

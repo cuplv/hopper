@@ -18,9 +18,7 @@ import com.ibm.wala.types.Selector
 import com.ibm.wala.types.TypeReference
 import com.ibm.wala.types.annotations.Annotation
 import com.ibm.wala.util.strings.Atom
-import edu.colorado.hopper.util.IRUtil
-import edu.colorado.hopper.util.CHAUtil
-import com.ibm.wala.types.ClassLoaderReference
+import edu.colorado.walautil.{IRUtil, CHAUtil}
 
 class DummyIMethod(m : IMethod, c : DummyIClass, cha : IClassHierarchy) extends SyntheticMethod(m.getReference, c, m.isStatic(), false) {
   require(m.isAbstract())        

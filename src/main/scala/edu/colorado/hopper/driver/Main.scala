@@ -5,7 +5,7 @@ import java.io.File
 import edu.colorado.hopper.client.{AssertionCheckingClient, AssertionCheckingClientTests, DowncastCheckingClient, DowncastCheckingClientTests, NullDereferenceClient}
 import edu.colorado.hopper.client.android._
 import edu.colorado.hopper.client.bounds.{ArrayBoundsClient, ArrayBoundsClientTests}
-import edu.colorado.hopper.util.Util
+import edu.colorado.walautil.Util
 import edu.colorado.thresher.core.Options
 
 object Main {

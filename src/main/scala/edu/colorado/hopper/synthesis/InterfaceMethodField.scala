@@ -1,11 +1,10 @@
 package edu.colorado.hopper.synthesis
 
-import edu.colorado.hopper.state.Fld
 import com.ibm.wala.classLoader.IMethod
-import edu.colorado.hopper.state.InstanceFld
-import edu.colorado.hopper.util.ClassUtil
 import com.ibm.wala.ipa.cha.IClassHierarchy
 import com.ibm.wala.types.MethodReference
+import edu.colorado.hopper.state.InstanceFld
+import edu.colorado.walautil.ClassUtil
 
 
 object InterfaceMethodField {

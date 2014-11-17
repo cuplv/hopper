@@ -1,12 +1,12 @@
 package edu.colorado.hopper.synthesis
 
-import scala.collection.JavaConversions.asScalaSet
 import com.ibm.wala.ipa.callgraph.CGNode
 import com.ibm.wala.ssa.SSAInvokeInstruction
-import edu.colorado.hopper.executor.UnstructuredSymbolicExecutor
-import edu.colorado.hopper.state.Path
-import edu.colorado.hopper.util.ClassUtil
 import edu.colorado.hopper.executor.DefaultSymbolicExecutor
+import edu.colorado.hopper.state.Path
+import edu.colorado.walautil.ClassUtil
+
+import scala.collection.JavaConversions.asScalaSet
 
 case class InvokeSynthesizerException(path : Path) extends Exception
 
