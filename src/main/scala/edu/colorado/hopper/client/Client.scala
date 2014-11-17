@@ -239,7 +239,7 @@ abstract class Client(appPath : String, libPath : Option[String], mainClass : St
   }
 
   def getWALAStubs : Option[File] = {
-    val f = new File("lib/primordial.jar.model")
+    val f = new File("config/primordial.jar.model")
     if (f.exists()) Some(f) else None
   }
     
