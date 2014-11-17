@@ -8,7 +8,7 @@
    - "wget https://www.dropbox.com/s/eqf45mlixg1bnri/com.microsoft.z3.jar"
    - "wget https://www.dropbox.com/s/qcjzpltjpih3s1z/libz3.so"
    - "wget https://www.dropbox.com/s/lx23mupkw48dke9/libz3java.so"
-   - "cd ../config && wget wget http://repository.grepcode.com/java/ext/com/google/android/android/4.4.2_r1/android-4.4.2_r1.jar && cd .."
+   - "cd ../config && wget http://repository.grepcode.com/java/ext/com/google/android/android/4.4.2_r1/android-4.4.2_r1.jar && cd .."
    - "sbt compile"
    - "sbt test:compile"
  script: export LD_LIBRARY_PATH=lib:$LD_LIBRARY_PATH && sbt "run -regressions -piecewise_execution"
