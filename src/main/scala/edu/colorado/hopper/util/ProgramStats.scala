@@ -8,6 +8,7 @@ import com.ibm.wala.util.graph.Graph
 import com.ibm.wala.util.graph.traverse.{Topological, DFSAllPathsFinder, DFSPathFinder}
 import edu.colorado.hopper.piecewise.RelevanceRelation
 import edu.colorado.hopper.state.Path
+import edu.colorado.walautil.ClassUtil
 
 import scala.collection.JavaConversions._
 

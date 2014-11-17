@@ -25,7 +25,7 @@ import edu.colorado.hopper.state.PureVal
 import edu.colorado.hopper.state.PureVar
 import edu.colorado.hopper.state.StaticFld
 import edu.colorado.hopper.state.Val
-import edu.colorado.hopper.util.Types.MSet
+import edu.colorado.walautil.Types.MSet
 
 
 object PtUtil {
