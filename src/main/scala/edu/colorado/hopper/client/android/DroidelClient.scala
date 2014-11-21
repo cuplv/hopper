@@ -2,6 +2,7 @@ package edu.colorado.hopper.client.android
 
 import java.io.File
 
+import com.ibm.wala.ipa.modref.ModRef
 import edu.colorado.droidel.driver.{AndroidAppTransformer, AndroidCGBuilder}
 import edu.colorado.hopper.client.WalaAnalysisResults
 import edu.colorado.thresher.core.Options
@@ -21,7 +22,8 @@ abstract class DroidelClient(appPath : String,  androidLib : File) {
     val _walaRes = new AndroidCGBuilder(analysisScope, appTransformer.harnessClassName, appTransformer.harnessMethodName)
                    .makeAndroidCallGraph
     // hacky due to code re-use across Droidel and Scwala
-    new WalaAnalysisResults(_walaRes.cg, _walaRes.hg, _walaRes.hm, null)
+    val modRefMap = if (Options.PIECEWISE_EXECUTION) null else ModRef.make.computeMod(_walaRes.cg, _walaRes.pa)
+    new WalaAnalysisResults(_walaRes.cg, _walaRes.hg, _walaRes.hm, modRefMap)
   }
 
 }
