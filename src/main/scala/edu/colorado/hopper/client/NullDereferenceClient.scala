@@ -6,14 +6,12 @@ import com.ibm.wala.ipa.callgraph.CGNode
 import com.ibm.wala.ipa.callgraph.propagation.{ConcreteTypeKey, InstanceKey}
 import com.ibm.wala.ssa.{SSAFieldAccessInstruction, SSAInstruction, SSAInvokeInstruction, SSAPutInstruction, SymbolTable}
 import com.ibm.wala.types.TypeReference
-import edu.colorado.walautil.IRUtil
 import edu.colorado.hopper.executor.{DefaultSymbolicExecutor, TransferFunctions}
 import edu.colorado.hopper.piecewise.{DefaultPiecewiseSymbolicExecutor, RelevanceRelation}
 import edu.colorado.hopper.state.{LocalPtEdge, PtEdge, Pure, PureVar, Qry, Var}
-import edu.colorado.walautil.ClassUtil
-import edu.colorado.walautil.CFGUtil
 import edu.colorado.hopper.util.PtUtil
 import edu.colorado.thresher.core.Options
+import edu.colorado.walautil.{CFGUtil, ClassUtil, IRUtil, WalaAnalysisResults}
 
 import scala.collection.JavaConversions._
 import scala.io.Source
@@ -53,7 +51,7 @@ class NullDereferenceClient(appPath : String, libPath : Option[String], mainClas
     
     val walaRes = makeCallGraphAndPointsToAnalysis
     val tf = new NullDereferenceTransferFunctions(walaRes)
-    val exec = 
+    val exec =
       if (Options.PIECEWISE_EXECUTION) new DefaultPiecewiseSymbolicExecutor(tf, new RelevanceRelation(tf.cg, tf.hg, tf.hm, tf.cha))
       else new DefaultSymbolicExecutor(tf)
 
@@ -111,15 +109,15 @@ class NullDereferenceClient(appPath : String, libPath : Option[String], mainClas
       } else {
         val ir = n.getIR()
         val srcLine = IRUtil.getSourceLine(i, ir)
-        print(s"Checking possible null deref # ${count} "); ClassUtil.pp_instr(i, ir); println(s" at source line $srcLine of ${ClassUtil.pretty(n)}")            
+        print(s"Checking possible null deref # ${count} "); ClassUtil.pp_instr(i, ir); println(s" at source line $srcLine of ${ClassUtil.pretty(n)}")
         // create the query
         val lpk = Var.makeLPK(useNum, n, hm)
         val nullPure = Pure.makePureVar(lpk)
-        val locEdge = PtEdge.make(lpk, nullPure)      
+        val locEdge = PtEdge.make(lpk, nullPure)
         val qry = Qry.make(List(locEdge), i, n, hm, startBeforeI = true)
         qry.addPureConstraint(Pure.makeEqNullConstraint(nullPure))
         // invoke Thresher and check it
-        val foundWitness = 
+        val foundWitness =
           try {
             exec.executeBackward(qry)
           } catch {
@@ -127,7 +125,7 @@ class NullDereferenceClient(appPath : String, libPath : Option[String], mainClas
               println(s"Error on access # $count $e \n${e.getStackTraceString}")
               if (Options.SCALA_DEBUG) throw e
               else true // soundly assume we got a witness
-          }      
+          }
         print(s"Deref # $count "); ClassUtil.pp_instr(i, ir); println(s" at source line $srcLine of ${ClassUtil.pretty(n)} can fail? $foundWitness")
         foundWitness
     }    
@@ -160,7 +158,7 @@ object NullDereferenceTransferFunctions {
 }
 
 class NullDereferenceTransferFunctions(walaRes : WalaAnalysisResults) 
-  extends TransferFunctions(walaRes.cg, walaRes.hg, walaRes.hm, walaRes.cha, walaRes.modRef) {
+  extends TransferFunctions(walaRes.cg, walaRes.hg, walaRes.hm, walaRes.cha) {
   
   override def execute(s : SSAInstruction, qry : Qry, n : CGNode) : List[Qry] = s match {
     case i : SSAFieldAccessInstruction if !i.isStatic() => // x = y.f or y.f = x

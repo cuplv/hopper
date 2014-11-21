@@ -6,20 +6,19 @@ import com.ibm.wala.classLoader.{IClass, IField}
 import com.ibm.wala.ipa.callgraph.propagation.{ConcreteTypeKey, HeapModel, InstanceKey, LocalPointerKey, PointerKey}
 import com.ibm.wala.ipa.callgraph.{CGNode, CallGraph}
 import com.ibm.wala.ipa.cha.IClassHierarchy
-import com.ibm.wala.ipa.modref.DelegatingExtendedHeapModel
+import com.ibm.wala.ipa.modref.{DelegatingExtendedHeapModel, ModRef}
 import com.ibm.wala.ssa._
 import com.ibm.wala.types.TypeReference
 import com.ibm.wala.util.graph.traverse.DFS
-import com.ibm.wala.util.intset.OrdinalSet
 import edu.colorado.hopper.executor.TransferFunctions._
 import edu.colorado.hopper.solver.UnknownSMTResult
 import edu.colorado.hopper.state._
 import edu.colorado.hopper.synthesis.InterfaceMethodField
-import edu.colorado.hopper.util.PtUtil._
 import edu.colorado.hopper.util.PtUtil
+import edu.colorado.hopper.util.PtUtil._
+import edu.colorado.thresher.core.Options
 import edu.colorado.walautil.Types._
 import edu.colorado.walautil.{ClassUtil, Util}
-import edu.colorado.thresher.core.Options
 
 import scala.collection.JavaConversions._
 
@@ -86,8 +85,9 @@ object TransferFunctions {
 }
 
 /** implements the |- {R} c {Q} judgement from Section 3.2 of Thresher: Precise Refutations for Heap Reachability (PLDI 2013) */
-class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm : HeapModel, val cha : IClassHierarchy, val modRef : java.util.Map[CGNode, OrdinalSet[PointerKey]]) {
-  val hm = new DelegatingExtendedHeapModel(_hm)    
+class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm : HeapModel, val cha : IClassHierarchy) {
+  val hm = new DelegatingExtendedHeapModel(_hm)
+  lazy val modRef = ModRef.make().computeMod(cg, hg.getPointerAnalysis)
   
   /** look up the lhs of @param s in @param localConstraints, @return matching rhs var and edge if we find it */
   protected def getConstraintPtForDef(s : SSAInstruction, localConstraints : MSet[LocalPtEdge], n : CGNode) : Option[(ObjVar,LocalPtEdge)] =
@@ -641,7 +641,7 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
       assert(call.isStatic() || !tbl.isNullConstant(call.getUse(0))) // TODO: refute based on null dispatch
       for (i <- 0 to callee.getMethod().getNumberOfParameters() - 1) { // TODO: rewrite as forall to make clearer?
         getConstraintEdge(Var.makeLPK(i + 1, callee, hm), calleeConstraints) match {
-          case Some(edge) =>          
+          case Some(edge) =>
             val callUse = call.getUse(i) 
             edge.snk match {            
               case formalObj@ObjVar(rgn) =>                

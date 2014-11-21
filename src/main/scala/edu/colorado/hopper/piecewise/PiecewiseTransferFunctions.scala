@@ -1,18 +1,17 @@
 package edu.colorado.hopper.piecewise
 
 import com.ibm.wala.analysis.pointers.HeapGraph
+import com.ibm.wala.ipa.callgraph.propagation.{HeapModel, InstanceKey}
 import com.ibm.wala.ipa.callgraph.{CGNode, CallGraph}
-import com.ibm.wala.ipa.callgraph.propagation.{InstanceKey, HeapModel, PointerKey}
 import com.ibm.wala.ipa.cha.IClassHierarchy
 import com.ibm.wala.ssa.SSAInvokeInstruction
 import com.ibm.wala.util.graph.traverse.{BFSPathFinder, DFS}
-import com.ibm.wala.util.intset.OrdinalSet
 import edu.colorado.hopper.executor.TransferFunctions
 import edu.colorado.hopper.executor.TransferFunctions._
 import edu.colorado.hopper.piecewise.PiecewiseTransferFunctions._
 import edu.colorado.hopper.state.{LocalVar, Qry, Var}
-import edu.colorado.walautil.{ClassUtil, GraphUtil}
 import edu.colorado.thresher.core.Options
+import edu.colorado.walautil.{ClassUtil, GraphUtil}
 
 import scala.collection.JavaConversions._
 
@@ -25,8 +24,7 @@ object PiecewiseTransferFunctions {
 
 /** extension of ordinary Thresher transfer functions using the relevance relation to do some things more precisely/efficiently */
 class PiecewiseTransferFunctions(cg : CallGraph, hg : HeapGraph[InstanceKey], hm : HeapModel, cha : IClassHierarchy,
-                                 modRef : java.util.Map[CGNode, OrdinalSet[PointerKey]],
-  val rr : RelevanceRelation) extends TransferFunctions(cg, hg, hm, cha, modRef) {  
+                                 val rr : RelevanceRelation) extends TransferFunctions(cg, hg, hm, cha) {
   
   private def doesCalleeModifyHeap(callee : CGNode, qry : Qry) : Boolean = {
     // set of nodes reachable from call at i

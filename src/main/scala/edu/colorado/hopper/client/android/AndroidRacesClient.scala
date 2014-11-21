@@ -5,7 +5,7 @@ import java.io.File
 import com.ibm.wala.classLoader.IClass
 import com.ibm.wala.ipa.callgraph.CGNode
 import com.ibm.wala.ssa.{SSAFieldAccessInstruction, SSAInvokeInstruction}
-import edu.colorado.walautil.{IRUtil, ClassUtil}
+import edu.colorado.walautil.{ClassUtil, IRUtil}
 
 import scala.collection.JavaConversions._
 

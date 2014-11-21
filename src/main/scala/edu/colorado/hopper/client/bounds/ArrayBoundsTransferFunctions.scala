@@ -2,16 +2,14 @@ package edu.colorado.hopper.client.bounds
 
 import com.ibm.wala.ipa.callgraph.CGNode
 import com.ibm.wala.ssa.{ISSABasicBlock, SSACFG, SSAInstruction, SSAInvokeInstruction, SSAPhiInstruction}
-import edu.colorado.hopper.client.WalaAnalysisResults
 import edu.colorado.hopper.executor.TransferFunctions
 import edu.colorado.hopper.state.Qry
-import edu.colorado.thresher.core.Options
-import edu.colorado.walautil.Util
+import edu.colorado.walautil.{Util, WalaAnalysisResults}
 
 import scala.collection.JavaConversions._
 
 class ArrayBoundsTransferFunctions(walaRes : WalaAnalysisResults) 
-  extends TransferFunctions(walaRes.cg, walaRes.hg, walaRes.hm, walaRes.cha, walaRes.modRef) {
+  extends TransferFunctions(walaRes.cg, walaRes.hg, walaRes.hm, walaRes.cha) {
   
   override def dropConstraintsFromInstructions(i : Iterable[SSAInstruction], n : CGNode, qry : Qry, 
                                                callee : Option[CGNode] = None, loopDrop : Boolean = false) : Unit = {

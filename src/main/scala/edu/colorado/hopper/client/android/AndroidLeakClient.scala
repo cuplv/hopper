@@ -8,12 +8,13 @@ import com.ibm.wala.types.{ClassLoaderReference, TypeReference}
 import com.ibm.wala.types.annotations.Annotation
 import com.ibm.wala.util.graph.Graph
 import com.ibm.wala.util.graph.traverse.DFS
-import edu.colorado.hopper.client.{ClientTests, WalaAnalysisResults}
+import edu.colorado.hopper.client.ClientTests
 import edu.colorado.hopper.piecewise.RelevanceRelation
 import edu.colorado.hopper.solver.Z3Solver
 import edu.colorado.hopper.state.{CallStack, Fld, HeapPtEdge, ObjVar, Path, PtEdge, PureConstraint, Qry}
 import edu.colorado.walautil.Types._
 import edu.colorado.walautil.{ClassUtil, LoopUtil, Timer, Util}
+import edu.colorado.walautil.WalaAnalysisResults
 import edu.colorado.thresher.core.{HeapGraphWrapper, Options}
 
 import scala.collection.JavaConversions.{asJavaCollection, asScalaBuffer, asScalaSet, bufferAsJavaList, collectionAsScalaIterable, iterableAsScalaIterable, mutableSetAsJavaSet, seqAsJavaList}

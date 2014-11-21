@@ -7,21 +7,19 @@ import com.ibm.wala.analysis.pointers.HeapGraph
 import com.ibm.wala.classLoader.{BinaryDirectoryTreeModule, IClass, IMethod}
 import com.ibm.wala.ipa.callgraph.AnalysisOptions.ReflectionOptions
 import com.ibm.wala.ipa.callgraph.impl.{ArgumentTypeEntrypoint, DefaultEntrypoint}
+import com.ibm.wala.ipa.callgraph.propagation.{InstanceKey, PointerAnalysis}
 import com.ibm.wala.ipa.callgraph.propagation.cfa.ZeroXInstanceKeys
-import com.ibm.wala.ipa.callgraph.propagation.{HeapModel, InstanceKey, PointerKey}
-import com.ibm.wala.ipa.callgraph.{AnalysisCache, AnalysisOptions, AnalysisScope, CGNode, CallGraph, CallGraphBuilder, CallGraphStats, Entrypoint}
+import com.ibm.wala.ipa.callgraph._
 import com.ibm.wala.ipa.cha.{ClassHierarchy, IClassHierarchy}
-import com.ibm.wala.ipa.modref.ModRef
 import com.ibm.wala.ssa.{InstanceOfPiPolicy, SSAOptions}
 import com.ibm.wala.types.ClassLoaderReference
 import com.ibm.wala.util.config.FileOfClasses
-import com.ibm.wala.util.intset.OrdinalSet
 import edu.colorado.hopper.client.Client._
 import edu.colorado.hopper.executor.{DefaultSymbolicExecutor, SymbolicExecutor, TransferFunctions}
 import edu.colorado.hopper.piecewise.{DefaultPiecewiseSymbolicExecutor, RelevanceRelation}
 import edu.colorado.hopper.synthesis.{SynthesisSymbolicExecutor, SynthesisTransferFunctions}
-import edu.colorado.walautil.{ClassUtil, Timer, Util}
 import edu.colorado.thresher.core._
+import edu.colorado.walautil.{ClassUtil, Timer, Util, WalaAnalysisResults}
 
 import scala.collection.JavaConversions.{asJavaCollection, collectionAsScalaIterable, iterableAsScalaIterable}
 
@@ -29,11 +27,9 @@ object Client {
   protected val DEBUG = true
 }
 
-// simple struct to hold output of up-front WALA analysis
-class WalaAnalysisResults(val cg : CallGraph, val hg : HeapGraph[InstanceKey], val hm : HeapModel,
-                          val modRef : java.util.Map[CGNode, OrdinalSet[PointerKey]]) {
-  val cha = cg.getClassHierarchy()
-  val pa = hg.getPointerAnalysis()
+class WrappedWalaAnalysisResults(override val cg : CallGraph, override val pa : PointerAnalysis[InstanceKey])
+  extends WalaAnalysisResults(cg, pa) {
+  override val hg = new HeapGraphWrapper(pa, cg).asInstanceOf[HeapGraph[InstanceKey]]
 }
 
 abstract class Client(appPath : String, libPath : Option[String], mainClass : String, mainMethod : String,
@@ -42,9 +38,9 @@ abstract class Client(appPath : String, libPath : Option[String], mainClass : St
   lazy protected val analysisScope = makeAnalysisScope()
   lazy protected val cha = ClassHierarchy.make(analysisScope)
 
-  def makeAnalysisCache : AnalysisCache = new AnalysisCache    
+  def makeAnalysisCache : AnalysisCache = new AnalysisCache
 
-  def makeCallGraphAndPointsToAnalysis : WalaAnalysisResults = {    
+  def makeCallGraphAndPointsToAnalysis : WalaAnalysisResults = {
     if (DEBUG) println(s"Class hierarchy size is ${cha.getNumberOfClasses()}")
     val entrypoints = makeEntrypoints
     assert(!entrypoints.isEmpty,
@@ -53,7 +49,7 @@ abstract class Client(appPath : String, libPath : Option[String], mainClass : St
       println(s"Got ${entrypoints.size} entrypoints")
       entrypoints.foreach(e => println(e.getMethod()))
     }
-    val options = makeOptions(analysisScope, entrypoints)        
+    val options = makeOptions(analysisScope, entrypoints)
     val cache = makeAnalysisCache
 
     // finally, build the call graph and extract the points-to analysis
@@ -68,23 +64,18 @@ abstract class Client(appPath : String, libPath : Option[String], mainClass : St
     ptTimer.clear
     if (DEBUG) println(CallGraphStats.getStats(cg))
     val pa = cgBuilder.getPointerAnalysis()
-    val hg = new HeapGraphWrapper(pa, cg)
-    val hm = pa.getHeapModel()
-    // TODO: eventually, may not want to compute mod/ref in all situations, or even at all
-    val modRef = ModRef.make
-    val modRefMap = modRef.computeMod(cg, pa)    
     SameReceiverEntrypoint.clearCachedArgs()
-    new WalaAnalysisResults(cg, hg.asInstanceOf[HeapGraph[InstanceKey]], hm, modRefMap)
+    new WrappedWalaAnalysisResults(cg, pa)
   }
-  
+
   // add bypass logic that delegates to stubs if applicable
   def addBypassLogic(options : AnalysisOptions, analysisScope : AnalysisScope, cha : IClassHierarchy) : Unit = {
     com.ibm.wala.ipa.callgraph.impl.Util.setNativeSpec("config/natives.xml")
     com.ibm.wala.ipa.callgraph.impl.Util.addDefaultBypassLogic(options, analysisScope,
       classOf[com.ibm.wala.ipa.callgraph.impl.Util].getClassLoader(), cha)
   }
-      
-  def makeCallGraphBuilder(options : AnalysisOptions, cache : AnalysisCache, cha : IClassHierarchy, 
+
+  def makeCallGraphBuilder(options : AnalysisOptions, cache : AnalysisCache, cha : IClassHierarchy,
                            analysisScope : AnalysisScope, isRegression : Boolean) : CallGraphBuilder = {
     assert(options.getMethodTargetSelector() == null, "Method target selector should not be set at this point.")
     assert(options.getClassTargetSelector() == null, "Class target selector should not be set at this point.")
@@ -98,7 +89,7 @@ abstract class Client(appPath : String, libPath : Option[String], mainClass : St
       else (defaultInstancePolicy | ZeroXInstanceKeys.SMUSH_PRIMITIVE_HOLDERS)
     new ImprovedZeroXContainerCFABuilder(cha, options, cache, null, null, instancePolicy)
   }
-  
+
   def makeOptions(analysisScope : AnalysisScope, entrypoints : Iterable[Entrypoint]) : AnalysisOptions = {
     val collectionEntrypoints : java.util.Collection[_ <: Entrypoint] = entrypoints
     val options = new AnalysisOptions(analysisScope, collectionEntrypoints)
@@ -112,14 +103,14 @@ abstract class Client(appPath : String, libPath : Option[String], mainClass : St
     }
     options
   }
-  
-  def isEntrypointClass(c : IClass, analysisScope : AnalysisScope, mainClass : String) : Boolean = 
+
+  def isEntrypointClass(c : IClass, analysisScope : AnalysisScope, mainClass : String) : Boolean =
     // do contains(mainClass) instead of equality to account for WALA adding 'L' to front of each class name
     !ClassUtil.isLibrary(c) && c.getName().toString().contains(mainClass)
-  
+
   def isEntrypoint(m : IMethod, cha : IClassHierarchy, mainMethod : String) : Boolean =
     m.getName().toString() == mainMethod
-  
+
   // this creates concrete allocations for non-interface types and passes null (!) for interface types
   def mkDefaultEntrypoint(m : IMethod, cha : IClassHierarchy) : Entrypoint =
     new DefaultEntrypoint(m, cha)
@@ -136,7 +127,7 @@ abstract class Client(appPath : String, libPath : Option[String], mainClass : St
   // same Activity, we will (unsoundly) miss a lot of behavior
   def mkSharedAllocationEntrypoint(m : IMethod, cha : IClassHierarchy) : Entrypoint =
     new SharedAllocationEntrypoint(m, cha)
-  
+
   def mkEntrypoint(m : IMethod, cha : IClassHierarchy) : Entrypoint = {
     if (DEBUG) println(s"Making entrypoint $m")
     // IMPORTANT! for maximally evil synthesis, we want DefaultEntrypoint rather than SharedAllocationEntrypoint. this
@@ -145,23 +136,23 @@ abstract class Client(appPath : String, libPath : Option[String], mainClass : St
     // synthesis, we may want to make the opposite choice
     if (Options.SYNTHESIS) mkDefaultEntrypoint(m, cha) else mkSharedAllocationEntrypoint(m, cha)
   }
-  
-  def makeEntrypoints : Iterable[Entrypoint] = {    
-    def addMethodsToEntrypoints(methods : Iterable[IMethod], entrypoints : List[Entrypoint]) : List[Entrypoint] = 
+
+  def makeEntrypoints : Iterable[Entrypoint] = {
+    def addMethodsToEntrypoints(methods : Iterable[IMethod], entrypoints : List[Entrypoint]) : List[Entrypoint] =
       methods.foldLeft (entrypoints) ((entrypoints, m) =>
         if (isEntrypoint(m, cha, mainMethod)) mkEntrypoint(m, cha) :: entrypoints else entrypoints)
-    
-    cha.foldLeft (List.empty[Entrypoint]) ((entrypoints, c) => 
+
+    cha.foldLeft (List.empty[Entrypoint]) ((entrypoints, c) =>
       if (isEntrypointClass(c, analysisScope, mainClass)) addMethodsToEntrypoints(c.getDeclaredMethods(), entrypoints)
       else entrypoints
     )
   }
-  
+
   def makeAnalysisScope(addJavaLibs : Boolean = true) : AnalysisScope = {
     val analysisScope = AnalysisScope.createJavaAnalysisScope()
     def isJar(f : File) : Boolean = f.getName().endsWith(".jar")
     def isClassfile(f : File) : Boolean = f.getName().endsWith(".class")
-        
+
     def addToScope(path : String, loader : ClassLoaderReference) : Unit = {
       val f  = new File(path)
       assert(f.exists(), s"Can't find file $f; it doesn't appear to exist")
@@ -177,7 +168,7 @@ abstract class Client(appPath : String, libPath : Option[String], mainClass : St
       else if (isClassfile(f)) analysisScope.addClassFileToScope(loader, f)
       else Util.unimp(s"Processing file $f. Expecting path to Java bytecode directory or JAR archive")
     }
-    
+
     // add application code to analysis scope
     addToScope(appPath, analysisScope.getApplicationLoader())
     // add library code to analysis scope, if any
@@ -190,7 +181,7 @@ abstract class Client(appPath : String, libPath : Option[String], mainClass : St
         () // no library code specified
     }
 
-    if (addJavaLibs) getJVMLibFile match { 
+    if (addJavaLibs) getJVMLibFile match {
       // add core Java libraries      
       case Some(libFile) =>
         if (DEBUG) println(s"Using JVM lib file $libFile")
@@ -207,30 +198,29 @@ abstract class Client(appPath : String, libPath : Option[String], mainClass : St
     setExclusions(analysisScope)
     analysisScope
   }
-  
+
   // TODO: eliminate reference to options here? make WALA regression exclusions the default?
   def setExclusions(analysisScope : AnalysisScope) : Unit = {
     // set exclusions if appropriate
     val exclusionsFile = new File(Options.EXCLUSIONS)
     if (exclusionsFile.exists()) {
       if (DEBUG) println(s"Using exclusions file ${exclusionsFile.getAbsolutePath()}")
-      analysisScope.setExclusions(new FileOfClasses(new FileInputStream(exclusionsFile)))           
+      analysisScope.setExclusions(new FileOfClasses(new FileInputStream(exclusionsFile)))
     } else if (DEBUG)
       println(s"Exclusions file ${exclusionsFile.getAbsolutePath()} does not exist, not using exclusions")
   }
-  
-  def makeTransferFunctions(walaRes : WalaAnalysisResults) : TransferFunctions =  
-    new TransferFunctions(walaRes.cg, walaRes.hg, walaRes.hm, walaRes.cha, walaRes.modRef)
- 
-  def makeSymbolicExecutor(walaRes : WalaAnalysisResults) : SymbolicExecutor = 
-    if (Options.PIECEWISE_EXECUTION) { 
+
+  def makeTransferFunctions(walaRes : WalaAnalysisResults) : TransferFunctions =
+    new TransferFunctions(walaRes.cg, walaRes.hg, walaRes.hm, walaRes.cha)
+
+  def makeSymbolicExecutor(walaRes : WalaAnalysisResults) : SymbolicExecutor =
+    if (Options.PIECEWISE_EXECUTION) {
       val tf = makeTransferFunctions(walaRes)
       new DefaultPiecewiseSymbolicExecutor(tf, new RelevanceRelation(tf.cg, tf.hg, tf.hm, tf.cha))
     } else if (Options.SYNTHESIS)
-      new SynthesisSymbolicExecutor(new SynthesisTransferFunctions(walaRes.cg, walaRes.hg, walaRes.hm, walaRes.cha,
-                                                                   walaRes.modRef))
+      new SynthesisSymbolicExecutor(new SynthesisTransferFunctions(walaRes.cg, walaRes.hg, walaRes.hm, walaRes.cha))
     else new DefaultSymbolicExecutor(makeTransferFunctions(walaRes))
-  
+
    def getJVMLibFile : Option[File] = new File(Options.JAVA_LIB) match {
     case f if f.exists() => Some(f)
     case _ =>
@@ -242,17 +232,17 @@ abstract class Client(appPath : String, libPath : Option[String], mainClass : St
     val f = new File("config/primordial.jar.model")
     if (f.exists()) Some(f) else None
   }
-    
+
 }
 
-abstract class ClientTests {  
+abstract class ClientTests {
   def runRegressionTests() : Unit = ()
   // is this client compatible with piecewise execution? this should be true for most refutation-oriented clients and
   // false for most witness-oriented ones
   def isPiecewiseCompatible : Boolean = true
-  
+
   protected def printTestFailureMsg(test : String, testNum : Int) : Unit = println(s"Test $test (#$testNum) failed :(")
-  
+
   protected def getJVMVersion : String = System.getProperty("java.version")
 
 }

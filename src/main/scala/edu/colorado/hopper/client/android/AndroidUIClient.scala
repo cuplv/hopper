@@ -5,13 +5,10 @@ import java.io.File
 import com.ibm.wala.classLoader.IClass
 import com.ibm.wala.ipa.callgraph.{CGNode, CallGraph}
 import edu.colorado.droidel.constants.DroidelConstants
-import edu.colorado.hopper.client.WalaAnalysisResults
 import edu.colorado.hopper.executor.TransferFunctions
 import edu.colorado.hopper.piecewise.{DefaultPiecewiseSymbolicExecutor, PiecewiseTransferFunctions, RelevanceRelation}
 import edu.colorado.hopper.state.{Path, Qry}
-import edu.colorado.walautil.ClassUtil
-import edu.colorado.walautil.Timer
-import edu.colorado.walautil.Util
+import edu.colorado.walautil.{ClassUtil, Timer, Util, WalaAnalysisResults}
 
 import scala.collection.JavaConversions._
 
@@ -128,7 +125,7 @@ class AndroidUIClient(appPath : String, androidLib : File) extends DroidelClient
   def makeTransferFunctions(walaRes : WalaAnalysisResults) : TransferFunctions = {
     import walaRes._
     val rr = getOrCreateRelevanceRelation(walaRes)
-    new PiecewiseTransferFunctions(cg, hg, hm, walaRes.cha, walaRes.modRef, rr) 
+    new PiecewiseTransferFunctions(cg, hg, hm, cha, rr)
   }
       
   def isAndroidRelated(clazz : IClass) : Boolean = {

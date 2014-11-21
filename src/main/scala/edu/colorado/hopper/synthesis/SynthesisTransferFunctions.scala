@@ -2,22 +2,16 @@ package edu.colorado.hopper.synthesis
 
 import com.ibm.wala.analysis.pointers.HeapGraph
 import com.ibm.wala.analysis.typeInference.TypeInference
-import com.ibm.wala.ipa.callgraph.CGNode
-import com.ibm.wala.ipa.callgraph.CallGraph
-import com.ibm.wala.ipa.callgraph.propagation.{InstanceKey, HeapModel, LocalPointerKey, PointerKey}
+import com.ibm.wala.ipa.callgraph.{CGNode, CallGraph}
+import com.ibm.wala.ipa.callgraph.propagation.{HeapModel, InstanceKey, LocalPointerKey}
 import com.ibm.wala.ipa.cha.IClassHierarchy
 import com.ibm.wala.ssa.SSAInvokeInstruction
-import com.ibm.wala.util.intset.OrdinalSet
-
 import edu.colorado.hopper.executor.TransferFunctions
-import edu.colorado.hopper.state.LocalPtEdge
-import edu.colorado.hopper.state.PtEdge
-import edu.colorado.hopper.state.Qry
-import edu.colorado.hopper.state.Var
+import edu.colorado.hopper.state.{LocalPtEdge, PtEdge, Qry, Var}
 import edu.colorado.hopper.util.PtUtil
 
-class SynthesisTransferFunctions(cg : CallGraph, hg : HeapGraph[InstanceKey], _hm : HeapModel, cha : IClassHierarchy, modRef : java.util.Map[CGNode, OrdinalSet[PointerKey]])
-  extends TransferFunctions(cg, hg, _hm, cha, modRef) {
+class SynthesisTransferFunctions(cg : CallGraph, hg : HeapGraph[InstanceKey], _hm : HeapModel, cha : IClassHierarchy)
+  extends TransferFunctions(cg, hg, _hm, cha) {
   
    // we choose *not* to refute based on empty PT sets
   override def refuteBasedOnEmptyPT(lpk : LocalPointerKey, qry : Qry, n : CGNode) : Boolean = {
