@@ -1534,6 +1534,7 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
         case Some(e@LocalPtEdge(_, p@PureVar(_))) => // found edge x -> p; implicitly, p == null
           assert(p.isReferenceType)
           assert(!n.getIR().getSymbolTable().isConstant(s.getVal()))
+          qry.removeLocalConstraint(e)
           if (qry.isNull(p)) {
             // since x is null, y must also be null
             val y = Var.makeLPK(s.getVal(), n, hm)
