@@ -475,7 +475,7 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
                 if (receiverLPK.getValueNumber() == 1) Set(nextNode.getMethod().getDeclaringClass())
                 else getPt(receiverLPK, qry.localConstraints, hg) match {
                   case Some((ObjVar(rgnReceiver), _)) => rgnReceiver.map(key => key.getConcreteType)
-                  case None => Set.empty // refuted by null dispatch
+                  case None => Set.empty[IClass] // refuted by null dispatch
                 }
               rgnX.exists(k =>
                 receiverTypes.exists(receiverType => cha.isAssignableFrom(receiverType, k.getConcreteType)))

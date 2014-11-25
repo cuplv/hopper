@@ -175,12 +175,10 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
             if (DEBUG)
               println(s"Entering call ${instr.getDeclaredTarget().getName()} from ${node.getMethod().getName()} full names ${ClassUtil.pretty(instr.getDeclaredTarget())} from ${ClassUtil.pretty(node)}")
             val paths = executeBackwardWhile(enterPaths, p => p.callStackSize != initSize, skipPaths)
-
             if (DEBUG)
               println(s"Returning from call to ${ClassUtil.pretty(instr.getDeclaredTarget())} back to ${ClassUtil.pretty(node)}; have ${paths.size} paths.")
             paths
-          }
-          else {
+          } else {
             if (DEBUG) println(s"decided to skip call $instr; have ${skipPaths.size}")
             skipPaths
           }

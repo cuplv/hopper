@@ -61,8 +61,8 @@ class DowncastCheckingClient(appPath : String, libPath : Option[String], mainCla
           DemandCastChecker.makeDemandPointerAnalysis(analysisScope, walaRes.cha.asInstanceOf[ClassHierarchy], options)
         val fails = DemandCastChecker.findFailingCasts(demandPair.fst.getBaseCallGraph(), demandPair.snd, demandPair.fst)
         println("====Done with demand cast checking====")
-        fails
-      } else java.util.Collections.EMPTY_SET
+        fails.toSet
+      } else Set.empty[String]
 
     // see if a list of cast queries was specified on the command line
     val queries = if (Options.QUERIES.isEmpty) Set.empty[String] else parseCastList(Options.QUERIES)

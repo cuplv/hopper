@@ -78,9 +78,6 @@ public class AndroidLeakClient {
         if (type.equals(WEAK_REFERENCE) || cha.isSubclassOf(type, WEAK_REFERENCE))
           return true;
       }
-      // also do silly syntactic check
-      // return src.toString().contains("WeakReference") ||
-      // snk.toString().contains("WeakReference");
     }
     return false;
   }
