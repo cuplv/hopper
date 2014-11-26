@@ -536,9 +536,7 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
           //} // else, don't know anything about the value of this argument; don't bind it
       }      
     }
-    
-    //println("about to enter call. new locs are " + Qry.constraintsToString(calleeLocalConstraints) + " qry " + qry + "IR " + callee.getIR())
-    
+
     qry.callStack.push(CallStackFrame.make(callee, calleeLocalConstraints, call))
     true
   }  
@@ -1485,6 +1483,7 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
       }
       
     case s : SSACheckCastInstruction => // x = (T) y
+
       val types = s.getDeclaredResultTypes()
       assert(types.length == 1) // in Java, this should be true
       val castType = cha.lookupClass(types(0))

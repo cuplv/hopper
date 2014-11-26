@@ -169,8 +169,7 @@ class NullDereferenceTransferFunctions(walaRes : WalaAnalysisResults)
         case Some(LocalPtEdge(_, p@PureVar(_))) if qry.isNull(p) =>
           // have x == null and x = y.this$0 (or similar). reading from this$0 will never return null without bytecode
           // editor magic (or order of initialization silliness)--refute
-          //if (NullDereferenceTransferFunctions.DEBUG) println("Refuted by read from inner class this!")
-          println("Refuted by read from inner class this!")
+          if (NullDereferenceTransferFunctions.DEBUG) println("Refuted by read from inner class this!")
           Nil
         case _ => super.execute(s, qry, n)
       }

@@ -6,6 +6,7 @@ import com.ibm.wala.classLoader.IClass
 import com.ibm.wala.ipa.callgraph.CGNode
 import com.ibm.wala.ipa.callgraph.propagation.HeapModel
 import com.ibm.wala.ssa.{SSAInstruction, SSAFieldAccessInstruction, SSAInvokeInstruction}
+import edu.colorado.droidel.driver.AbsurdityIdentifier
 import edu.colorado.hopper.client.NullDereferenceTransferFunctions
 import edu.colorado.hopper.executor.DefaultSymbolicExecutor
 import edu.colorado.hopper.piecewise.{DefaultPiecewiseSymbolicExecutor, RelevanceRelation}
@@ -61,6 +62,13 @@ class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelCli
       val declClass = n.getMethod.getDeclaringClass
       callbackClasses.exists(c => cha.isSubclassOf(declClass, c) || cha.implementsInterface(declClass, c))
     }
+
+    val absurdityIdentifier = new AbsurdityIdentifier(appTransformer.harnessClassName)
+    absurdityIdentifier.getAbsurdities(walaRes)
+    val uncalledMethods = absurdityIdentifier.getUncalledMethods(cg, cha)
+    println("Uncalled methods: ")
+    uncalledMethods.foreach(m => println(ClassUtil.pretty(m)))
+
 
     val nullDerefs =
       walaRes.cg.foldLeft (0) ((count, n) =>
