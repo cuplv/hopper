@@ -23,7 +23,8 @@ import edu.colorado.walautil.{ClassUtil, Util}
 import scala.collection.JavaConversions._
 
 object TransferFunctions {  
-  def DEBUG = Options.SCALA_DEBUG      
+  def DEBUG = Options.SCALA_DEBUG
+  // print warning messages about potential unsoundness in the points-to analysis
   private val EMPTY_PT_WARNING = true 
   
    def initializeStaticFieldsToDefaultValues(qry : Qry, node : CGNode) : Boolean = {
@@ -237,7 +238,7 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
   
   // we choose to refute based on empty PT
   def refuteBasedOnEmptyPT(lpk : LocalPointerKey, qry : Qry, n : CGNode) : Boolean = {
-    if (EMPTY_PT_WARNING) println("Warning: returning null for " + lpk + " based on empty PT set")
+    if (EMPTY_PT_WARNING) println(s"(1) Warning: returning null for v${lpk.getValueNumber} based on empty PT set")
     true
   }
   
@@ -375,9 +376,13 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
               if (Pure.isEqualityOp(op)) {
                 val rgnInter = rgn0.intersect(rgn1)
                 if (rgnInter.isEmpty) {
-                  if (EMPTY_PT_WARNING && (rgn0.isEmpty || rgn1.isEmpty))
-                    println("Warning: returning null for " + lpk0 + " and/or " + lpk1 + " based on empty PT set")
-                  false                
+                  if (EMPTY_PT_WARNING && (rgn0.isEmpty || rgn1.isEmpty)) {
+                    println(s"(2) Warning: returning null for v${lpk0.getValueNumber} and/or v${lpk1.getValueNumber} based on empty PT set")
+                    // TODO: this is to guard against unsound refutations due to unsoundness in the points-to analysis,
+                    // but is less good than actually fixing the points-to analysis
+                    true
+                  } else false
+                  //false
                 } else {
                   val interVar = ObjVar(rgnInter)
                   qry.addLocalConstraint(PtEdge.make(lpk0, interVar)) // add y -> interVar constraint
@@ -389,7 +394,7 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
                 else {
                   def objVarOrNull(rgn : Set[InstanceKey]) : Val = 
                     if (rgn.isEmpty) {
-                      println("Warning: returning null for " + lpk0 + " and/or " + lpk1 + " based on empty PT set")
+                      println(s"(3) Warning: returning null for v${lpk0.getValueNumber} and/or v${lpk1.getValueNumber} based on empty PT set")
                       Qry.getNullVar(qry)
                     } else ObjVar(rgn)
                   // y and z need to point to different ObjVars            
@@ -438,7 +443,7 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
         case Some(LocalPtEdge(_, retObj@ObjVar(_))) =>
           getPt(calleeRet, hg) match {
             case rgn if rgn.isEmpty =>              
-              if (EMPTY_PT_WARNING) println("Warning: returning null for " + calleeRet + " based on empty PT set")
+              if (EMPTY_PT_WARNING) println(s"(4) Warning: returning null for $calleeRet based on empty PT set")
               false // callee only returns null, but we need it to return an ObjVar
             case rgn => // dispatch is onlyFeasible if rgn(retObj) \cap rgn(retObj) is non-empty 
               qry.intersectAndSubstitute(retObj, ObjVar(rgn), hg).isDefined 
@@ -470,7 +475,7 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
                 if (receiverLPK.getValueNumber() == 1) Set(nextNode.getMethod().getDeclaringClass())
                 else getPt(receiverLPK, qry.localConstraints, hg) match {
                   case Some((ObjVar(rgnReceiver), _)) => rgnReceiver.map(key => key.getConcreteType)
-                  case None => Set.empty // refuted by null dispatch
+                  case None => Set.empty[IClass] // refuted by null dispatch
                 }
               rgnX.exists(k =>
                 receiverTypes.exists(receiverType => cha.isAssignableFrom(receiverType, k.getConcreteType)))
@@ -531,9 +536,7 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
           //} // else, don't know anything about the value of this argument; don't bind it
       }      
     }
-    
-    //println("about to enter call. new locs are " + Qry.constraintsToString(calleeLocalConstraints) + " qry " + qry + "IR " + callee.getIR())
-    
+
     qry.callStack.push(CallStackFrame.make(callee, calleeLocalConstraints, call))
     true
   }  
@@ -1480,6 +1483,7 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
       }
       
     case s : SSACheckCastInstruction => // x = (T) y
+
       val types = s.getDeclaredResultTypes()
       assert(types.length == 1) // in Java, this should be true
       val castType = cha.lookupClass(types(0))
@@ -1529,6 +1533,7 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
         case Some(e@LocalPtEdge(_, p@PureVar(_))) => // found edge x -> p; implicitly, p == null
           assert(p.isReferenceType)
           assert(!n.getIR().getSymbolTable().isConstant(s.getVal()))
+          qry.removeLocalConstraint(e)
           if (qry.isNull(p)) {
             // since x is null, y must also be null
             val y = Var.makeLPK(s.getVal(), n, hm)
@@ -1644,24 +1649,6 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
     case s : SSAThrowInstruction => false // refuted by thrown exception
     case s : SSAGotoInstruction => true 
     case s => sys.error("unsupported instruction " + s)
-    
-    
-    /*
-    // function calls
-    case s : SSAAbstractInvokeInstruction =>
-    // exceptions
-    case s : SSAAbstractThrowInstruction =>
-    case s : SSAAbstractUnaryInstruction =>
-    case s : SSAAddressOfInstruction =>
-    // if statements
-    case s : SSAConditionalBranchInstruction =>
-    case s : SSAFieldAccessInstruction =>
-    case s : SSALoadMetadataInstruction =>
-    case s : SSAMonitorInstruction =>
-    case s : SSASwitchInstruction => 
-    case s : SSAStoreIndirectInstruction =>
-    case other => sys.error("Unimplemented: executing instruction " + other)
-    */
   }
   
   private def handleUnsupportedInstruction(s : SSAInstruction, qry : Qry, n : CGNode) = 
@@ -1721,15 +1708,8 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
   
   private def dropLocalConstraint(l : LocalPtEdge, q : Qry, loopDrop : Boolean) : Unit = 
     dropPtEdge(l, q, (e : LocalPtEdge) => q.removeLocalConstraint(e), loopDrop)
-    /*{
-    if (DEBUG) println("dropping local constraint " + l)
-    q.removeLocalConstraint(l)
-    dropRelatedPureConstraints(l.snk, q)
-  }*/
   
-  private def dropHeapConstraint(h : HeapPtEdge, q : Qry, loopDrop : Boolean) : Unit = 
-    //dropPtEdge(h, q, (e : HeapPtEdge) => q.removeHeapConstraint(e), loopDrop)
-
+  private def dropHeapConstraint(h : HeapPtEdge, q : Qry, loopDrop : Boolean) : Unit =
     h.snk match {
     case ObjVar(_) => 
       if (!loopDrop) {

@@ -2,8 +2,10 @@ package edu.colorado.hopper.client.android
 
 import java.io.File
 
+import com.ibm.wala.ipa.modref.ModRef
 import edu.colorado.droidel.driver.{AndroidAppTransformer, AndroidCGBuilder}
 import edu.colorado.thresher.core.Options
+import edu.colorado.walautil.WalaAnalysisResults
 
 /** Base client for apps that have been preprocessed with Droidel */
 abstract class DroidelClient(appPath : String,  androidLib : File) {

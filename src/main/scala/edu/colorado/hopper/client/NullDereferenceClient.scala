@@ -4,7 +4,7 @@ import java.io.File
 
 import com.ibm.wala.ipa.callgraph.CGNode
 import com.ibm.wala.ipa.callgraph.propagation.{ConcreteTypeKey, InstanceKey}
-import com.ibm.wala.ssa.{SSAFieldAccessInstruction, SSAInstruction, SSAInvokeInstruction, SSAPutInstruction, SymbolTable}
+import com.ibm.wala.ssa._
 import com.ibm.wala.types.TypeReference
 import edu.colorado.hopper.executor.{DefaultSymbolicExecutor, TransferFunctions}
 import edu.colorado.hopper.piecewise.{DefaultPiecewiseSymbolicExecutor, RelevanceRelation}
@@ -161,6 +161,16 @@ class NullDereferenceTransferFunctions(walaRes : WalaAnalysisResults)
   extends TransferFunctions(walaRes.cg, walaRes.hg, walaRes.hm, walaRes.cha) {
   
   override def execute(s : SSAInstruction, qry : Qry, n : CGNode) : List[Qry] = s match {
+
+    case i : SSAGetInstruction if !i.isStatic && ClassUtil.isInnerClassThis(i.getDeclaredField) =>
+      PtUtil.getConstraintEdge(Var.makeLPK(i.getDef, n, hm), qry.localConstraints) match {
+        case Some(LocalPtEdge(_, p@PureVar(_))) if qry.isNull(p) =>
+          // have x == null and x = y.this$0 (or similar). reading from this$0 will never return null without bytecode
+          // editor magic (or order of initialization silliness)--refute
+          if (NullDereferenceTransferFunctions.DEBUG) println("Refuted by read from inner class this!")
+          Nil
+        case _ => super.execute(s, qry, n)
+      }
     case i : SSAFieldAccessInstruction if !i.isStatic() => // x = y.f or y.f = x
       PtUtil.getConstraintEdge(Var.makeLPK(i.getRef(), n, hm), qry.localConstraints) match {        
         case Some(LocalPtEdge(_, p@PureVar(_))) if qry.isNull(p) =>

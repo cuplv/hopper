@@ -12,11 +12,10 @@ import com.ibm.wala.types.{MethodReference, TypeReference}
 import com.ibm.wala.util.graph.dominators.Dominators
 import com.twitter.util.LruMap
 import edu.colorado.hopper.executor.UnstructuredSymbolicExecutor._
-import edu.colorado.hopper.state.{InvariantMap, MinSet, Path, Qry}
-import edu.colorado.walautil._
-import edu.colorado.walautil.WalaBlock
-import WalaBlock.{fromISSABasicBlock, fromWalaBlock}
+import edu.colorado.hopper.state._
 import edu.colorado.thresher.core.Options
+import edu.colorado.walautil.WalaBlock.{fromISSABasicBlock, fromWalaBlock}
+import edu.colorado.walautil.{WalaBlock, _}
 
 import scala.collection.JavaConversions.{asScalaBuffer, asScalaIterator, asScalaSet, collectionAsScalaIterable, mapAsJavaMap}
 
@@ -108,48 +107,52 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
     tf.handleJavaMagicMethod(i, caller, paths) match {
       case Some(res) => res
       case None =>
-      val callees = cg.getPossibleTargets(caller, i.getCallSite())      
-      if (callees.isEmpty()) {
-        // callee is a native method or cannot be resolved for some reason. drop any retval constraints we have
-        paths.foreach(p => p.dropReturnValueConstraints(i, caller, tf))
-        (List.empty[Path], paths)
-      } else paths.foldLeft (List.empty[Path], List.empty[Path]) ((pair, p) =>
-        callees.foldLeft (pair) ((pair, callee) => {         
-          val calleePath = p.deepCopy
-          if (PRINT_IR) println(callee.getIR())
-          val (enterPaths, skipPaths) = pair
+        val callees = cg.getPossibleTargets(caller, i.getCallSite())
+        if (callees.isEmpty()) {
+          //if (DEBUG) println("Dropping retval constraint because we have no targets")
+          if (true) println("Dropping retval constraint and skipping because we have no targets")
+          // callee is a native method or cannot be resolved for some reason. drop any retval constraints we have
+          paths.foreach(p => p.dropReturnValueConstraints(i, caller, tf))
+          (List.empty[Path], paths)
+        } else paths.foldLeft (List.empty[Path], List.empty[Path]) ((pair, p) =>
+          callees.foldLeft (pair) ((pair, callee) => {
+            val calleePath = p.deepCopy
+            if (PRINT_IR) println(callee.getIR())
+            val (enterPaths, skipPaths) = pair
 
-          // this checks if the calls System.exit() directly.
-          // TODO: for maximal precision, we might want to check if System.exit() can be called transitively. don't want
-          // to try this without evaluating it, though
-          def mayDirectlyCallExitMethod() : Boolean = 
-            (cg.getSuccNodes(callee).foldLeft (Set.empty[MethodReference]) ((s, n) => s + n.getMethod().getReference())).contains(Path.SYSTEM_EXIT)
+            // this checks if the calls System.exit() directly.
+            // TODO: for maximal precision, we might want to check if System.exit() can be called transitively. don't want
+            // to try this without evaluating it, though
+            def mayDirectlyCallExitMethod() : Boolean =
+              (cg.getSuccNodes(callee).foldLeft (Set.empty[MethodReference]) ((s, n) =>
+                s + n.getMethod().getReference())).contains(Path.SYSTEM_EXIT)
 
-          if (calleePath.isDispatchFeasible(i, caller, callee, tf) && callee.getMethod().getReference() != Path.SYSTEM_EXIT)            
-            if (Path.methodBlacklistContains(callee.getMethod())) { // skip method if it is in our blacklist
-              calleePath.dropReturnValueConstraints(i, caller, tf)
-              (enterPaths, if (skipPaths.contains(calleePath)) skipPaths else calleePath :: skipPaths)
-            } else if (calleePath.callStackSize >= Options.MAX_CALLSTACK_DEPTH ||
-                       callee.getIR() == null ||
-                       callee.equals(caller)) {
-               if (DEBUG) println("skipping call to " + callee.getMethod.getName() + " due to " +
-                   (if (calleePath.callStackSize >= Options.MAX_CALLSTACK_DEPTH) "depth-out" else "blacklist") +
-                   "; max depth is " + Options.MAX_CALLSTACK_DEPTH)
-                calleePath.dropConstraintsProduceableInCall(i, caller, callee, tf)
+            if (calleePath.isDispatchFeasible(i, caller, callee, tf) &&
+                callee.getMethod().getReference() != Path.SYSTEM_EXIT)
+              if (Path.methodBlacklistContains(callee.getMethod())) { // skip method if it is in our blacklist
+                calleePath.dropReturnValueConstraints(i, caller, tf)
                 (enterPaths, if (skipPaths.contains(calleePath)) skipPaths else calleePath :: skipPaths)
-              } else if (calleePath.isCallRelevant(i, caller, callee, tf) || mayDirectlyCallExitMethod) 
-                // calling enterCallee pushes callee onto call stack
-                (if (calleePath.enterCallee(i, callee, tf)) calleePath :: enterPaths else enterPaths, skipPaths) 
-              else {
-                if (DEBUG) println("callee not relevant; skipping. skip paths have " + skipPaths.size )
-                (enterPaths, if (skipPaths.contains(calleePath)) skipPaths else calleePath :: skipPaths) 
-              } // callee feasible, but not relevant; skip it
-          else { 
-            if (DEBUG) println("refuted by bad dispatch or call to System.exit()!")
-            (enterPaths, skipPaths) 
-          } 
-        })
-      )
+              } else if (calleePath.callStackSize >= Options.MAX_CALLSTACK_DEPTH ||
+                         callee.getIR() == null ||
+                         callee.equals(caller)) {
+                if (DEBUG) println("skipping call to " + callee.getMethod.getName() + " due to " +
+                     (if (calleePath.callStackSize >= Options.MAX_CALLSTACK_DEPTH) "depth-out" else "blacklist") +
+                     "; max depth is " + Options.MAX_CALLSTACK_DEPTH)
+                  calleePath.dropConstraintsProduceableInCall(i, caller, callee, tf)
+                  (enterPaths, if (skipPaths.contains(calleePath)) skipPaths else calleePath :: skipPaths)
+                } else if (calleePath.isCallRelevant(i, caller, callee, tf) || mayDirectlyCallExitMethod)
+                  // calling enterCallee pushes callee onto call stack
+                  (if (calleePath.enterCallee(i, callee, tf)) calleePath :: enterPaths else enterPaths, skipPaths)
+                else {
+                  if (DEBUG) println("callee not relevant; skipping. skip paths have " + skipPaths.size )
+                  (enterPaths, if (skipPaths.contains(calleePath)) skipPaths else calleePath :: skipPaths)
+                } // callee feasible, but not relevant; skip it
+            else {
+              if (DEBUG) println("refuted by bad dispatch or call to System.exit()!")
+              (enterPaths, skipPaths)
+            }
+          })
+        )
     }
   }
   
@@ -175,12 +178,10 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
             if (DEBUG)
               println(s"Entering call ${instr.getDeclaredTarget().getName()} from ${node.getMethod().getName()} full names ${ClassUtil.pretty(instr.getDeclaredTarget())} from ${ClassUtil.pretty(node)}")
             val paths = executeBackwardWhile(enterPaths, p => p.callStackSize != initSize, skipPaths)
-
             if (DEBUG)
               println(s"Returning from call to ${ClassUtil.pretty(instr.getDeclaredTarget())} back to ${ClassUtil.pretty(node)}; have ${paths.size} paths.")
             paths
-          }
-          else {
+          } else {
             if (DEBUG) println(s"decided to skip call $instr; have ${skipPaths.size}")
             skipPaths
           }
