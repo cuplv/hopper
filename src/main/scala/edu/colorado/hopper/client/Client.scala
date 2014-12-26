@@ -182,7 +182,7 @@ abstract class Client(appPath : String, libPath : Option[String], mainClass : St
     }
 
     if (addJavaLibs) getJVMLibFile match {
-      // add core Java libraries      
+      // add core Java libraries
       case Some(libFile) =>
         if (DEBUG) println(s"Using JVM lib file $libFile")
         analysisScope.addToScope(analysisScope.getPrimordialLoader(), new JarFile(libFile))
@@ -199,7 +199,6 @@ abstract class Client(appPath : String, libPath : Option[String], mainClass : St
     analysisScope
   }
 
-  // TODO: eliminate reference to options here? make WALA regression exclusions the default?
   def setExclusions(analysisScope : AnalysisScope) : Unit = {
     // set exclusions if appropriate
     val exclusionsFile = new File(Options.EXCLUSIONS)

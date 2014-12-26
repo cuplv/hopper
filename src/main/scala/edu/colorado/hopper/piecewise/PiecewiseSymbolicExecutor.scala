@@ -29,13 +29,17 @@ trait PiecewiseSymbolicExecutor extends UnstructuredSymbolicExecutor {
   // exposed to allow subclasses to eliminate or conditionalize the unproduceable constraint check
   def hasUnproduceableConstraint(p : Path) : Boolean = rr.hasUnproduceableConstraint(p)
 
+  final def forkToPredecessorBlocksNoJump(instrPaths : List[Path], startBlk : ISSABasicBlock, loopHeader : Option[ISSABasicBlock],
+                                          ir : IR, passPaths : List[Path], failPaths : List[Path], test : Path => Boolean) =
+    super.forkToPredecessorBlocks(instrPaths, startBlk, loopHeader, ir, passPaths, failPaths, test)
+
   override def forkToPredecessorBlocks(instrPaths : List[Path], startBlk : ISSABasicBlock, loopHeader : Option[ISSABasicBlock],
                                        ir : IR, passPaths : List[Path], failPaths : List[Path], test : Path => Boolean) =
    // disallowing nested jumps for now
    if (instrPaths.forall(p => hasUnproduceableConstraint(p) || (!p.isInJump && piecewiseJumpRefuted(p))))
      (passPaths, failPaths)
    else
-     super.forkToPredecessorBlocks(instrPaths, startBlk, loopHeader, ir, passPaths, failPaths, test)
+     forkToPredecessorBlocksNoJump(instrPaths, startBlk, loopHeader, ir, passPaths, failPaths, test)
   
   var piecewiseInvMap = new InvariantMap[(CGNode,WalaBlock,Int)]
   
@@ -130,14 +134,13 @@ trait PiecewiseSymbolicExecutor extends UnstructuredSymbolicExecutor {
   // TODO: cache sets of constraints we've already checked
   // match the first invariant template that we can
   /** @return callback to be called on failure of jump if we should jump, None otherwise */
-  private def shouldJump(p : Path) : Option[(Path, Qry => Boolean, Unit => Any)] =
+  def shouldJump(p : Path) : Option[(Path, Qry => Boolean, Unit => Any)] =
     // TODO: we don't allow nested jumps now, can lift this later. really, just don't want to jump to the same spot
     if (!p.qry.hasConstraint || p.isClinitPath(cg) || p.isInJump) None
     else matchesInvariantTemplate(p)
   
   // TODO: extract InvariantTemplate to a class
-  val templates : List[Path => Option[(Path, Qry => Boolean, Unit => Any)]] = 
-    //List(objectInvariantTemplate)
+  val templates : List[Path => Option[(Path, Qry => Boolean, Unit => Any)]] =
     List(objectInvariantTemplate, contextSensitiveTemplate)
   
   /** @return callback to be called on failure of jump if we found a match, None otherwise */

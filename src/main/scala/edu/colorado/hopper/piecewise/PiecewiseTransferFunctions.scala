@@ -9,7 +9,7 @@ import com.ibm.wala.util.graph.traverse.{BFSPathFinder, DFS}
 import edu.colorado.hopper.executor.TransferFunctions
 import edu.colorado.hopper.executor.TransferFunctions._
 import edu.colorado.hopper.piecewise.PiecewiseTransferFunctions._
-import edu.colorado.hopper.state.{LocalVar, Qry, Var}
+import edu.colorado.hopper.state.Qry
 import edu.colorado.thresher.core.Options
 import edu.colorado.walautil.{ClassUtil, GraphUtil}
 
@@ -74,15 +74,8 @@ class PiecewiseTransferFunctions(cg : CallGraph, hg : HeapGraph[InstanceKey], hm
       }))
     }
   }
-  
-  override def isCallRelevant(i : SSAInvokeInstruction, caller : CGNode, callee : CGNode, qry : Qry) : Boolean = {    
-    if (i.hasDef()) {
-      val lhs = LocalVar(Var.makeLPK(i.getDef(), qry.node, hm))
-      if (qry.localConstraints.exists(e => e.src == lhs)) {
-        println(s"Retval relevant for call from ${ClassUtil.pretty(caller)}")
-        true // retval relevant      
-      } else doesCalleeModifyHeap(callee, qry)
-    } else doesCalleeModifyHeap(callee, qry)
-  }
-  
+
+  override def isCallRelevant(i : SSAInvokeInstruction, caller : CGNode, callee : CGNode, qry : Qry) : Boolean =
+    isRetvalRelevant(i, caller, qry) || doesCalleeModifyHeap(callee, qry)
+
 }

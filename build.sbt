@@ -6,6 +6,8 @@ organization := "University of Colorado Boulder"
 
 scalaVersion := "2.10.2"
 
+offline := true
+
 scalacOptions ++= Seq("-deprecation", "-feature")
 
 resolvers += "Local Maven Repository" at "file:///"+Path.userHome.absolutePath+"/.m2/repository"

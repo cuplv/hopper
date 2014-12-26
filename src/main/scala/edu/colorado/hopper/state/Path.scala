@@ -327,12 +327,6 @@ class Path(val qry : Qry, var lastBlk : WalaBlock = null,
     callStack.top.blk = newBlk
     callStack.top.index = newBlk.size - 1
   }
-
-  def enterCallee(i : SSAInvokeInstruction, callee : CGNode, tf : TransferFunctions) : Boolean = {
-    // TODO: for testing qry!
-    tf.enterCallee(i, qry, node, callee)
-    //qry.enterCall(i, callee, oldPath)
-  }
   
   def addConstraintFromConditional(i : SSAConditionalBranchInstruction, isThenBranch : Boolean, tf : TransferFunctions) : Boolean = {
     val res0 = tf.executeCond(i, qry, node, isThenBranch)

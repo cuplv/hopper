@@ -487,59 +487,69 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
       case _ => true // no relevant edge
     }
   }
-  
-  /** perform parameter binding and call stack manipulation associated with making a call to @param callee from
-    * @param caller via the instruction @param call */
-  def enterCallee(call : SSAInvokeInstruction, qry : Qry, caller : CGNode, callee : CGNode) : Boolean = {
+
+  /** @return Some(calleeConstraints) if binding succeeded, None if binding caused refutation */
+  def tryBindReturnValue(call : SSAInvokeInstruction, qry : Qry, caller : CGNode,
+                         callee : CGNode) : Option[MSet[LocalPtEdge]] = {
     val calleeLocalConstraints = Util.makeSet[LocalPtEdge]
-    // bind return value (if needed)
     if (call.hasDef) // x = call m(a, b, ...)
       getConstraintEdgeForDef(call, qry.localConstraints, caller) match {
         case Some(edge) => // found return value in constraints
-          qry.removeLocalConstraint(edge) // remove x -> A constraint 
+          qry.removeLocalConstraint(edge) // remove x -> A constraint
           // add ret_callee -> A constraint
-          calleeLocalConstraints += PtEdge.make(Var.makeReturnVar(callee, hm), edge.snk)                    
+          calleeLocalConstraints += PtEdge.make(Var.makeReturnVar(callee, hm), edge.snk)
         case None => () // return value not in constraints, no need to do anything
       }
 
-    val tbl = caller.getIR().getSymbolTable()
-    assert(call.isStatic() || !tbl.isNullConstant(call.getUse(0))) // TODO: refute based on null dispatch-- or is this done elsewhere?
+    Some(calleeLocalConstraints)
+  }
+  
+  /** perform parameter binding and call stack manipulation associated with making a call to @param callee from
+    * @param caller via the instruction @param call */
+  def enterCallee(call : SSAInvokeInstruction, qry : Qry, caller : CGNode, callee : CGNode) : Boolean =
+    tryBindReturnValue(call, qry, caller, callee) match {
+      case Some(calleeLocalConstraints) =>
+        val tbl = caller.getIR().getSymbolTable()
+        // TODO: refute based on null dispatch-- or should this be done elsewhere?
+        assert(call.isStatic() || !tbl.isNullConstant(call.getUse(0)))
 
-    // TODO: add contextual constraints if we don't already have a constraint on the receiver
-    // bind actuals of caller to formals of callee: add constraints m-1 -> a, m-2 -> b, etc.
-    for (i <- 0 to call.getNumberOfUses - 1) {
-      val (actualNum, formalNum) = (call.getUse(i), i + 1) 
-      val formalLPK = Var.makeLPK(formalNum, callee, hm)
-      if (tbl.isConstant(actualNum)) { // actual is a constant c--we should bind it
-        val paramType = callee.getMethod().getParameterType(i)
-        val pureVar = Pure.makePureVar(paramType)
-        // add m-i -> p-? constraint
-        calleeLocalConstraints += PtEdge.make(formalLPK, pureVar)
-        // add p-? == c pure constraint
-        qry.addPureConstraint(Pure.makeEqConstraint(pureVar, Pure.makePureVal(tbl, actualNum)))
-      } else getConstraintEdge(Var.makeLPK(actualNum, caller, hm), qry.localConstraints) match {
-        case Some(LocalPtEdge(_, actualVar@ObjVar(_))) => // bind formalLPK to actualVar \cap interVar
-          getPt(formalLPK, hg) match {
-            case rgn if rgn.isEmpty => return false // refuted by null parameter when we needed actualVar
-            case rgn => qry.intersectAndSubstitute(actualVar, rgn, hg) match {
-              case Some(interVar) => calleeLocalConstraints += PtEdge.make(formalLPK, interVar)
-              case None => return false
-            }
+        // TODO: add contextual constraints if we don't already have a constraint on the receiver
+        // bind actuals of caller to formals of callee: add constraints m-1 -> a, m-2 -> b, etc.
+        for (i <- 0 to call.getNumberOfUses - 1) {
+          val (actualNum, formalNum) = (call.getUse(i), i + 1)
+          val formalLPK = Var.makeLPK(formalNum, callee, hm)
+          if (tbl.isConstant(actualNum)) { // actual is a constant c--we should bind it
+            val paramType = callee.getMethod().getParameterType(i)
+            val pureVar = Pure.makePureVar(paramType)
+            // add m-i -> p-? constraint
+            calleeLocalConstraints += PtEdge.make(formalLPK, pureVar)
+            // add p-? == c pure constraint
+            qry.addPureConstraint(Pure.makeEqConstraint(pureVar, Pure.makePureVal(tbl, actualNum)))
+          } else getConstraintEdge(Var.makeLPK(actualNum, caller, hm), qry.localConstraints) match {
+            case Some(LocalPtEdge(_, actualVar@ObjVar(_))) => // bind formalLPK to actualVar \cap interVar
+              getPt(formalLPK, hg) match {
+                case rgn if rgn.isEmpty => return false // refuted by null parameter when we needed actualVar
+                case rgn => qry.intersectAndSubstitute(actualVar, rgn, hg) match {
+                  case Some(interVar) => calleeLocalConstraints += PtEdge.make(formalLPK, interVar)
+                  case None => return false
+                }
+              }
+            case Some(LocalPtEdge(_, p@PureVar(_))) => // TODO: check for null/non-null here?
+              calleeLocalConstraints += PtEdge.make(formalLPK, p)
+            case None =>
+              //if (!call.isStatic() && formalNum == 1) {
+                // special case: it's sound to bind the receiver to its pts-to value since we know it can't be null
+                // (else we'd have null dispatch) BUT, we'd have to consider aliasing case splits, which we don't
+                // necessarily want to do
+                // calleeLocalConstraints += PtEdge.make(formalVar, ObjVar(getPt(Var.makeLPK(actualNum, caller, hm), hg)))
+              //} // else, don't know anything about the value of this argument; don't bind it
           }
-        case Some(LocalPtEdge(_, p@PureVar(_))) => // TODO: check for null/non-null here? 
-          calleeLocalConstraints += PtEdge.make(formalLPK, p)
-        case None =>
-          //if (!call.isStatic() && formalNum == 1) {
-            // special case: it's sound to bind the receiver to its pts-to value since we know it can't be null (else we'd have null dispatch)
-            // BUT, we'd have to consider aliasing case splits, which we don't necessarily want to do
-            //calleeLocalConstraints += PtEdge.make(formalVar, ObjVar(getPt(Var.makeLPK(actualNum, caller, hm), hg)))
-          //} // else, don't know anything about the value of this argument; don't bind it
-      }      
-    }
+        }
 
-    qry.callStack.push(CallStackFrame.make(callee, calleeLocalConstraints, call))
-    true
-  }  
+        qry.callStack.push(CallStackFrame.make(callee, calleeLocalConstraints, call))
+        true
+      case None => false // refuted by return value binding
+    }
   
   // TODO: flush unused pure constraints
   def returnToCallerNormal(qry : Qry) : Boolean = {
@@ -549,21 +559,19 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
       case Some(callInstr) => callInstr
       case other => sys.error("Expecting invoke instr as part of frame " + calleeFrame + "; got nothing")
     }
-    val callee = calleeFrame.node
-  
+
     bindFormalsToActuals(qry, callInstr, qry.node, calleeFrame.node, qry.localConstraints, calleeFrame.localConstraints)        
   }
   
   // TODO: flush unused pure constraints
   /** return from @param qry with empty call stack to @param caller */
-  def returnToCallerContextFree(call : SSAInvokeInstruction, qry : Qry, caller : CGNode, callBlk : ISSABasicBlock, callLine : Int) : Boolean = {
+  def returnToCallerContextFree(call : SSAInvokeInstruction, qry : Qry, caller : CGNode, callBlk : ISSABasicBlock,
+                                callLine : Int) : Boolean = {
     require(qry.callStack.size == 1, "Call stack should have one frame, has " + qry.callStack.size)
-    //println("qry " + qry.id + " before ret from " + ClassUtil.pretty(qry.node) + " to " + ClassUtil.pretty(caller) + " qry is " + qry)
     // TODO: need to do anything with return value here?
     val callerLocalConstraints = Util.makeSet[LocalPtEdge]
     val calleeFrame = qry.callStack.pop
     qry.callStack.push(new CallStackFrame(caller, callerLocalConstraints, callBlk, callLine)) // add the new stack frame
-    val callee = calleeFrame.node
     val calleeConstraints = calleeFrame.localConstraints
     
     /*
@@ -588,7 +596,8 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
   
   /** bind formals of callee to actuals of caller */
   private def bindFormalsToActuals(qry : Qry, call : SSAInvokeInstruction, caller : CGNode, callee : CGNode, 
-                                   callerConstraints : MSet[LocalPtEdge], calleeConstraints : MSet[LocalPtEdge]) : Boolean = {
+                                   callerConstraints : MSet[LocalPtEdge],
+                                   calleeConstraints : MSet[LocalPtEdge]) : Boolean = {
     if (!call.isStatic()) {
       val thisLPK = Var.makeLPK(1, callee, hm)
       
@@ -1805,16 +1814,15 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
       case m => None
     }
 
-  def isCallRelevant(i : SSAInvokeInstruction, caller : CGNode, callee : CGNode, qry : Qry) : Boolean = {
-    def isRetvalRelevant(i : SSAInvokeInstruction, caller : CGNode, qry : Qry) =
-      i.hasDef() && {
-        val lhs = LocalVar(Var.makeLPK(i.getDef(), caller, hm))
-        qry.localConstraints.exists(e => e.src == lhs)
-      }
+  def isRetvalRelevant(i : SSAInvokeInstruction, caller : CGNode, qry : Qry) =
+    i.hasDef() && {
+      val lhs = LocalVar(Var.makeLPK(i.getDef(), caller, hm))
+      qry.localConstraints.exists(e => e.src == lhs)
+    }
 
+  def isCallRelevant(i : SSAInvokeInstruction, caller : CGNode, callee : CGNode, qry : Qry) : Boolean =
     isRetvalRelevant(i, caller, qry) ||
-      dropCallConstraintsOrCheckCallRelevant(callee, qry.heapConstraints, dropConstraints = false, loopDrop = false, qry)
-  }  
+    dropCallConstraintsOrCheckCallRelevant(callee, qry.heapConstraints, dropConstraints = false, loopDrop = false, qry)
   
   private def dropCallConstraints(qry : Qry, callee : CGNode, 
     modRef : java.util.Map[CGNode,com.ibm.wala.util.intset.OrdinalSet[PointerKey]], loopDrop : Boolean) : Unit = 

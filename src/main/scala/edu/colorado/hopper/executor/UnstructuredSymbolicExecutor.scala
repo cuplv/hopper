@@ -132,17 +132,20 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
               if (Path.methodBlacklistContains(callee.getMethod())) { // skip method if it is in our blacklist
                 calleePath.dropReturnValueConstraints(i, caller, tf)
                 (enterPaths, if (skipPaths.contains(calleePath)) skipPaths else calleePath :: skipPaths)
-              } else if (calleePath.callStackSize >= Options.MAX_CALLSTACK_DEPTH ||
-                         callee.getIR() == null ||
-                         callee.equals(caller)) {
-                if (DEBUG) println("skipping call to " + callee.getMethod.getName() + " due to " +
-                     (if (calleePath.callStackSize >= Options.MAX_CALLSTACK_DEPTH) "depth-out" else "blacklist") +
-                     "; max depth is " + Options.MAX_CALLSTACK_DEPTH)
+              } else if (calleePath.callStackSize >= Options.MAX_CALLSTACK_DEPTH) {// || callee == caller) {
+                if (DEBUG)
+                  println("skipping call to " + callee.getMethod.getName() + " due to " +
+                          (if (calleePath.callStackSize >= Options.MAX_CALLSTACK_DEPTH) "depth-out"
+                           else if (callee.getIR == null) "null IR"
+                           else if (callee == caller) "recursion"
+                           else "blacklist")
+                         )
                   calleePath.dropConstraintsProduceableInCall(i, caller, callee, tf)
                   (enterPaths, if (skipPaths.contains(calleePath)) skipPaths else calleePath :: skipPaths)
                 } else if (calleePath.isCallRelevant(i, caller, callee, tf) || mayDirectlyCallExitMethod)
                   // calling enterCallee pushes callee onto call stack
-                  (if (calleePath.enterCallee(i, callee, tf)) calleePath :: enterPaths else enterPaths, skipPaths)
+                  (if (tf.enterCallee(i, calleePath.qry, calleePath.node, callee)) calleePath :: enterPaths else enterPaths,
+                   skipPaths)
                 else {
                   if (DEBUG) println("callee not relevant; skipping. skip paths have " + skipPaths.size )
                   (enterPaths, if (skipPaths.contains(calleePath)) skipPaths else calleePath :: skipPaths)
@@ -259,7 +262,6 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
   def getCallers(cg : CallGraph, callee : CGNode) : Iterable[CGNode] = cg.getPredNodes(callee).toIterable
   
   def returnFromCall(p : Path) : Iterable[Path] = {
-    //val callee = p.popCallStack.node // get rid of current stack frame
     val callee = p.callStack.top.node // get rid of current stack frame
     
     if (p.callStackSize == 1) {
@@ -277,7 +279,6 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
            // create a path for each caller and call site of the current method 
            if (MIN_DEBUG) println("caller: " + ClassUtil.pretty(caller))       
            if (callerInvMap.pathEntailsInv((caller, callee), callerPath)) {
-           //if (callerInvMap.pathEntailsInv((caller, callee), p) && !p.isInJump) {
              if (Options.PRINT_REFS) println("Refuted by caller summary.")
              lst // refuted by summary
            } else {  

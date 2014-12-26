@@ -30,7 +30,7 @@ object RelevanceRelation {
   // should we do a local dominator analysis to cut down on the number of relevant instructions to fork to?
   // if this is enabled, we are flow-sensitive intraprocedurally
   val DO_DOMINATOR_CHECK = true
-  val DEBUG = false
+  val DEBUG = true
   val CACHE_SIZE = 100 
 }
 
@@ -303,17 +303,6 @@ class RelevanceRelation(val cg : CallGraph, val hg : HeapGraph[InstanceKey], val
       val res = !prodMap.contains(e) && !mayBeArrayContentsConstraintHoldingDefaultValue(e, qry)
       if (res && Options.PRINT_REFS) println("Refuted by unproduceable constraint " + e)
       res
-      /*
-      res || { e match {
-        case e : HeapPtEdge =>
-          val timer = new Timer
-          timer.start
-          val res = flowSensitiveRefuted(p, e, prodMap)
-          timer.stop
-          println("Flow-insensitive check took " + timer.time)
-          res
-        case _ => false
-      }}*/
     })
   }
   
@@ -450,7 +439,7 @@ class RelevanceRelation(val cg : CallGraph, val hg : HeapGraph[InstanceKey], val
       val prods = if (getMods) getModifiers(e, q) else getProducers(e, q)
       if (DEBUG) {
         println(prods.size + " producers for " + e + ": ")
-        prods.foreach(pair => { ClassUtil.pp_instr(pair._2, pair._1.getIR()); println(" in " + ClassUtil.pretty(pair._1)) }) 
+        prods.foreach(pair => { ClassUtil.pp_instr(pair._2, pair._1.getIR()); println(" in " + ClassUtil.pretty(pair._1)) })
       }
       if (prods.isEmpty) map else map + (e -> prods)
     })  
