@@ -69,7 +69,7 @@ class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelCli
 
       if (call.hasDef) // x = call m(a, b, ...)
         getConstraintEdgeForDef(call, qry.localConstraints, caller) match {
-          case Some(LocalPtEdge(_, p@PureVar(_))) if calleeHasNonNullAnnotation && qry.isNull(p) =>
+          case Some(LocalPtEdge(_, p@PureVar(t))) if calleeHasNonNullAnnotation && t.isReferenceType && qry.isNull(p) =>
             if (Options.PRINT_REFS) println(s"Refuted by Nit annotation on ${ClassUtil.pretty(callee)}")
             None
           case Some(edge) => // found return value in constraints
@@ -144,7 +144,6 @@ class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelCli
           else true // soundly assume we got a witness
       }
     print(s"Deref #$count "); ClassUtil.pp_instr(i, ir); println(s" at source line $srcLine of ${ClassUtil.pretty(n)} can fail? $foundWitness")
-    sys.error("exitiing")
     foundWitness
   }
 
