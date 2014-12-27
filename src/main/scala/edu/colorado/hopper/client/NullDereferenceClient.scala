@@ -154,7 +154,7 @@ class NullDereferenceClient(appPath : String, libPath : Option[String], mainClas
 }
 
 object NullDereferenceTransferFunctions {
-  private val DEBUG = true
+  private val DEBUG = false
 }
 
 class NullDereferenceTransferFunctions(walaRes : WalaAnalysisResults) 

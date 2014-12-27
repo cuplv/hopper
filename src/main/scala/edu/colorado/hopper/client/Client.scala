@@ -24,7 +24,7 @@ import edu.colorado.walautil.{ClassUtil, Timer, Util, WalaAnalysisResults}
 import scala.collection.JavaConversions.{asJavaCollection, collectionAsScalaIterable, iterableAsScalaIterable}
 
 object Client {
-  protected val DEBUG = true
+  protected val DEBUG = false
 }
 
 class WrappedWalaAnalysisResults(override val cg : CallGraph, override val pa : PointerAnalysis[InstanceKey])
