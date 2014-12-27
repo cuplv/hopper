@@ -15,6 +15,7 @@ import edu.colorado.hopper.client.NullDereferenceTransferFunctions
 import edu.colorado.hopper.executor.DefaultSymbolicExecutor
 import edu.colorado.hopper.piecewise.{PiecewiseTransferFunctions, AndroidRelevanceRelation, DefaultPiecewiseSymbolicExecutor}
 import edu.colorado.hopper.state._
+import edu.colorado.hopper.util.PtUtil
 import edu.colorado.thresher.core.Options
 import edu.colorado.walautil.Types.MSet
 import edu.colorado.walautil.{Util, ClassUtil, IRUtil}
@@ -25,9 +26,39 @@ import scala.xml.XML
 class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelClient(appPath, androidLib) {
 
   lazy val rr = new AndroidRelevanceRelation(walaRes.cg, walaRes.hg, walaRes.hm, walaRes.cha)
-  // TODO: mixin null deref transfer functions and pw transfer functions?
-  //lazy val tf = new NullDereferenceTransferFunctions(walaRes)
+
+  // TODO: mixin null deref transfer functions and pw transfer functions, or otherwise allow code reuse
   lazy val tf = new PiecewiseTransferFunctions(walaRes.cg, walaRes.hg, walaRes.hm, walaRes.cha, rr) {
+
+    override def execute(s : SSAInstruction, qry : Qry, n : CGNode) : List[Qry] = s match {
+
+      case i : SSAGetInstruction if !i.isStatic && ClassUtil.isInnerClassThis(i.getDeclaredField) =>
+        PtUtil.getConstraintEdge(Var.makeLPK(i.getDef, n, hm), qry.localConstraints) match {
+          case Some(LocalPtEdge(_, p@PureVar(_))) if qry.isNull(p) =>
+            // have x == null and x = y.this$0 (or similar). reading from this$0 will never return null without bytecode
+            // editor magic (or order of initialization silliness)--refute
+            if (Options.PRINT_REFS) println("Refuted by read from inner class this!")
+            Nil
+          case _ => super.execute(s, qry, n)
+        }
+      case i : SSAFieldAccessInstruction if !i.isStatic() => // x = y.f or y.f = x
+        PtUtil.getConstraintEdge(Var.makeLPK(i.getRef(), n, hm), qry.localConstraints) match {
+          case Some(LocalPtEdge(_, p@PureVar(_))) if qry.isNull(p) =>
+            // y is null--we could never have reached the current program point because executing this instruction would have thrown a NPE
+            if (Options.PRINT_REFS) println("Refuted by dominating null check!")
+            Nil
+          case _ => super.execute(s, qry, n)
+        }
+      case i : SSAInvokeInstruction if !i.isStatic() => // x = y.m(...)
+        PtUtil.getConstraintEdge(Var.makeLPK(i.getReceiver(), n, hm), qry.localConstraints) match {
+          case Some(LocalPtEdge(_, p@PureVar(_))) if qry.isNull(p) =>
+            // y is null--we could never have reached the current program point because executing this instruction would have thrown a NPE
+            if (Options.PRINT_REFS) println("Refuted by dominating null check!")
+            Nil
+          case _ => super.execute(s, qry, n)
+        }
+      case _ => super.execute(s, qry, n)
+    }
 
     private val nonNullRetMethods = parseNitNonNullAnnotations()
 
