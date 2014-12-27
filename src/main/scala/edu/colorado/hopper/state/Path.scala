@@ -328,15 +328,11 @@ class Path(val qry : Qry, var lastBlk : WalaBlock = null,
     callStack.top.index = newBlk.size - 1
   }
   
-  def addConstraintFromConditional(i : SSAConditionalBranchInstruction, isThenBranch : Boolean, tf : TransferFunctions) : Boolean = {
-    val res0 = tf.executeCond(i, qry, node, isThenBranch)
-    res0
-  }
+  def addConstraintFromConditional(i : SSAConditionalBranchInstruction, isThenBranch : Boolean, tf : TransferFunctions) : Boolean =
+    tf.executeCond(i, qry, node, isThenBranch)
  
-  def addConstraintFromSwitch(i : SSAConditionalBranchInstruction, tf : TransferFunctions, negated : Boolean = false) : Boolean = {
-    val res0 = tf.executeCond(i, qry, node, !negated)
-    res0
-  }
+  def addConstraintFromSwitch(i : SSAConditionalBranchInstruction, tf : TransferFunctions, negated : Boolean = false) : Boolean =
+    tf.executeCond(i, qry, node, !negated)
 
   def dropLoopProduceableConstraints(loopHeader : ISSABasicBlock, tf : TransferFunctions) : Unit = 
     tf.dropLoopWriteableConstraints(qry, loopHeader, node)

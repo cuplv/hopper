@@ -299,14 +299,22 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
                 if (Pure.isEqualityOp(op)) { // y == null constraint
                   if (!qrySaysNull && Options.PRINT_REFS) println("refuted by nullness in conditional!")
                   qrySaysNull
-                } else {
-                  if (!qrySaysNull) { // y != null constraint
+                } else// y != null constraint
+                  if (!qrySaysNull) {
                     qry.removeLocalConstraint(e)
                     // add y -> ptY constraint to express that y != null
-                    qry.addLocalConstraint(PtEdge.make(e.src, ObjVar(getPt(e.src.key, hg))))
-                  } else if (Options.PRINT_REFS) println("refuted by nullness in conditional!")
-                  !qrySaysNull
-                }  
+                    getPt(e.src.key, hg) match {
+                      case rgn if rgn.isEmpty =>
+                        if (Options.PRINT_REFS) println("refuted by empty points-to set w/ null comparison!")
+                        false
+                      case rgn =>
+                        qry.addLocalConstraint(PtEdge.make(e.src, ObjVar(rgn)))
+                        true
+                    }
+                  } else {
+                    if (Options.PRINT_REFS) println("refuted by nullness in conditional!")
+                    false
+                  }
               } else {
                 val zLPK = Var.makeLPK(useNum, n, hm)
                 if (Pure.isEqualityOp(op)) {
