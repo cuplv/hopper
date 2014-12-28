@@ -5,11 +5,12 @@ import java.io.File
 import com.ibm.wala.analysis.pointers.HeapGraph
 import com.ibm.wala.classLoader.IClass
 import com.ibm.wala.ipa.callgraph.{CallGraph, CGNode}
-import com.ibm.wala.ipa.callgraph.propagation.HeapModel
+import com.ibm.wala.ipa.callgraph.propagation.{InstanceKey, HeapModel}
 import com.ibm.wala.ipa.cha.IClassHierarchy
 import com.ibm.wala.ssa._
 import com.ibm.wala.types.MethodReference
 import com.ibm.wala.util.graph.dominators.Dominators
+import com.ibm.wala.util.graph.traverse.DFS
 import edu.colorado.droidel.driver.AbsurdityIdentifier
 import edu.colorado.hopper.client.NullDereferenceTransferFunctions
 import edu.colorado.hopper.executor.DefaultSymbolicExecutor
@@ -18,7 +19,7 @@ import edu.colorado.hopper.state._
 import edu.colorado.hopper.util.PtUtil
 import edu.colorado.thresher.core.Options
 import edu.colorado.walautil.Types.MSet
-import edu.colorado.walautil.{Util, ClassUtil, IRUtil}
+import edu.colorado.walautil.{Timer, Util, ClassUtil, IRUtil}
 
 import scala.collection.JavaConversions._
 import scala.xml.XML
@@ -30,8 +31,41 @@ class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelCli
   // TODO: mixin null deref transfer functions and pw transfer functions, or otherwise allow code reuse
   lazy val tf = new PiecewiseTransferFunctions(walaRes.cg, walaRes.hg, walaRes.hm, walaRes.cha, rr) {
 
-    override def execute(s : SSAInstruction, qry : Qry, n : CGNode) : List[Qry] = s match {
+    /** @return true if we should add the conditional expression from @param cond as a constraint given that we want to
+      * refute @param qry, false otherwise */
+    def shouldAddConditionalConstraint(cond : SSAConditionalBranchInstruction, qry : Qry, n : CGNode) : Boolean = {
+      val tbl = n.getIR().getSymbolTable()
 
+      val queryInstanceKeys = qry.getAllObjVars.flatMap(o => o.rgn)
+
+      def useMayBeRelevantToQuery(use : Int) : Boolean = !tbl.isConstant(use) && {
+        val lpk = Var.makeLPK(use, n, hm)
+        // the query refers to a local in the query
+        qry.localConstraints.exists(e => e.src.key == lpk) || {
+          // TODO: this does not capture guards enforcing object invariants
+          val lpkReachable = PtUtil.getPt(lpk, hg)
+          // too slow
+          /*val lpkReachable = DFS.getReachableNodes(hg).foldLeft (Set.empty[InstanceKey]) ((s, k) => k match {
+            case k : InstanceKey => s + k
+            case _ => s
+          })*/
+          // the query points at a heap loc reachable in the heap from the local constraint
+          !queryInstanceKeys.intersect(lpkReachable).isEmpty
+        }
+      }
+
+      val shouldAdd = useMayBeRelevantToQuery(cond.getUse(0)) || useMayBeRelevantToQuery(cond.getUse(1))
+      if (!shouldAdd) { print("Not adding cond "); ClassUtil.pp_instr(cond, n.getIR); println(" since it may be irrel") }
+      shouldAdd
+    }
+
+    override def executeCond(cond : SSAConditionalBranchInstruction, qry : Qry, n : CGNode,
+                             isThenBranch : Boolean) : Boolean =
+      // decide whether or not we should keep the condition
+      if (shouldAddConditionalConstraint(cond, qry, n)) super.executeCond(cond, qry, n, isThenBranch)
+      else true
+
+    override def execute(s : SSAInstruction, qry : Qry, n : CGNode) : List[Qry] = s match {
       case i : SSAGetInstruction if !i.isStatic && ClassUtil.isInnerClassThis(i.getDeclaredField) =>
         PtUtil.getConstraintEdge(Var.makeLPK(i.getDef, n, hm), qry.localConstraints) match {
           case Some(LocalPtEdge(_, p@PureVar(_))) if qry.isNull(p) =>
@@ -177,13 +211,6 @@ class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelCli
     print(s"Deref #$count "); ClassUtil.pp_instr(i, ir); println(s" at source line $srcLine of ${ClassUtil.pretty(n)} can fail? $foundWitness")
     foundWitness
   }
-
-  /*def quickNonNullCheck(ir : IR) = {
-    val cfg = ir.getControlFlowGraph
-    val domInfo = Dominators.make(cfg, cfg.entry())
-    cfg.
-
-  }*/
 
   def isEntrypointCallback(n : CGNode) = {
     !ClassUtil.isLibrary(n) && walaRes.cg.getPredNodes(n).exists(n => ClassUtil.isLibrary(n))
