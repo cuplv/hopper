@@ -242,7 +242,7 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
     true
   }
   
-  def executeCond(cond : SSAConditionalBranchInstruction, qry : Qry, n : CGNode, isThenBranch : Boolean) : Boolean = {    
+  def executeCond(cond : SSAConditionalBranchInstruction, qry : Qry, n : CGNode, isThenBranch : Boolean) : Boolean = {
     val tbl = n.getIR().getSymbolTable()
     val (use0, use1) = (cond.getUse(0), cond.getUse(1))
     val op = if (isThenBranch) cond.getOperator else Pure.negateCmpOp(cond.getOperator)
@@ -1565,23 +1565,35 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
                 true
             }
           } else sys.error("non-null constraint")
-        case None =>
+        case None => // no edge x -> _
           val y = Var.makeLPK(s.getVal, n, hm)
-          val yRgn = PtUtil.getPt(y, hg)
-          // TODO: do this for local constraints too?
-          // we will choose to add a constraint on this cast succeeding if the target may-alias something else in our
-          // constraints that has an incompatible type with the cast type T
-          qry.heapConstraints.forall(e => e match {
-            case ObjPtEdge(_, _, o@ObjVar(rgn)) if !rgn.intersect(yRgn).isEmpty && filterByCastType(rgn).isEmpty =>
-              // yRgn and rgn overlap. filter yRgn by type and add x -> ObjVar(yRgn) constraint
-              val filteredYRgn = filterByCastType(yRgn)
-              if (filteredYRgn.isEmpty) false // refuted by definitely failing cast
-              else {
-                qry.addLocalConstraint(PtEdge.make(y, ObjVar(filteredYRgn)))
-                true
-              }
-            case _ => true
-          })
+
+          def filterByRegionAndAddEdge(yRgn : Set[InstanceKey]) : Boolean = {
+            val filteredYRgn = filterByCastType(yRgn)
+            if (filteredYRgn.isEmpty) false // refuted by definitely failing cast
+            else {
+              qry.addLocalConstraint(PtEdge.make(y, ObjVar(filteredYRgn)))
+              true
+            }
+          }
+
+          getConstraintEdge(y, qry.localConstraints) match {
+            case Some(e@LocalPtEdge(_, ObjVar(yRgn))) => // found edge y -> _; filter
+              qry.removeLocalConstraint(e)
+              filterByRegionAndAddEdge(yRgn)
+            case Some(_) => true // TODO: add new y edge here?
+            case None =>
+              val yRgn = PtUtil.getPt(y, hg)
+              // TODO: do this for local constraints too?
+              // we will choose to add a constraint on this cast succeeding if the target may-alias something else in our
+              // constraints that has an incompatible type with the cast type T
+              if (qry.heapConstraints.exists(e => e match {
+                // yRgn and rgn overlap. filter yRgn by type and add x -> ObjVar(yRgn) constraint
+                case ObjPtEdge(_, _, o@ObjVar(rgn)) if !rgn.intersect(yRgn).isEmpty && filterByCastType(rgn).isEmpty => true
+                case _ => false
+              })) filterByRegionAndAddEdge(yRgn)
+              else true
+          }
       }
 
     case s : SSAPiInstruction => // x = pi y for BLK, cause INSTR
