@@ -132,7 +132,7 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
               if (Path.methodBlacklistContains(callee.getMethod())) { // skip method if it is in our blacklist
                 calleePath.dropReturnValueConstraints(i, caller, tf)
                 (enterPaths, if (skipPaths.contains(calleePath)) skipPaths else calleePath :: skipPaths)
-              } else if (calleePath.callStackSize >= Options.MAX_CALLSTACK_DEPTH) {// || callee == caller) {
+              } else if (calleePath.callStackSize >= Options.MAX_CALLSTACK_DEPTH || callee.getIR == null || callee == caller) {
                 if (DEBUG)
                   println("skipping call to " + callee.getMethod.getName() + " due to " +
                           (if (calleePath.callStackSize >= Options.MAX_CALLSTACK_DEPTH) "depth-out"

@@ -11,6 +11,7 @@ import com.ibm.wala.ssa.SSAInvokeInstruction
 
 object CallStackFrame {
   def make(n : CGNode, localConstraints : MSet[LocalPtEdge], callInstr : SSAInvokeInstruction) : CallStackFrame = {
+    require (n.getIR != null, "Can't enter a callee with null IR!")
     val exit = n.getIR().getExitBlock()
     new CallStackFrame(n, localConstraints, exit, exit.getLastInstructionIndex(), Some(callInstr))
   }
