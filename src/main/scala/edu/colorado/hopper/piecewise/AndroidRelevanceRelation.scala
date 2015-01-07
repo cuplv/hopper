@@ -1,6 +1,7 @@
 package edu.colorado.hopper.piecewise
 
 import com.ibm.wala.analysis.pointers.HeapGraph
+import com.ibm.wala.classLoader.IMethod
 import com.ibm.wala.ipa.callgraph.propagation.{HeapModel, InstanceKey}
 import com.ibm.wala.ipa.callgraph.{CGNode, CallGraph}
 import com.ibm.wala.ipa.cha.IClassHierarchy
@@ -34,9 +35,6 @@ class AndroidRelevanceRelation(cg : CallGraph, hg : HeapGraph[InstanceKey], hm :
       case _ => pair
     })*/
 
-
-
-
     constraintProducerMap
   }
 
@@ -51,10 +49,11 @@ class AndroidRelevanceRelation(cg : CallGraph, hg : HeapGraph[InstanceKey], hm :
     false
   }
 
-  // TODO: there's some unstated precondition for being able to call this at all...constraints must be fields of the
+  // TODO: there's some unstated precondition for being able to call this at all for the init/android-specific rules
+  // (clinit rule is fine though)...something like "constraints must be fields of the
   // *same* object instance whose methods we are trying to filter, and writes to fields of that object must be through
-  // the "this" pointer, or something like that. alternatively, the class whose methods are under consideration is one
-  // that is somehow known or proven to have only one instance in existence at a time,
+  // the "this" pointer, or something like that". alternatively, the class whose methods are under consideration is one
+  // that is somehow known or proven to have only one instance in existence at a time.
 
   /** @return true if we can prove that @param toFilter is control-infeasible with respect to @param curNode based on
     * the fact that @param otherRelNodes are also relevant */
@@ -63,42 +62,87 @@ class AndroidRelevanceRelation(cg : CallGraph, hg : HeapGraph[InstanceKey], hm :
       val path = new BFSPathFinder(cg, toFilter, curNode).find()
       // TODO: this is *very* unsound, but need to do it for now to avoid absurd paths. fix CG issues that cause this later
       val reachable =
-        path != null && path.size > 0 && path.exists(n => n != toFilter && n != curNode && !ClassUtil.isLibrary(n)) && path.size < 20
+        path != null && path.size > 0 && path.exists(n => n != toFilter && n != curNode && !ClassUtil.isLibrary(n)) &&
+        path.size < 20
       if (reachable) {
         println(s"can't filter $toFilter since it's reachable from ${ClassUtil.pretty(curNode)}")
         path.foreach(println)
       }
 
+      val curMethod = curNode.getMethod
+      val toFilterMethod = toFilter.getMethod
+      val toFilterClass = toFilterMethod.getDeclaringClass
+
+      // return true if i is guarded by a conditional in
+      def isGuardedByConditional(i : SSAInstruction, n : CGNode) : Boolean =
+        // we do the isGeneratedInstruction check because relevance adds synthetic assignments to default values when
+        // needed, but these instructions don't occur in the IR (and are thus never guarded by a conditional)
+        IRUtil.isGeneratedInstruction(i) ||
+        !CFGUtil.isInConditionalIntraprocedural(n.getIR.getBasicBlockForInstruction(i), n.getIR.getControlFlowGraph)
+
+      // we can filter if toFilter is a constructor o.<init>() and one of otherRelNodes is a method o.m()
+      def canFilterDueToConstructor() : Boolean =
+        toFilterMethod.isInit && nodeProducerMap.keys.exists(n =>
+          n != toFilter && {
+            val m = n.getMethod
+            !m.isInit && !m.isClinit
+            m.getDeclaringClass == toFilterClass
+          } && nodeProducerMap(n).exists(i => isGuardedByConditional(i, n)))
+
+      // similarly, we can filter if toFilter is a class initializer o.<clinit> and one of otherRelNodes is a method o.m()
+      def canFilterDueToClassInit() : Boolean =
+        toFilterMethod.isClinit && nodeProducerMap.keys.exists(n =>
+          n != toFilter && n.getMethod.getDeclaringClass == toFilterClass &&
+          nodeProducerMap(n).exists(i => isGuardedByConditional(i, n)))
+
+      // TODO: implement important Android lifecycle ordering facts here
+      def methodOrderingOk(toFilterMethod : IMethod, relMethod : IMethod, curMethod : IMethod) : Boolean = false
+
+      def canFilterBasedOnMethodOrderingInner(toFilterMethod : IMethod, relInstruction : SSAInstruction,
+                                              relInstructionNode : CGNode, curMethod : IMethod) : Boolean = {
+        // want to return true if toFilterMethod < relInstructionNode.getMethod < curMethod
+        // TODO: allow addition of contextual constraints if caller of relInstruction method matches, but
+        // relInstructionMethod doesn't match directly?
+        val ir = relInstructionNode.getIR
+        val cfg = ir.getControlFlowGraph
+        val instrBlk =
+          if (IRUtil.isGeneratedInstruction(relInstruction)) cfg.entry()
+          else ir.getBasicBlockForInstruction(relInstruction)
+
+
+        // TODO: make this more complicated so that it stops at the harness boundary!
+        def cgNodeFilter(n : CGNode) : Boolean = true
+
+        methodOrderingOk(toFilterMethod, relInstructionNode.getMethod, curMethod) &&
+        !CFGUtil.isInConditionalInterprocedural(instrBlk, relInstructionNode, cg, cgNodeFilter) &&
+        !CFGUtil.isInTryBlockInterprocedural(instrBlk, relInstructionNode, cg, cgNodeFilter)
+      }
+
+      def canFilterDueToMethodOrdering(toFilterMethod : IMethod, curMethod : IMethod) : Boolean =
+        nodeProducerMap.exists(pair => {
+          val (relNode, relInstrs) = pair
+          relInstrs.exists(relInstr =>
+            canFilterBasedOnMethodOrderingInner(toFilterMethod, relInstr, relNode, curMethod))
+        })
+
       // check if there is a path from toFilter to curNode in the call graph; if so, we can't (easily) filter, so don't try
       !reachable && {
         // TODO: what about subclassing? is there something we can do here about superclass constructors without being unsound?
-        val toFilterMethod = toFilter.getMethod
-        val toFilterClass = toFilterMethod.getDeclaringClass
-        val canFiler =
-        // we can filter if toFilter is a constructor o.<init>() and one of otherRelNodes is a method o.m()
+        val canFilter =
+          canFilterDueToConstructor() || canFilterDueToClassInit() ||
+          canFilterDueToMethodOrdering(toFilterMethod, curMethod)
         // TODO: or a callee of o.m(). but this will force us to generalize the conditional check below
-          (toFilterMethod.isInit &&
-            nodeProducerMap.keys.exists(n => n != toFilter && {
-              val m = n.getMethod
-              !m.isInit && !m.isClinit
-              m.getDeclaringClass == toFilterClass
-              // TODO: problem: some i's are synthetic (generated by rel relation) and thus not in the IR for n. these cannot be guarded by conds
-            } && nodeProducerMap(n).exists(i => IRUtil.isGeneratedInstruction(i) || !CFGUtil.isGuardedByConditional(i, n)))
-            ) ||
-            // .. or similarly for a class initializer o.<clinit> and any method o.m()
-            (toFilterMethod.isClinit &&
-              nodeProducerMap.keys.exists(n => n != toFilter && n.getMethod.getDeclaringClass == toFilterClass &&
-                nodeProducerMap(n).exists(i => IRUtil.isGeneratedInstruction(i) || !CFGUtil.isGuardedByConditional(i, n))))
-        // TODO: we don't actually need this check for Android so long as we only jump at the "harness boundary", but we may need it elsewhere
+        // TODO: && there must be some i in n that is not guarded by a catch block locally, and n should not be guarded by a catch block in any of its callers
+
+        // TODO: we don't actually need the check below for Android so long as we only jump at the "harness boundary", but we may need it elsewhere
         // if n (transtively) calls curNode, we don't know if it's relevant instruction will execute before curNode is
         // reached or not. we can try to figure this out, but it's rather hard so for now we just insist on unreachbility
         //!DFS.getReachableNodes(cg, java.util.Collections.singleton(n)).contains(curNode) &&
         // there must be some relevant instruction that cannot be guarded by a conditional, otherwise we cannot
         // guarantee that it will execute before we reach curNode
         // ...and there exists a relevant command in otherRelNode that must be executed on the path to the current block in curNode
-        // TODO: && there must be some i in n that is not guarded by a catch block locally, and n should not be guarded by a catch block in any of its callers
-        if (DEBUG && canFiler) println(s"Filtered node $toFilter!")
-        canFiler
+        if (DEBUG && canFilter) println(s"Filtered node $toFilter!")
+        canFilter
       }
     }
 
