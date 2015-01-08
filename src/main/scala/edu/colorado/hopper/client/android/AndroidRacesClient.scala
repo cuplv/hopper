@@ -2,30 +2,23 @@ package edu.colorado.hopper.client.android
 
 import java.io.File
 
-import com.ibm.wala.analysis.pointers.HeapGraph
 import com.ibm.wala.classLoader.IClass
-import com.ibm.wala.ipa.callgraph.{CallGraph, CGNode}
-import com.ibm.wala.ipa.callgraph.propagation.{InstanceKey, HeapModel}
-import com.ibm.wala.ipa.cha.IClassHierarchy
+import com.ibm.wala.ipa.callgraph.CGNode
+import com.ibm.wala.ipa.callgraph.propagation.HeapModel
 import com.ibm.wala.ssa._
-import com.ibm.wala.types.MethodReference
-import com.ibm.wala.util.graph.dominators.Dominators
-import com.ibm.wala.util.graph.traverse.DFS
-import edu.colorado.droidel.driver.AbsurdityIdentifier
-import edu.colorado.hopper.client.NullDereferenceTransferFunctions
 import edu.colorado.hopper.executor.DefaultSymbolicExecutor
-import edu.colorado.hopper.piecewise.{PiecewiseTransferFunctions, AndroidRelevanceRelation, DefaultPiecewiseSymbolicExecutor}
+import edu.colorado.hopper.piecewise.{AndroidRelevanceRelation, DefaultPiecewiseSymbolicExecutor, PiecewiseTransferFunctions}
 import edu.colorado.hopper.state._
 import edu.colorado.hopper.util.PtUtil
 import edu.colorado.thresher.core.Options
 import edu.colorado.walautil.Types.MSet
-import edu.colorado.walautil.{Timer, Util, ClassUtil, IRUtil}
+import edu.colorado.walautil.{ClassUtil, IRUtil, Util}
 
 import scala.collection.JavaConversions._
 import scala.xml.XML
 
 class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelClient(appPath, androidLib) {
-
+  val DEBUG = true
   lazy val rr = new AndroidRelevanceRelation(walaRes.cg, walaRes.hg, walaRes.hm, walaRes.cha)
 
   // TODO: mixin null deref transfer functions and pw transfer functions, or otherwise allow code reuse
@@ -35,14 +28,13 @@ class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelCli
       * refute @param qry, false otherwise */
     def shouldAddConditionalConstraint(cond : SSAConditionalBranchInstruction, qry : Qry, n : CGNode) : Boolean = {
       val tbl = n.getIR().getSymbolTable()
-
       val queryInstanceKeys = qry.getAllObjVars.flatMap(o => o.rgn)
 
       def useMayBeRelevantToQuery(use : Int) : Boolean = !tbl.isConstant(use) && {
         val lpk = Var.makeLPK(use, n, hm)
         // the query refers to a local in the query
         qry.localConstraints.exists(e => e.src.key == lpk) || {
-          // TODO: this does not capture guards enforcing object invariants
+          // TODO: this does not capture guards enforcing object invariants, among other things
           val lpkReachable = PtUtil.getPt(lpk, hg)
           // too slow
           /*val lpkReachable = DFS.getReachableNodes(hg).foldLeft (Set.empty[InstanceKey]) ((s, k) => k match {
@@ -55,7 +47,9 @@ class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelCli
       }
 
       val shouldAdd = useMayBeRelevantToQuery(cond.getUse(0)) || useMayBeRelevantToQuery(cond.getUse(1))
-      if (!shouldAdd) { print("Not adding cond "); ClassUtil.pp_instr(cond, n.getIR); println(" since it may be irrel") }
+      if (DEBUG && !shouldAdd) {
+        print("Not adding cond "); ClassUtil.pp_instr(cond, n.getIR); println(" since it may be irrel")
+      }
       shouldAdd
     }
 
@@ -78,7 +72,8 @@ class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelCli
       case i : SSAFieldAccessInstruction if !i.isStatic() => // x = y.f or y.f = x
         PtUtil.getConstraintEdge(Var.makeLPK(i.getRef(), n, hm), qry.localConstraints) match {
           case Some(LocalPtEdge(_, p@PureVar(_))) if qry.isNull(p) =>
-            // y is null--we could never have reached the current program point because executing this instruction would have thrown a NPE
+            // y is null--we could never have reached the current program point because executing this instruction would
+            // have thrown a NPE
             if (Options.PRINT_REFS) println("Refuted by dominating null check!")
             Nil
           case _ => super.execute(s, qry, n)
@@ -86,7 +81,8 @@ class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelCli
       case i : SSAInvokeInstruction if !i.isStatic() => // x = y.m(...)
         PtUtil.getConstraintEdge(Var.makeLPK(i.getReceiver(), n, hm), qry.localConstraints) match {
           case Some(LocalPtEdge(_, p@PureVar(_))) if qry.isNull(p) =>
-            // y is null--we could never have reached the current program point because executing this instruction would have thrown a NPE
+            // y is null--we could never have reached the current program point because executing this instruction would
+            //  have thrown a NPE
             if (Options.PRINT_REFS) println("Refuted by dominating null check!")
             Nil
           case _ => super.execute(s, qry, n)
@@ -98,10 +94,12 @@ class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelCli
 
     /** parse annotations produced by Nit and @return the set of methods whose return values are always non-null */
     def parseNitNonNullAnnotations() : Set[String] = {
+      // set of Java library methods that are known to return non-null values
+      val javaLibraryAnnots = Set("Ljava/lang/Integer.valueOf(I)Ljava/lang/Integer;")
       val nitXmlFile = new File(s"$appPath/nit_annots.xml")
       if (nitXmlFile.exists()) {
         println(s"Parsing Nit annotations from ${nitXmlFile.getAbsolutePath}")
-        (XML.loadFile(nitXmlFile) \\ "class").foldLeft (Set.empty[String]) ((s, c) =>
+        (XML.loadFile(nitXmlFile) \\ "class").foldLeft (javaLibraryAnnots) ((s, c) =>
           (c \\ "method").foldLeft (s) ((s, m) => {
             val ret = m \\ "return"
             if (ret.isEmpty || (ret \\ "NonNull").isEmpty) s
@@ -118,7 +116,7 @@ class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelCli
         )
       } else {
         println("No Nit annotations found")
-        Set.empty[String]
+        javaLibraryAnnots
       }
     }
 
@@ -152,36 +150,32 @@ class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelCli
   lazy val exec =
     if (Options.PIECEWISE_EXECUTION) new DefaultPiecewiseSymbolicExecutor(tf, rr) {
 
-      override def returnFromCall(p : Path) : Iterable[Path] = {
-        // TODO: check for entrypoint in the callers here
-        super.returnFromCall(p)
-      }
+      // TODO: do we want this?
+      override val keepLoopConstraints = true
 
-      // TODO: choose to jump once we get a new heap constraint?
-      // TODO: if callee is relevant to heap constraint only, choose to jump instead of diving in
+      // TODO: if callee is relevant to heap constraint only, choose to jump instead of diving in?
+      override def returnFromCall(p : Path) : Iterable[Path] =
+        if (p.callStackSize == 1 && isEntrypointCallback(p.node)) {
+          println(s"at function boundary of entrypoint cb ${p.node}")
+          val jmpPath = p.deepCopy
+          val qry = jmpPath.qry
+          // drop all local constraints
+          qry.localConstraints.clear()
+          // drop constraints on inner class this, since they're essentially local constraints
+          qry.heapConstraints.foreach(e => e match {
+            case e@ObjPtEdge(_, InstanceFld(f), _) if ClassUtil.isInnerClassThis(f) => qry.removeHeapConstraint(e)
+            case _ => ()
+          })
+          if (piecewiseJumpRefuted(jmpPath)) List.empty[Path] else super.returnFromCall(p)
+        } else super.returnFromCall(p)
+
       override def forkToPredecessorBlocks(instrPaths : List[Path], startBlk : ISSABasicBlock,
                                            loopHeader : Option[ISSABasicBlock], ir : IR, passPaths : List[Path],
                                            failPaths : List[Path], test : Path => Boolean) =
-        if (instrPaths.forall(p => startBlk.isEntryBlock && isEntrypointCallback(p.node) && {
-            println(s"at function boundary of entrypoint cb ${p.node}")
-            val jmpPath = p.deepCopy
-            val qry = jmpPath.qry
-            // drop all local constraints
-            qry.localConstraints.clear()
-            // drop constraints on inner class this, since they're essentially local constraints
-            qry.heapConstraints.foreach(e => e match {
-              case e@ObjPtEdge(_, InstanceFld(f), _) if ClassUtil.isInnerClassThis(f) => qry.removeHeapConstraint(e)
-              case _ => ()
-            })
-            piecewiseJumpRefuted(jmpPath)
-          }
-        )) (passPaths, failPaths)
-        else forkToPredecessorBlocksNoJump(instrPaths, startBlk, loopHeader, ir, passPaths, failPaths, test)
+        super.forkToPredecessorBlocksNoJump(instrPaths, startBlk, loopHeader, ir, passPaths, failPaths, test)
 
-      override def shouldJump(p : Path) : Option[(Path, Qry => Boolean, Unit => Any)] = {
+      override def shouldJump(p : Path) : Option[(Path, Qry => Boolean, Unit => Any)] =
         Some((p.deepCopy, ((q : Qry) => true), Util.NOP))
-        //None
-      }
 
     }
     else new DefaultSymbolicExecutor(tf)
@@ -208,36 +202,21 @@ class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelCli
           if (Options.SCALA_DEBUG) throw e
           else true // soundly assume we got a witness
       }
-    print(s"Deref #$count "); ClassUtil.pp_instr(i, ir); println(s" at source line $srcLine of ${ClassUtil.pretty(n)} can fail? $foundWitness")
+    print(s"Deref #$count ")
+    ClassUtil.pp_instr(i, ir)
+    println(s" at source line $srcLine of ${ClassUtil.pretty(n)} can fail? $foundWitness")
+
     foundWitness
   }
 
-  def isEntrypointCallback(n : CGNode) = {
+  def isEntrypointCallback(n : CGNode) : Boolean =
     !ClassUtil.isLibrary(n) && walaRes.cg.getPredNodes(n).exists(n => ClassUtil.isLibrary(n))
-
-    /*val cg  = walaRes.cg
-    val entrypoints = cg.getEntrypointNodes
-    assert(entrypoints.size == 1)
-    val androidMain = entrypoints.head
-    val entrypointCallbacks = cg.getSuccNodes(androidMain)
-
-    val isEntrypointCb = entrypointCallbacks.contains(n)
-    val isOnlyCalledFromMain = cg.getPredNodeCount(n) == 1
-
-    if (isEntrypointCb && !isOnlyCalledFromMain) {
-      val otherCallers = cg.getPredNodes(n).toList.filterNot(n => n == androidMain)
-      println(s"Warning: Expected ${ClassUtil.pretty(n)}} to only be called from main, but is called from: ${otherCallers.size} other nodes: ")
-      otherCallers.foreach(caller => println(ClassUtil.pretty(caller)))
-    }
-
-    isEntrypointCb*/
-  }
 
   def checkForRacingDerefs() = {
     import walaRes._
-    val id = new AbsurdityIdentifier("")
+    /*val id = new AbsurdityIdentifier("")
     val absurdities = id.getAbsurdities(walaRes, reportLibraryAbsurdities = false)
-    println(s"Have ${absurdities.size} absurdities")
+    println(s"Have ${absurdities.size} absurdities")*/
 
     val callbackClasses =
       appTransformer.getCallbackClasses().foldLeft (Set.empty[IClass]) ((s, t) => cha.lookupClass(t) match {
@@ -251,33 +230,30 @@ class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelCli
       callbackClasses.exists(c => cha.isSubclassOf(declClass, c) || cha.implementsInterface(declClass, c))
     }
 
+    def shouldCheck(n : CGNode) : Boolean =
+      //!n.getMethod.getDeclaringClass.getName.toString.contains("ListView") && n.getMethod.getName.toString == "onItemClick" // TODO: TMP, for testing
+      !ClassUtil.isLibrary(n)
+
     val nullDerefs =
       walaRes.cg.foldLeft (0) ((count, n) =>
-        if (!ClassUtil.isLibrary(n) && isCallback(n)) n.getIR match {
+        if (shouldCheck(n)) n.getIR match {
           case null => count
           case ir =>
-            val shouldCheck =
-              !n.getMethod.getDeclaringClass.getName.toString.contains("ListView") &&
-              n.getMethod.getName.toString == "onItemClick" // TODO: TMP
             ir.getInstructions.foldLeft (count) ((count, i) => i match {
               case i : SSAInvokeInstruction if !i.isStatic && !IRUtil.isThisVar(i.getReceiver) &&
                                                !i.getDeclaredTarget.isInit =>
-                if (shouldCheck) {
-                  if (canDerefFail(i, n, walaRes.hm, count)) count + 1
-                  else count
-                } else count + 1
+                if (canDerefFail(i, n, walaRes.hm, count)) count + 1
+                else count
 
               case i : SSAFieldAccessInstruction if !i.isStatic && !IRUtil.isThisVar(i.getRef) =>
-                if (shouldCheck) {
-                  if (canDerefFail(i, n, walaRes.hm, count)) count + 1
-                  else count
-                } else count + 1
+                if (canDerefFail(i, n, walaRes.hm, count)) count + 1
+                else count
 
               case _ => count
             })
         } else count
       )
 
-    println("Found " + nullDerefs + " null derefs")
+    println(s"Found $nullDerefs potential null derefs")
   }
 }

@@ -109,8 +109,7 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
       case None =>
         val callees = cg.getPossibleTargets(caller, i.getCallSite())
         if (callees.isEmpty()) {
-          //if (DEBUG) println("Dropping retval constraint because we have no targets")
-          if (true) println("Dropping retval constraint and skipping because we have no targets")
+          if (DEBUG) println("Dropping retval constraint because we have no targets")
           // callee is a native method or cannot be resolved for some reason. drop any retval constraints we have
           paths.foreach(p => p.dropReturnValueConstraints(i, caller, tf))
           (List.empty[Path], paths)
@@ -263,58 +262,58 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
   
   def returnFromCall(p : Path) : Iterable[Path] = {
     val callee = p.callStack.top.node // get rid of current stack frame
-    
+
     if (p.callStackSize == 1) {
       // no calling context; have to consider all callers in call graph
       if (DEBUG) println("at function boundary of node " + ClassUtil.pretty(callee))      
       
       if (callee == CGNodeUtil.getFakeWorldClinitNode(cg).get) sys.error("should be handled elsewhere")
-       // TODO: execute other entrypoints also? answer depends on harness
-       else if (callee == cg.getFakeRootNode() || callee.getMethod().isClinit()) List(p)
-       else { // else, return to caller with no context
-         val callers = getCallers(cg, callee)
-         if (MIN_DEBUG) println(s"Context-free return; branching from ${ClassUtil.pretty(callee)} to ${callers.size} callers.")
-         val newPaths = callers.foldLeft (List.empty[Path]) ((lst, caller) => {
-           val callerPath = p.deepCopy
-           // create a path for each caller and call site of the current method 
-           if (MIN_DEBUG) println("caller: " + ClassUtil.pretty(caller))       
-           if (callerInvMap.pathEntailsInv((caller, callee), callerPath)) {
-             if (Options.PRINT_REFS) println("Refuted by caller summary.")
-             lst // refuted by summary
-           } else {  
-             if (UnstructuredSymbolicExecutor.PRINT_IR) println(caller.getIR())
-             val recursive = caller.equals(callee)
-             val callerIR = caller.getIR()
-             val callerCFG = callerIR.getControlFlowGraph()
+      // TODO: execute other entrypoints also? answer depends on harness
+      else if (callee == cg.getFakeRootNode() || callee.getMethod().isClinit()) List(p)
+      else { // else, return to caller with no context
+        val callers = getCallers(cg, callee)
+        if (MIN_DEBUG) println(s"Context-free return; branching from ${ClassUtil.pretty(callee)} to ${callers.size} callers.")
+        val newPaths = callers.foldLeft (List.empty[Path]) ((lst, caller) => {
+          val callerPath = p.deepCopy
+          // create a path for each caller and call site of the current method
+          if (MIN_DEBUG) println("caller: " + ClassUtil.pretty(caller))
+          if (callerInvMap.pathEntailsInv((caller, callee), callerPath)) {
+            if (Options.PRINT_REFS) println("Refuted by caller summary.")
+            lst // refuted by summary
+          } else {
+            if (UnstructuredSymbolicExecutor.PRINT_IR) println(caller.getIR())
+            val recursive = caller.equals(callee)
+            val callerIR = caller.getIR()
+            val callerCFG = callerIR.getControlFlowGraph()
 
-             // get all call instructions in caller that might call callee
-             callerIR.getInstructions().zipWithIndex.collect({
-               case (i : SSAInvokeInstruction, index) if cg.getPossibleTargets(caller, i.getCallSite()).contains(callee) => (i, index)
-             })
-             .foldLeft (lst) ((lst, pair) => {
-               val (invoke, index) = pair
-               val sitePath = callerPath.deepCopy
-               if (recursive) {
-                 // TODO: handle mutual recursion here? need to track repeated sequences of bw visited calls
-                 if (DEBUG) println("handled recursive call while forking to all callers--dropping constraints")
-                 sitePath.dropConstraintsProduceableInCall(invoke, caller, callee, tf)
-               }
-               val callBlk : WalaBlock = callerCFG.getBlockForInstruction(index)
-               val callLine = callBlk.size - 2 // call is always the last instruction in a block. set to line *before* the call
-               assert(callBlk.getLastInstruction == invoke,
-                 s"Expected call to be last instruction in $callBlk, but got ${callBlk.getLastInstruction}. IR $callerIR")
-               if (sitePath.returnFromCall(caller, callee, callBlk, callLine, invoke, tf)) {
-                 assert(sitePath.node == caller)
-                 sitePath :: lst
-               } else {
-                 if (Options.PRINT_REFS) println("refuted by return from call")
-                 lst
-               }     
-             })             
-           }
-         })
-         newPaths
-       }
+            // get all call instructions in caller that might call callee
+            callerIR.getInstructions().zipWithIndex.collect({
+              case (i : SSAInvokeInstruction, index) if cg.getPossibleTargets(caller, i.getCallSite()).contains(callee) => (i, index)
+            })
+            .foldLeft (lst) ((lst, pair) => {
+              val (invoke, index) = pair
+              val sitePath = callerPath.deepCopy
+              if (recursive) {
+                // TODO: handle mutual recursion here? need to track repeated sequences of bw visited calls
+                if (DEBUG) println("handled recursive call while forking to all callers--dropping constraints")
+                sitePath.dropConstraintsProduceableInCall(invoke, caller, callee, tf)
+              }
+              val callBlk : WalaBlock = callerCFG.getBlockForInstruction(index)
+              val callLine = callBlk.size - 2 // call is always the last instruction in a block. set to line *before* the call
+              assert(callBlk.getLastInstruction == invoke,
+                     s"Expected call to be last instruction in $callBlk, but got ${callBlk.getLastInstruction}. IR $callerIR")
+              if (sitePath.returnFromCall(caller, callee, callBlk, callLine, invoke, tf)) {
+                assert(sitePath.node == caller)
+                sitePath :: lst
+              } else {
+                if (Options.PRINT_REFS) println("refuted by return from call")
+                lst
+              }
+            })
+          }
+        })
+        newPaths
+      }
     } else // else callStack.size > 1, "normal" return from callee to caller      
       p.callStack.top.callInstr match {
         case Some(callInstr) => 
@@ -389,9 +388,11 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
         if (DEBUG) println("at loop head BB" + loopHeader.getNumber() + " on path " + p)
         // don't do the loop invariant check if we're coming from outside the loop
         if ((LoopUtil.getLoopBody(loopHeader, ir).contains(p.lastBlk) || LoopUtil.isDoWhileLoop(loopHeader, ir)) &&
-          invariantImpliesPath(p)) return (passPaths, failPaths)
+            invariantImpliesPath(p))
+          return (passPaths, failPaths)
       } else if (LoopUtil.isExplicitlyInfiniteLoop(loopHeader, ir) && // won't have any conditional branch instruction in this case
-        invariantImpliesPath(p)) return (passPaths, failPaths)
+                 invariantImpliesPath(p))
+        return (passPaths, failPaths)
     )
 
     val isLoopBlk = loopHeader.isDefined/*loopHeader match {

@@ -22,7 +22,7 @@ class AndroidRelevanceRelation(cg : CallGraph, hg : HeapGraph[InstanceKey], hm :
 
   val invertedCG = GraphInverter.invert(cg)
 
-  val DEBUG = false
+  val DEBUG = true
 
   override def getConstraintProducerMap(q : Qry, ignoreLocalConstraints : Boolean = false) : Map[PtEdge,List[(CGNode,SSAInstruction)]] = {
     val constraintProducerMap = super.getConstraintProducerMap(q, ignoreLocalConstraints)

@@ -17,8 +17,8 @@ import scala.collection.JavaConversions._
 
 
 object PiecewiseTransferFunctions {
-  // if true, drop constraints when a callee is relevant, but is more than Options.MAX_CALLSTACK_DEPTH steps away in the call graph.
-  // this dropping will allow us to soundly report that the callee is irrelevant
+  // if true, drop constraints when a callee is relevant, but is more than Options.MAX_CALLSTACK_DEPTH steps away in the
+  // call graph. this dropping will allow us to soundly report that the callee is irrelevant
   private val AGGRESSIVE_CALLEE_CONSTRAINT_DROPPING = true
 }
 

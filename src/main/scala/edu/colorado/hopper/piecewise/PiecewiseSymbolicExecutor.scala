@@ -12,8 +12,8 @@ import edu.colorado.walautil.{WalaBlock, ClassUtil, Util}
 
 object PiecewiseSymbolicExecutor {
   // if true, when we do a piecewise jump and fail, we will continue doing path-based execution
-  private val BACKTRACK = true // TODO: don't use this, currently unsound in a subtle way
-  private def DEBUG = true
+  private val BACKTRACK = true
+  private def DEBUG = false
 }
 
 class DefaultPiecewiseSymbolicExecutor(override val tf : TransferFunctions,

@@ -88,7 +88,7 @@ object TransferFunctions {
 /** implements the |- {R} c {Q} judgement from Section 3.2 of Thresher: Precise Refutations for Heap Reachability (PLDI 2013) */
 class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm : HeapModel, val cha : IClassHierarchy) {
   val hm = new DelegatingExtendedHeapModel(_hm)
-  lazy val modRef = ModRef.make().computeMod(cg, hg.getPointerAnalysis)
+  val modRef = ModRef.make().computeMod(cg, hg.getPointerAnalysis)
   
   /** look up the lhs of @param s in @param localConstraints, @return matching rhs var and edge if we find it */
   protected def getConstraintPtForDef(s : SSAInstruction, localConstraints : MSet[LocalPtEdge], n : CGNode) : Option[(ObjVar,LocalPtEdge)] =
@@ -1853,8 +1853,9 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
     // important to do this first; otherwise we may unsoundly assume a local binding holds when it can in fact be reassigned in a loop
     // qry.node check is because we only need to drop local constraints for the current node (not for callees, 
     // because we won't have any)
-    if (qry.node == n) i.foreach(i => dropLocalConstraintsFromInstruction(i, qry, loopDrop)) 
-    i.foreach(i => dropHeapConstraintsFromInstruction(i, n, qry, modRef, loopDrop, callee))  
+    if (qry.node == n) i.foreach(i => dropLocalConstraintsFromInstruction(i, qry, loopDrop))
+
+    i.foreach(i => dropHeapConstraintsFromInstruction(i, n, qry, modRef, loopDrop, callee))
   }
         
   def dropLocalConstraintsFromInstruction(i : SSAInstruction, qry : Qry, loopDrop : Boolean = false) = 
@@ -1869,6 +1870,7 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
   def dropHeapConstraintsFromInstruction(i : SSAInstruction, n : CGNode, qry : Qry, 
                                          modRef : java.util.Map[CGNode,com.ibm.wala.util.intset.OrdinalSet[PointerKey]],
                                          loopDrop : Boolean, callee : Option[CGNode] = None) : Unit = {
+
     val (localConstraints, heapConstraints) = (qry.localConstraints, qry.heapConstraints)
 
     i match { // drop heap constraints that may be modified by the instruction
@@ -1882,7 +1884,7 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
               val x = Var.makeLPK(i.getRef(), n, hm)
               getPt(x, localConstraints, hg) match {
                 case Some((ptX, _)) => !ptX.rgn.intersect(rgn).isEmpty
-                case None => sys.error("Empty region for " + x)                  
+                case None => sys.error("Empty region fcor " + x)
               }                     
             case ClassVar(c) => true
           }}) dropHeapConstraint(e, qry, loopDrop) // src and snk both match -- need to drop this constraint
@@ -1921,6 +1923,7 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
         })
         
       case i : SSAInvokeInstruction =>
+
         def dropEdgeIfConsumedByInitToDefaultVals(e : HeapPtEdge) = e.snk match {
           case p@PureVar(_) =>
             try {
@@ -1933,7 +1936,7 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
             }
           case ObjVar(_) => () // no need to drop; initialization to default values can't assign an objet (only null)
         }   
-        
+
         cha.resolveMethod(i.getDeclaredTarget()) match {
           case null => ()
           case m => if (m.isInit()) { // drop constraints that can be produced by default value initialization
@@ -1967,9 +1970,12 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
               Set.empty[IClass] // null dispatch, don't have to drop anything
             case None => Set.empty[IClass]
           }
-        } else Set.empty[IClass]  
+        } else Set.empty[IClass]
         
-        val targets = if (callee.isDefined) List(callee.get) else cg.getPossibleTargets(n, i.getCallSite()).toIterable        
+        val targets = callee match {
+          case Some(callee) => Iterable(callee)
+          case None => cg.getPossibleTargets(n, i.getCallSite()).toIterable
+        }
         // drop constraints from all instructions in each feasible method call according to okClasses
         targets.foreach(n => {
           if (n.getIR() != null && (okClasses.isEmpty || okClasses.contains(n.getMethod().getDeclaringClass()))) {
@@ -1981,7 +1987,8 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
         })
           
       case _ => () // other instructions can't modify the heap
-    }   
+    }
+
   }
   
   def dropLoopWriteableConstraints(qry : Qry, loopHead : ISSABasicBlock, n : CGNode) : Unit = {
