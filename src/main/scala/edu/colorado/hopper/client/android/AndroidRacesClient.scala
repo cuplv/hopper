@@ -18,7 +18,7 @@ import scala.collection.JavaConversions._
 import scala.xml.XML
 
 class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelClient(appPath, androidLib) {
-  val DEBUG = true
+  val DEBUG = false
   lazy val rr = new AndroidRelevanceRelation(walaRes.cg, walaRes.hg, walaRes.hm, walaRes.cha)
 
   // TODO: mixin null deref transfer functions and pw transfer functions, or otherwise allow code reuse
@@ -95,7 +95,9 @@ class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelCli
     /** parse annotations produced by Nit and @return the set of methods whose return values are always non-null */
     def parseNitNonNullAnnotations() : Set[String] = {
       // set of Java library methods that are known to return non-null values
-      val javaLibraryAnnots = Set("Ljava/lang/Integer.valueOf(I)Ljava/lang/Integer;")
+      val javaLibraryAnnots =
+        Set("Ljava/lang/Integer.valueOf(I)Ljava/lang/Integer;",
+            "Ljava/lang/StringBuilder.append(Ljava/lang/String;)Ljava/lang/StringBuilder")
       val nitXmlFile = new File(s"$appPath/nit_annots.xml")
       if (nitXmlFile.exists()) {
         println(s"Parsing Nit annotations from ${nitXmlFile.getAbsolutePath}")

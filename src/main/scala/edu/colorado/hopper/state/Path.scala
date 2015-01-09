@@ -28,7 +28,7 @@ import com.ibm.wala.types.TypeReference
 import com.ibm.wala.types.ClassLoaderReference
 
 object Path {
-  val methodNameBlacklist = Set("toString", "equals", "hash", "println", "print", "indexOf", "append", "charAt", "hashCode", "intValue", "parseInt", "eq")
+  val methodNameBlacklist = Set("toString", "equals", "hash", "println", "print", "indexOf", "charAt", "hashCode", "intValue", "parseInt", "eq")
   val classNameBlacklist = Set("Ljava/io/PrintWriter", "Ljava/lang/String", "Ljava/security/AccessController", "Ljava/lang/Character", "Lsun/misc/VM",
                                "Ljava/lang/Class", "Ljava/io/BufferedReader", "Ljava/lang/Float")  
   
@@ -49,7 +49,7 @@ object Path {
   
   private val DEBUG = false
   
-   // TODO: this shouldn't live here. find someplace reasonable to putit
+   // TODO: this shouldn't live here. find someplace reasonable to put it
   /**
    * @return list of paths representing the result of pushing @param p to each instruction in @param instrs
    */
