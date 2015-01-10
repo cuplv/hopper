@@ -6,6 +6,7 @@ import com.ibm.wala.classLoader.IClass
 import com.ibm.wala.ipa.callgraph.CGNode
 import com.ibm.wala.ipa.callgraph.propagation.HeapModel
 import com.ibm.wala.ssa._
+import edu.colorado.droidel.driver.AbsurdityIdentifier
 import edu.colorado.hopper.executor.DefaultSymbolicExecutor
 import edu.colorado.hopper.piecewise.{AndroidRelevanceRelation, DefaultPiecewiseSymbolicExecutor, PiecewiseTransferFunctions}
 import edu.colorado.hopper.state._
@@ -82,7 +83,7 @@ class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelCli
         PtUtil.getConstraintEdge(Var.makeLPK(i.getReceiver(), n, hm), qry.localConstraints) match {
           case Some(LocalPtEdge(_, p@PureVar(_))) if qry.isNull(p) =>
             // y is null--we could never have reached the current program point because executing this instruction would
-            //  have thrown a NPE
+            // have thrown a NPE
             if (Options.PRINT_REFS) println("Refuted by dominating null check!")
             Nil
           case _ => super.execute(s, qry, n)
@@ -92,16 +93,31 @@ class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelCli
 
     private val nonNullRetMethods = parseNitNonNullAnnotations()
 
+    // TODO: parse nit parameter annotations as well
+    private val nonNullParams : Map[String,Set[Int]] = null
+
     /** parse annotations produced by Nit and @return the set of methods whose return values are always non-null */
     def parseNitNonNullAnnotations() : Set[String] = {
-      // set of Java library methods that are known to return non-null values
-      val javaLibraryAnnots =
+      // potentially unsound, but reasonable annots to reduce false positives. can fix some of these by using Droidel's
+      // instrumentation functionality
+      val unsoundAnnots =
+        Set("Landroid/view/View.findViewById(I)Landroid/view/View;",
+            "Landroid/content/Context.getSystemService(Ljava/lang/String;)Ljava/lang/Object;",
+            "Landroid/app/Activity.getSystemService(Ljava/lang/String;)Ljava/lang/Object;"
+           )
+
+      // set of library methods that are known to return non-null values
+      val libraryAnnots =
         Set("Ljava/lang/Integer.valueOf(I)Ljava/lang/Integer;",
-            "Ljava/lang/StringBuilder.append(Ljava/lang/String;)Ljava/lang/StringBuilder")
+            "Ljava/lang/StringBuilder.append(Ljava/lang/String;)Ljava/lang/StringBuilder;",
+            "Landroid/content/ContentResolver.openInputStream(Landroid/net/Uri;)Ljava/io/InputStream;"
+           )
+
+      val defaultAnnots = libraryAnnots ++ unsoundAnnots
       val nitXmlFile = new File(s"$appPath/nit_annots.xml")
       if (nitXmlFile.exists()) {
         println(s"Parsing Nit annotations from ${nitXmlFile.getAbsolutePath}")
-        (XML.loadFile(nitXmlFile) \\ "class").foldLeft (javaLibraryAnnots) ((s, c) =>
+        (XML.loadFile(nitXmlFile) \\ "class").foldLeft (defaultAnnots) ((s, c) =>
           (c \\ "method").foldLeft (s) ((s, m) => {
             val ret = m \\ "return"
             if (ret.isEmpty || (ret \\ "NonNull").isEmpty) s
@@ -118,7 +134,7 @@ class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelCli
         )
       } else {
         println("No Nit annotations found")
-        javaLibraryAnnots
+        defaultAnnots
       }
     }
 
@@ -233,7 +249,7 @@ class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelCli
     }
 
     def shouldCheck(n : CGNode) : Boolean =
-      //!n.getMethod.getDeclaringClass.getName.toString.contains("ListView") && n.getMethod.getName.toString == "onItemClick" // TODO: TMP, for testing
+      //n.getMethod.getDeclaringClass.getName.toString.contains("SourcePreferences") && n.getMethod.getName.toString == "onCreate" && // TODO: TMP, for testing
       !ClassUtil.isLibrary(n)
 
     val nullDerefs =

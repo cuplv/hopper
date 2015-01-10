@@ -90,8 +90,9 @@ class NullDereferenceClient(appPath : String, libPath : Option[String], mainClas
     
     // TODO: could optimize with a type-based check instead of going straight to PT
     def mayHoldDangerKey(useNum : Int, n : CGNode, tbl : SymbolTable) : Boolean = {
-      val locPt = PtUtil.getPt(Var.makeLPK(useNum, n, hm), hg)
-      !locPt.intersect(dangerKeys).isEmpty
+      /*val locPt = PtUtil.getPt(Var.makeLPK(useNum, n, hm), hg)
+      !locPt.intersect(dangerKeys).isEmpty*/
+      true // checks all derefs rather than just "danger key" derefs
     }
         
     def canBeNullDeref(useNum : Int, i : SSAInstruction, n : CGNode, count : Int) : Boolean = 
