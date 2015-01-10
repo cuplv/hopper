@@ -4,7 +4,7 @@ import java.io.File
 
 import com.ibm.wala.classLoader.IClass
 import com.ibm.wala.ipa.callgraph.CGNode
-import com.ibm.wala.ipa.callgraph.propagation.HeapModel
+import com.ibm.wala.ipa.callgraph.propagation.{InstanceFieldKey, HeapModel}
 import com.ibm.wala.ssa._
 import edu.colorado.droidel.driver.AbsurdityIdentifier
 import edu.colorado.hopper.executor.DefaultSymbolicExecutor
@@ -103,10 +103,14 @@ class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelCli
       val unsoundAnnots =
         Set("Landroid/view/View.findViewById(I)Landroid/view/View;",
             "Landroid/content/Context.getSystemService(Ljava/lang/String;)Ljava/lang/Object;",
-            "Landroid/app/Activity.getSystemService(Ljava/lang/String;)Ljava/lang/Object;"
-           )
+            "Landroid/app/Activity.getSystemService(Ljava/lang/String;)Ljava/lang/Object;",
+            "Landroid/content/Context.getResources()Landroid/content/res/Resources;",
+            "Landroid/view/ContextThemeWrapper.getResources()Landroid/content/res/Resources;",
+            "Landroid/content/res/Resources.getDrawable(I)Landroid/graphics/drawable/Drawable;"
+        )
 
-      // set of library methods that are known to return non-null values
+      // set of library methods that are known to return non-null values, but use native code or reflection that confuse
+      // Nit / the analysis
       val libraryAnnots =
         Set("Ljava/lang/Integer.valueOf(I)Ljava/lang/Integer;",
             "Ljava/lang/StringBuilder.append(Ljava/lang/String;)Ljava/lang/StringBuilder;",
@@ -249,7 +253,7 @@ class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelCli
     }
 
     def shouldCheck(n : CGNode) : Boolean =
-      //n.getMethod.getDeclaringClass.getName.toString.contains("SourcePreferences") && n.getMethod.getName.toString == "onCreate" && // TODO: TMP, for testing
+      n.getMethod.getDeclaringClass.getName.toString.contains("DuckDuckGo") && n.getMethod.getName.toString == "onCreate" && // TODO: TMP, for testing
       !ClassUtil.isLibrary(n)
 
     val nullDerefs =
