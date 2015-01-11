@@ -218,6 +218,13 @@ class Qry(val heapConstraints : MSet[HeapPtEdge], val pureConstraints : MSet[Pur
     keepObjVars(heapConstraints, localObjVars)
   }
 
+  /** @return the set of all IField's referenced by the query */
+  def getAllFields() : Set[IField] =
+    qry.heapConstraints.collect({
+      case ObjPtEdge(_, InstanceFld(fld), _) => fld
+      case StaticPtEdge(_, StaticFld(key), _) => key.getField
+    }).toSet
+
   private def isDefinitelyBool(p : PureVar, bool : Boolean) = {
     try {
       !qry.checkTmpPureConstraint(Pure.makeEqBoolConstraint(p, !bool))

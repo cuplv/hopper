@@ -2,9 +2,9 @@ package edu.colorado.hopper.client.android
 
 import java.io.File
 
-import com.ibm.wala.classLoader.IClass
+import com.ibm.wala.classLoader.{IField, IClass}
 import com.ibm.wala.ipa.callgraph.CGNode
-import com.ibm.wala.ipa.callgraph.propagation.{InstanceFieldKey, HeapModel}
+import com.ibm.wala.ipa.callgraph.propagation.{StaticFieldKey, InstanceFieldKey, HeapModel}
 import com.ibm.wala.ssa._
 import edu.colorado.droidel.driver.AbsurdityIdentifier
 import edu.colorado.hopper.executor.DefaultSymbolicExecutor
@@ -36,14 +36,20 @@ class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelCli
         // the query refers to a local in the query
         qry.localConstraints.exists(e => e.src.key == lpk) || {
           // TODO: this does not capture guards enforcing object invariants, among other things
-          val lpkReachable = PtUtil.getPt(lpk, hg)
-          // too slow
-          /*val lpkReachable = DFS.getReachableNodes(hg).foldLeft (Set.empty[InstanceKey]) ((s, k) => k match {
-            case k : InstanceKey => s + k
-            case _ => s
-          })*/
           // the query points at a heap loc reachable in the heap from the local constraint
-          !queryInstanceKeys.intersect(lpkReachable).isEmpty
+          !queryInstanceKeys.intersect(PtUtil.getPt(lpk, hg)).isEmpty || {
+            // get the fields that point at the object(s) the local pointer key points at
+            val lpkFields =
+              hg.getSuccNodes(lpk).foldLeft (Set.empty[IField]) ((s, k) =>
+                hg.getPredNodes(k).foldLeft (s) ((s, k) => k match {
+                  case k : InstanceFieldKey => s + k.getField
+                  case k : StaticFieldKey => s + k.getField
+                  case _ => s
+                })
+              )
+            // the query contains a field that may point at the object(s) the local pointer key points at
+            !lpkFields.intersect(qry.getAllFields()).isEmpty
+          }
         }
       }
 
