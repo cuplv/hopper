@@ -66,6 +66,7 @@ class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelCli
       if (shouldAddConditionalConstraint(cond, qry, n)) super.executeCond(cond, qry, n, isThenBranch)
       else true
 
+    // TODO: refute based on dominating null checks for re-used fields
     override def execute(s : SSAInstruction, qry : Qry, n : CGNode) : List[Qry] = s match {
       case i : SSAGetInstruction if !i.isStatic && ClassUtil.isInnerClassThis(i.getDeclaredField) =>
         PtUtil.getConstraintEdge(Var.makeLPK(i.getDef, n, hm), qry.localConstraints) match {
@@ -112,7 +113,8 @@ class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelCli
             "Landroid/app/Activity.getSystemService(Ljava/lang/String;)Ljava/lang/Object;",
             "Landroid/content/Context.getResources()Landroid/content/res/Resources;",
             "Landroid/view/ContextThemeWrapper.getResources()Landroid/content/res/Resources;",
-            "Landroid/content/res/Resources.getDrawable(I)Landroid/graphics/drawable/Drawable;"
+            "Landroid/content/res/Resources.getDrawable(I)Landroid/graphics/drawable/Drawable;",
+            "Landroid/view/Window.findViewById(I)Landroid/view/View;"
         )
 
       // set of library methods that are known to return non-null values, but use native code or reflection that confuse
@@ -189,11 +191,15 @@ class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelCli
           val qry = jmpPath.qry
           // drop all local constraints
           qry.localConstraints.clear()
-          // drop constraints on inner class this, since they're essentially local constraints
+
+          // only keep constraints on null
+          // TODO: keep access paths of constraints on null as well?
           qry.heapConstraints.foreach(e => e match {
-            case e@ObjPtEdge(_, InstanceFld(f), _) if ClassUtil.isInnerClassThis(f) => qry.removeHeapConstraint(e)
-            case _ => ()
+            case e@ObjPtEdge(_, _, p@PureVar(_)) if qry.isNull(p) => ()
+            case e@StaticPtEdge(_, _, p@PureVar(_)) if qry.isNull(p) => ()
+            case _ => qry.removeHeapConstraint(e)
           })
+
           if (piecewiseJumpRefuted(jmpPath)) List.empty[Path] else super.returnFromCall(p)
         } else super.returnFromCall(p)
 
@@ -259,7 +265,7 @@ class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelCli
     }
 
     def shouldCheck(n : CGNode) : Boolean =
-      n.getMethod.getDeclaringClass.getName.toString.contains("DuckDuckGo") && n.getMethod.getName.toString == "onCreate" && // TODO: TMP, for testing
+      n.getMethod.getDeclaringClass.getName.toString.contains("DuckDuckGo") && n.getMethod.getName.toString == "displayPreferences" && // TODO: TMP, for testing
       !ClassUtil.isLibrary(n)
 
     val nullDerefs =

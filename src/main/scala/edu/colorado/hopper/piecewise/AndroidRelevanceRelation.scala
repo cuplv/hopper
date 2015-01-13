@@ -10,7 +10,7 @@ import com.ibm.wala.util.graph.impl.GraphInverter
 import com.ibm.wala.util.graph.traverse.BFSPathFinder
 import com.ibm.wala.util.intset.OrdinalSet
 import edu.colorado.hopper.state.{PtEdge, Qry}
-import edu.colorado.walautil.{IRUtil, CFGUtil, ClassUtil}
+import edu.colorado.walautil.{CFGUtil, ClassUtil, IRUtil}
 
 import scala.collection.JavaConversions._
 
@@ -46,6 +46,25 @@ class AndroidRelevanceRelation(cg : CallGraph, hg : HeapGraph[InstanceKey], hm :
   /** check condition (1); @return true if @param toFilter is not backward-reachable from @param curNode */
   def isNotBackwardReachableFrom(toFilter : CGNode, curNode : CGNode) : Boolean = {
     // TODO: implement more precise check here?
+    false
+  }
+
+  def isActivityLifecycleMethod(m : IMethod) : Boolean = false
+
+  // get the caller of @param n that is ultimately called by the Android library in order to invoke n
+  // TODO: generalize to case with multiple app predecessors; too hard for now
+  def getLastAppPred(n : CGNode) : Option[CGNode] = {
+    cg.getPredNodes(n).filter(n => !ClassUtil.isLibrary(n)) match {
+      case preds if preds.isEmpty => Some(n)
+      case preds if preds.size == 1 && !preds.contains(n) => getLastAppPred(n)
+      case _ => None
+    }
+  }
+
+  // TODO: implement important Android lifecycle ordering facts here
+  // check that method(relNode) <: method(curNode), then check that method(toFilterNode) <: method(relNode)
+  def methodOrderingOk(toFilterNode : CGNode, relNode : CGNode, curNode : CGNode) : Boolean = {
+    //println(s"Checking: toFilterNode: ${ClassUtil.pretty(toFilterNode)}, relNode: ${ClassUtil.pretty(relNode)}, curNode: ${ClassUtil.pretty(curNode)}")
     false
   }
 
@@ -95,9 +114,6 @@ class AndroidRelevanceRelation(cg : CallGraph, hg : HeapGraph[InstanceKey], hm :
           n != toFilter && n.getMethod.getDeclaringClass == toFilterClass &&
           nodeProducerMap(n).exists(i => isGuardedByConditional(i, n)))
 
-      // TODO: implement important Android lifecycle ordering facts here
-      def methodOrderingOk(toFilterMethod : IMethod, relMethod : IMethod, curMethod : IMethod) : Boolean = false
-
       def canFilterBasedOnMethodOrderingInner(toFilterMethod : IMethod, relInstruction : SSAInstruction,
                                               relInstructionNode : CGNode, curMethod : IMethod) : Boolean = {
         // want to return true if toFilterMethod < relInstructionNode.getMethod < curMethod
@@ -113,7 +129,7 @@ class AndroidRelevanceRelation(cg : CallGraph, hg : HeapGraph[InstanceKey], hm :
         // TODO: make this more complicated so that it stops at the harness boundary!
         def cgNodeFilter(n : CGNode) : Boolean = true
 
-        methodOrderingOk(toFilterMethod, relInstructionNode.getMethod, curMethod) &&
+        methodOrderingOk(toFilter, relInstructionNode, curNode) &&
         !CFGUtil.isInConditionalInterprocedural(instrBlk, relInstructionNode, cg, cgNodeFilter) &&
         !CFGUtil.isInTryBlockInterprocedural(instrBlk, relInstructionNode, cg, cgNodeFilter)
       }
