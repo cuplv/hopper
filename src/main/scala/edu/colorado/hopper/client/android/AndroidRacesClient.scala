@@ -87,21 +87,11 @@ class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelCli
           case _ => super.execute(s, qry, n)
         }
       case i : SSAInvokeInstruction if !i.isStatic() => // x = y.m(...)
-        PtUtil.getConstraintEdge(Var.makeLPK(i.getReceiver(), n, hm), qry.localConstraints) match {
-          case Some(LocalPtEdge(_, p@PureVar(_))) if qry.isNull(p) =>
-            // y is null--we could never have reached the current program point because executing this instruction would
-            // have thrown a NPE
-            if (Options.PRINT_REFS) println("Refuted by dominating null check!")
-            Nil
-          case _ => super.execute(s, qry, n)
-        }
+        sys.error("This case should be handled in SymbolicExcutor.executeInstr")
       case _ => super.execute(s, qry, n)
     }
 
     private val nonNullRetMethods = parseNitNonNullAnnotations()
-
-    // TODO: parse nit parameter annotations as well
-    private val nonNullParams : Map[String,Set[Int]] = null
 
     /** parse annotations produced by Nit and @return the set of methods whose return values are always non-null */
     def parseNitNonNullAnnotations() : Set[String] = {
@@ -211,6 +201,25 @@ class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelCli
       override def shouldJump(p : Path) : Option[(Path, Qry => Boolean, Unit => Any)] =
         Some((p.deepCopy, ((q : Qry) => true), Util.NOP))
 
+      override def executeInstr(paths : List[Path], instr : SSAInstruction, blk : ISSABasicBlock, node : CGNode,
+                                cfg : SSACFG, isLoopBlk : Boolean, callStackSize : Int) : List[Path] = instr match {
+        case i : SSAInvokeInstruction if !i.isStatic =>
+          val okPaths =
+            paths.filter(p =>
+              PtUtil.getConstraintEdge(Var.makeLPK(i.getReceiver(), p.node, walaRes.hm), p.qry.localConstraints) match {
+                case Some(LocalPtEdge(_, pv@PureVar(_))) if p.qry.isNull(pv) =>
+                  // y is null--we could never have reached the current program point because executing this instruction would
+                  // have thrown a NPE
+                  if (Options.PRINT_REFS) println("Refuted by dominating null check!")
+                  false
+                case _ => true
+              }
+            )
+          if (okPaths.isEmpty) Nil
+          else super.executeInstr(okPaths, instr, blk, node, cfg, isLoopBlk, callStackSize)
+        case _ => super.executeInstr(paths, instr, blk, node, cfg, isLoopBlk, callStackSize)
+      }
+
     }
     else new DefaultSymbolicExecutor(tf)
 
@@ -265,7 +274,7 @@ class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelCli
     }
 
     def shouldCheck(n : CGNode) : Boolean =
-      n.getMethod.getDeclaringClass.getName.toString.contains("DuckDuckGo") && n.getMethod.getName.toString == "displayPreferences" && // TODO: TMP, for testing
+      n.getMethod.getDeclaringClass.getName.toString.contains("DuckDuckGo") && n.getMethod.getName.toString == "onPreferenceChange" && // TODO: TMP, for testing
       !ClassUtil.isLibrary(n)
 
     val nullDerefs =

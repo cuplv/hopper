@@ -157,6 +157,41 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
         )
     }
   }
+
+  def executeInstr(paths : List[Path], instr : SSAInstruction, blk : ISSABasicBlock, node : CGNode, cfg : SSACFG,
+                   isLoopBlk : Boolean, callStackSize : Int) : List[Path] = instr match {
+    case instr : SSAInvokeInstruction =>
+
+      val (enterPaths, skipPaths) = enterCallee(paths, instr)
+      if (!enterPaths.isEmpty) {
+        if (MIN_DEBUG)
+          println(s"Entering call ${ClassUtil.pretty(instr.getDeclaredTarget())} from ${ClassUtil.pretty(node)}; ${enterPaths.size} targets.")
+        if (DEBUG)
+          println(s"Entering call ${instr.getDeclaredTarget().getName()} from ${node.getMethod().getName()} full names ${ClassUtil.pretty(instr.getDeclaredTarget())} from ${ClassUtil.pretty(node)}")
+        val paths = executeBackwardWhile(enterPaths, p => p.callStackSize != callStackSize, skipPaths)
+        if (DEBUG)
+          println(s"Returning from call to ${ClassUtil.pretty(instr.getDeclaredTarget())} back to ${ClassUtil.pretty(node)}; have ${paths.size} paths.")
+        paths
+      } else {
+        if (DEBUG) println(s"decided to skip call $instr; have ${skipPaths.size}")
+        skipPaths
+      }
+    case instr : SSAPhiInstruction => paths // skip phis here, we deal with them while branching to preds //sys.error("phi " + instr)
+    case instr : SSAConditionalBranchInstruction =>
+      if (!isLoopBlk || keepLoopConstraints)
+        paths.foldLeft (List.empty[Path]) ((paths, p) =>
+          // might add a constraint that we would prefer not to pick up here, but we can hopefully eliminate it at the join point
+          if (p.addConstraintFromConditional(instr, isThenBranch = (p.lastBlk == CFGUtil.getThenBranch(blk, cfg)), tf)) p :: paths
+          else paths
+        )
+      else paths
+    case instr : SSASwitchInstruction => handleSwitch(paths, instr, blk, cfg)
+    case instr =>
+      paths.foldLeft (List.empty[Path]) ((paths, p) => p.executeInstr(instr, tf) match {
+        case None => paths
+        case Some(newPaths) => newPaths ++ paths
+      })
+  }
   
   def executeBlkInstrs(p : Path, isLoopBlk : Boolean) : List[Path] = {
     if (TRACE) logMethodAndTime("executeBlkInstrs")
@@ -169,40 +204,6 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
       val cfg = ir.getControlFlowGraph()
       val blk = p.blk.blk
       val instrs = blk.asInstanceOf[SSACFG#BasicBlock].getAllInstructions()
-
-      def executeInstr(paths : List[Path], instr : SSAInstruction) : List[Path] = instr match {
-        case instr : SSAInvokeInstruction =>
-          val initSize = p.callStackSize
-          val (enterPaths, skipPaths) = enterCallee(paths, instr)
-          if (!enterPaths.isEmpty) {
-            if (MIN_DEBUG)
-              println(s"Entering call ${ClassUtil.pretty(instr.getDeclaredTarget())} from ${ClassUtil.pretty(node)}; ${enterPaths.size} targets.")
-            if (DEBUG)
-              println(s"Entering call ${instr.getDeclaredTarget().getName()} from ${node.getMethod().getName()} full names ${ClassUtil.pretty(instr.getDeclaredTarget())} from ${ClassUtil.pretty(node)}")
-            val paths = executeBackwardWhile(enterPaths, p => p.callStackSize != initSize, skipPaths)
-            if (DEBUG)
-              println(s"Returning from call to ${ClassUtil.pretty(instr.getDeclaredTarget())} back to ${ClassUtil.pretty(node)}; have ${paths.size} paths.")
-            paths
-          } else {
-            if (DEBUG) println(s"decided to skip call $instr; have ${skipPaths.size}")
-            skipPaths
-          }
-        case instr : SSAPhiInstruction => paths // skip phis here, we deal with them while branching to preds //sys.error("phi " + instr)
-        case instr : SSAConditionalBranchInstruction =>
-          if (!isLoopBlk || keepLoopConstraints)
-            paths.foldLeft (List.empty[Path]) ((paths, p) =>
-              // might add a constraint that we would prefer not to pick up here, but we can hopefully eliminate it at the join point
-              if (p.addConstraintFromConditional(instr, isThenBranch = (p.lastBlk == CFGUtil.getThenBranch(blk, cfg)), tf)) p :: paths
-              else paths
-            )
-          else paths
-        case instr : SSASwitchInstruction => handleSwitch(paths, instr, blk, cfg)
-        case instr =>
-          paths.foldLeft (List.empty[Path]) ((paths, p) => p.executeInstr(instr, tf) match {
-            case None => paths
-            case Some(newPaths) => newPaths ++ paths
-          })
-      }
 
       (instrs.view.zipWithIndex.reverse foldLeft List(p)) { case (paths : List[Path], (instr : SSAInstruction, index : Int)) =>
         if (index <= pathIndex) {
@@ -245,14 +246,14 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
                 // that an exception was thrown inside of the call
                 val (pathsNotToExecute, _) = partitionExceptionalAndNormalPaths(thrownExceptionTypes)
                 val pathsNotToExecuteCopy = pathsNotToExecute.map(p => p.deepCopy)
-                executeInstr(paths, instr).union(pathsNotToExecuteCopy)
+                executeInstr(paths, instr, blk, node, cfg, isLoopBlk, p.callStackSize).union(pathsNotToExecuteCopy)
               case _ =>
-                val (pathsNotToExecute, pathsToExecute) = partitionExceptionalAndNormalPaths(thrownExceptionTypes)
+                val (pathsNotToExecute, _) = partitionExceptionalAndNormalPaths(thrownExceptionTypes)
                 // keep exceptional paths that could have caught e, refute other paths
                 val feasibleExceptionalPaths = pathsNotToExecute.filter(p => !p.isExceptional)
-                executeInstr(pathsToExecute, instr).union(feasibleExceptionalPaths)
+                executeInstr(paths, instr, blk, node, cfg, isLoopBlk, p.callStackSize).union(feasibleExceptionalPaths)
             }
-          } else executeInstr(paths, instr)
+          } else executeInstr(paths, instr, blk, node, cfg, isLoopBlk, p.callStackSize)
         } else paths
       }
     }
