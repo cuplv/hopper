@@ -10,8 +10,6 @@ import edu.colorado.thresher.core.Options
 
 object Main {
   
-  type MSet[T] = scala.collection.mutable.Set[T]
-  
   val REGRESSION = "__regression"
     
   def main(args: Array[String]) : Unit = {     

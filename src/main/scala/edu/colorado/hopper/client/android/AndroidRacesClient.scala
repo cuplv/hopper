@@ -2,11 +2,13 @@ package edu.colorado.hopper.client.android
 
 import java.io.File
 
+import com.ibm.wala.analysis.pointers.HeapGraph
 import com.ibm.wala.classLoader.{IField, IClass}
 import com.ibm.wala.ipa.callgraph.CGNode
-import com.ibm.wala.ipa.callgraph.propagation.{StaticFieldKey, InstanceFieldKey, HeapModel}
+import com.ibm.wala.ipa.callgraph.propagation.{InstanceKey, StaticFieldKey, InstanceFieldKey, HeapModel}
 import com.ibm.wala.ssa._
 import edu.colorado.droidel.driver.AbsurdityIdentifier
+import edu.colorado.hopper.client.NullDereferenceTransferFunctions
 import edu.colorado.hopper.executor.DefaultSymbolicExecutor
 import edu.colorado.hopper.piecewise.{AndroidRelevanceRelation, DefaultPiecewiseSymbolicExecutor, PiecewiseTransferFunctions}
 import edu.colorado.hopper.state._
@@ -23,37 +25,31 @@ class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelCli
   lazy val rr = new AndroidRelevanceRelation(walaRes.cg, walaRes.hg, walaRes.hm, walaRes.cha)
 
   // TODO: mixin null deref transfer functions and pw transfer functions, or otherwise allow code reuse
-  lazy val tf = new PiecewiseTransferFunctions(walaRes.cg, walaRes.hg, walaRes.hm, walaRes.cha, rr) {
+  lazy val tf = new NullDereferenceTransferFunctions(walaRes) {
+
+    override def isCallRelevant(i : SSAInvokeInstruction, caller : CGNode, callee : CGNode, qry : Qry) : Boolean =
+      if (Options.PIECEWISE_EXECUTION)
+        isRetvalRelevant(i, caller, qry) || PiecewiseTransferFunctions.doesCalleeModifyHeap(callee, qry, rr, cg)
+      else super.isCallRelevant(i, caller, callee, qry)
+
+    def useMayBeRelevantToQuery(use : Int, qry : Qry, n : CGNode, hm : HeapModel,
+                                 hg : HeapGraph[InstanceKey]) : Boolean = {
+      val tbl = n.getIR.getSymbolTable
+      !tbl.isConstant(use) && {
+        val lpk = Var.makeLPK(use, n, hm)
+        qry.localConstraints.exists(e => e.src.key == lpk) || {
+          val queryInstanceKeys = qry.getAllObjVars.flatMap(o => o.rgn)
+          !queryInstanceKeys.intersect(PtUtil.getPt(lpk, hg)).isEmpty || qry.localMayPointIntoQuery(lpk, n, hm, hg)
+        }
+      }
+    }
 
     /** @return true if we should add the conditional expression from @param cond as a constraint given that we want to
       * refute @param qry, false otherwise */
     def shouldAddConditionalConstraint(cond : SSAConditionalBranchInstruction, qry : Qry, n : CGNode) : Boolean = {
-      val tbl = n.getIR().getSymbolTable()
-      val queryInstanceKeys = qry.getAllObjVars.flatMap(o => o.rgn)
-
-      def useMayBeRelevantToQuery(use : Int) : Boolean = !tbl.isConstant(use) && {
-        val lpk = Var.makeLPK(use, n, hm)
-        // the query refers to a local in the query
-        qry.localConstraints.exists(e => e.src.key == lpk) || {
-          // TODO: this does not capture guards enforcing object invariants, among other things
-          // the query points at a heap loc reachable in the heap from the local constraint
-          !queryInstanceKeys.intersect(PtUtil.getPt(lpk, hg)).isEmpty || {
-            // get the fields that point at the object(s) the local pointer key points at
-            val lpkFields =
-              hg.getSuccNodes(lpk).foldLeft (Set.empty[IField]) ((s, k) =>
-                hg.getPredNodes(k).foldLeft (s) ((s, k) => k match {
-                  case k : InstanceFieldKey => s + k.getField
-                  case k : StaticFieldKey => s + k.getField
-                  case _ => s
-                })
-              )
-            // the query contains a field that may point at the object(s) the local pointer key points at
-            !lpkFields.intersect(qry.getAllFields()).isEmpty
-          }
-        }
-      }
-
-      val shouldAdd = useMayBeRelevantToQuery(cond.getUse(0)) || useMayBeRelevantToQuery(cond.getUse(1))
+      val shouldAdd =
+        useMayBeRelevantToQuery(cond.getUse(0), qry, n, hm, hg) ||
+        useMayBeRelevantToQuery(cond.getUse(1), qry, n, hm, hg)
       if (DEBUG && !shouldAdd) {
         print("Not adding cond "); ClassUtil.pp_instr(cond, n.getIR); println(" since it may be irrel")
       }
@@ -65,106 +61,6 @@ class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelCli
       // decide whether or not we should keep the condition
       if (shouldAddConditionalConstraint(cond, qry, n)) super.executeCond(cond, qry, n, isThenBranch)
       else true
-
-    // TODO: refute based on dominating null checks for re-used fields
-    override def execute(s : SSAInstruction, qry : Qry, n : CGNode) : List[Qry] = s match {
-      case i : SSAGetInstruction if !i.isStatic && ClassUtil.isInnerClassThis(i.getDeclaredField) =>
-        PtUtil.getConstraintEdge(Var.makeLPK(i.getDef, n, hm), qry.localConstraints) match {
-          case Some(LocalPtEdge(_, p@PureVar(_))) if qry.isNull(p) =>
-            // have x == null and x = y.this$0 (or similar). reading from this$0 will never return null without bytecode
-            // editor magic (or order of initialization silliness)--refute
-            if (Options.PRINT_REFS) println("Refuted by read from inner class this!")
-            Nil
-          case _ => super.execute(s, qry, n)
-        }
-      case i : SSAFieldAccessInstruction if !i.isStatic() => // x = y.f or y.f = x
-        PtUtil.getConstraintEdge(Var.makeLPK(i.getRef(), n, hm), qry.localConstraints) match {
-          case Some(LocalPtEdge(_, p@PureVar(_))) if qry.isNull(p) =>
-            // y is null--we could never have reached the current program point because executing this instruction would
-            // have thrown a NPE
-            if (Options.PRINT_REFS) println("Refuted by dominating null check!")
-            Nil
-          case _ => super.execute(s, qry, n)
-        }
-      case i : SSAInvokeInstruction if !i.isStatic() => // x = y.m(...)
-        sys.error("This case should be handled in SymbolicExcutor.executeInstr")
-      case _ => super.execute(s, qry, n)
-    }
-
-    private val nonNullRetMethods = parseNitNonNullAnnotations()
-
-    /** parse annotations produced by Nit and @return the set of methods whose return values are always non-null */
-    def parseNitNonNullAnnotations() : Set[String] = {
-      // potentially unsound, but reasonable annots to reduce false positives. can fix some of these by using Droidel's
-      // instrumentation functionality
-      val unsoundAnnots =
-        Set("Landroid/view/View.findViewById(I)Landroid/view/View;",
-            "Landroid/content/Context.getSystemService(Ljava/lang/String;)Ljava/lang/Object;",
-            "Landroid/app/Activity.getSystemService(Ljava/lang/String;)Ljava/lang/Object;",
-            "Landroid/content/Context.getResources()Landroid/content/res/Resources;",
-            "Landroid/view/ContextThemeWrapper.getResources()Landroid/content/res/Resources;",
-            "Landroid/content/res/Resources.getDrawable(I)Landroid/graphics/drawable/Drawable;",
-            "Landroid/view/Window.findViewById(I)Landroid/view/View;"
-        )
-
-      // set of library methods that are known to return non-null values, but use native code or reflection that confuse
-      // Nit / the analysis
-      val libraryAnnots =
-        Set("Ljava/lang/Integer.valueOf(I)Ljava/lang/Integer;",
-            "Ljava/lang/StringBuilder.append(Ljava/lang/String;)Ljava/lang/StringBuilder;",
-            "Landroid/content/ContentResolver.openInputStream(Landroid/net/Uri;)Ljava/io/InputStream;"
-           )
-
-      val defaultAnnots = libraryAnnots ++ unsoundAnnots
-      val nitXmlFile = new File(s"$appPath/nit_annots.xml")
-      if (nitXmlFile.exists()) {
-        println(s"Parsing Nit annotations from ${nitXmlFile.getAbsolutePath}")
-        (XML.loadFile(nitXmlFile) \\ "class").foldLeft (defaultAnnots) ((s, c) =>
-          (c \\ "method").foldLeft (s) ((s, m) => {
-            val ret = m \\ "return"
-            if (ret.isEmpty || (ret \\ "NonNull").isEmpty) s
-            else {
-              val className = c.attribute("name").head.text
-              // Nit separates method names from method signatures using colons; parse it out
-              val parsedArr = m.attribute("descriptor").head.text.split(":")
-              val (methodName, methodSig) = (parsedArr(0), parsedArr(1))
-              val walaifedName = s"${ClassUtil.walaifyClassName(className)}.$methodName${methodSig.replace('.', '/')}"
-              // using strings rather than MethodReference's to avoid classloader issues
-              s + walaifedName
-            }
-          })
-        )
-      } else {
-        println("No Nit annotations found")
-        defaultAnnots
-      }
-    }
-
-    // use Nit annotations to get easy refutation when we have a null constraint on a callee with a known non-null
-    // return value
-    override def tryBindReturnValue(call : SSAInvokeInstruction, qry : Qry, caller : CGNode,
-                                    callee : CGNode) : Option[MSet[LocalPtEdge]] = {
-      val calleeLocalConstraints = Util.makeSet[LocalPtEdge]
-      val m = callee.getMethod
-      val methodIdentifier = s"${ClassUtil.pretty(m.getDeclaringClass)}.${m.getSelector}"
-      // check the Nit annotations to see if callee has a non-null annotation
-      val calleeHasNonNullAnnotation = nonNullRetMethods.contains(methodIdentifier)
-
-      if (call.hasDef) // x = call m(a, b, ...)
-        getConstraintEdgeForDef(call, qry.localConstraints, caller) match {
-          case Some(LocalPtEdge(_, p@PureVar(t))) if calleeHasNonNullAnnotation && t.isReferenceType && qry.isNull(p) =>
-            if (Options.PRINT_REFS) println(s"Refuted by Nit annotation on ${ClassUtil.pretty(callee)}")
-            None
-          case Some(edge) => // found return value in constraints
-            qry.removeLocalConstraint(edge) // remove x -> A constraint
-            // add ret_callee -> A constraint
-            calleeLocalConstraints += PtEdge.make(Var.makeReturnVar(callee, hm), edge.snk)
-            Some(calleeLocalConstraints)
-          case None => Some(calleeLocalConstraints) // return value not in constraints, no need to do anything
-        }
-      else Some(calleeLocalConstraints)
-    }
-
   }
 
   lazy val exec =
@@ -204,9 +100,10 @@ class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelCli
       override def executeInstr(paths : List[Path], instr : SSAInstruction, blk : ISSABasicBlock, node : CGNode,
                                 cfg : SSACFG, isLoopBlk : Boolean, callStackSize : Int) : List[Path] = instr match {
         case i : SSAInvokeInstruction if !i.isStatic =>
+          val hm = tf.hm
           val okPaths =
             paths.filter(p =>
-              PtUtil.getConstraintEdge(Var.makeLPK(i.getReceiver(), p.node, walaRes.hm), p.qry.localConstraints) match {
+              PtUtil.getConstraintEdge(Var.makeLPK(i.getReceiver(), p.node,hm), p.qry.localConstraints) match {
                 case Some(LocalPtEdge(_, pv@PureVar(_))) if p.qry.isNull(pv) =>
                   // y is null--we could never have reached the current program point because executing this instruction would
                   // have thrown a NPE
@@ -216,7 +113,29 @@ class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelCli
               }
             )
           if (okPaths.isEmpty) Nil
-          else super.executeInstr(okPaths, instr, blk, node, cfg, isLoopBlk, callStackSize)
+          else {
+            val retPaths = super.executeInstr(okPaths, instr, blk, node, cfg, isLoopBlk, callStackSize)
+            val tbl = node.getIR.getSymbolTable
+            if (!i.isStatic && !tbl.isConstant(i.getReceiver())) {
+              val receiverLPK = Var.makeLPK(i.getReceiver, node, hm)
+              retPaths.filter(p => {
+                val qry = p.qry
+                PtUtil.getConstraintEdge(receiverLPK, qry.localConstraints) match {
+                  case Some(_) => true
+                  case None =>
+                    PtUtil.getPt(receiverLPK, tf.hg) match {
+                      case rgn if rgn.isEmpty =>
+                        if (Options.PRINT_REFS) println("Refuting based on empty points-to set for receiver!")
+                        false // should leak to a refutation
+                      case rgn =>
+                        // add constraint y != null (effectively)
+                        qry.addLocalConstraint(PtEdge.make(receiverLPK, ObjVar(rgn)))
+                        true
+                    }
+                }
+              })
+            } else retPaths
+          }
         case _ => super.executeInstr(paths, instr, blk, node, cfg, isLoopBlk, callStackSize)
       }
 
@@ -274,7 +193,7 @@ class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelCli
     }
 
     def shouldCheck(n : CGNode) : Boolean =
-      n.getMethod.getDeclaringClass.getName.toString.contains("DuckDuckGo") && n.getMethod.getName.toString == "onPreferenceChange" && // TODO: TMP, for testing
+      n.getMethod.getDeclaringClass.getName.toString.contains("DuckDuckGo") && n.getMethod.getName.toString.equals("onLongClick") && // TODO: TMP, for testing
       !ClassUtil.isLibrary(n)
 
     val nullDerefs =
@@ -282,9 +201,10 @@ class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelCli
         if (shouldCheck(n)) n.getIR match {
           case null => count
           case ir =>
+            val tbl = ir.getSymbolTable
             ir.getInstructions.foldLeft (count) ((count, i) => i match {
               case i : SSAInvokeInstruction if !i.isStatic && !IRUtil.isThisVar(i.getReceiver) &&
-                                               !i.getDeclaredTarget.isInit =>
+                                               !i.getDeclaredTarget.isInit && !tbl.isStringConstant(i.getReceiver) =>
                 if (canDerefFail(i, n, walaRes.hm, count)) count + 1
                 else count
 

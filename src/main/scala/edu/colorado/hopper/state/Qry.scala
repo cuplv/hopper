@@ -2,7 +2,7 @@ package edu.colorado.hopper.state
 
 import com.ibm.wala.analysis.pointers.HeapGraph
 import com.ibm.wala.classLoader.IField
-import com.ibm.wala.ipa.callgraph.propagation.{HeapModel, InstanceKey}
+import com.ibm.wala.ipa.callgraph.propagation._
 import com.ibm.wala.ipa.callgraph.{CGNode, ContextKey}
 import com.ibm.wala.ssa.{ISSABasicBlock, SSAInstruction}
 import edu.colorado.hopper.solver.{Solver, UnknownSMTResult, Z3Solver}
@@ -11,6 +11,7 @@ import edu.colorado.walautil.{CFGUtil, Util, IRUtil}
 import edu.colorado.walautil.Types.MSet
 import edu.colorado.hopper.util.PtUtil
 import edu.colorado.thresher.core.Options
+import scala.collection.JavaConversions._
 
 object Qry {
   private def DEBUG = Options.SCALA_DEBUG  
@@ -173,7 +174,7 @@ class Qry(val heapConstraints : MSet[HeapPtEdge], val pureConstraints : MSet[Pur
   def addHeapConstraint(e : HeapPtEdge) : Boolean = if (heapConstraints.contains(e)) true else {
     
     def simultaneousPointsToError : Boolean = {
-      if (DEBUG) println("e is " + e + " heap constraints are " + heapConstraints)
+      //if (DEBUG) println("e is " + e + " heap constraints are " + heapConstraints)
       if (Options.PRINT_REFS) println(s"Refuted by simultaneous points-to on field ${e.fld}")
       false 
     }
@@ -501,6 +502,25 @@ class Qry(val heapConstraints : MSet[HeapPtEdge], val pureConstraints : MSet[Pur
         }
       )
     else None
+  }
+
+  /** @return true if @param local may point at a value also pointed to by they query */
+  def localMayPointIntoQuery(local : LocalPointerKey, n : CGNode, hm : HeapModel,
+                             hg : HeapGraph[InstanceKey]) : Boolean = {
+    val qryFields = this.getAllFields()
+    !qryFields.isEmpty && {
+      // get the fields that point at the object(s) the local pointer key points at
+      val lpkFields =
+        hg.getSuccNodes(local).foldLeft(Set.empty[IField])((s, k) => {
+          hg.getPredNodes(k).foldLeft(s)((s, k) => k match {
+            case k: InstanceFieldKey => s + k.getField
+            case k: StaticFieldKey => s + k.getField
+            case _ => s
+          })
+        })
+      // the query contains a field that may point at the object(s) the local pointer key points at
+      !lpkFields.intersect(qryFields).isEmpty
+    }
   }
    
   /*
