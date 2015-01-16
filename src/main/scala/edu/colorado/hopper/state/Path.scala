@@ -28,7 +28,7 @@ import com.ibm.wala.types.TypeReference
 import com.ibm.wala.types.ClassLoaderReference
 
 object Path {
-  val methodNameBlacklist = Set("toString", "equals", "hash", "println", "print", "indexOf", "charAt", "hashCode", "intValue", "parseInt", "eq")
+  val methodNameBlacklist = Set("equals", "hash", "println", "print", "indexOf", "charAt", "hashCode", "intValue", "parseInt", "eq")
   val classNameBlacklist = Set("Ljava/io/PrintWriter", "Ljava/lang/String", "Ljava/security/AccessController", "Ljava/lang/Character", "Lsun/misc/VM",
                                "Ljava/lang/Class", "Ljava/io/BufferedReader", "Ljava/lang/Float")  
   

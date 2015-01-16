@@ -253,7 +253,7 @@ class NullDereferenceTransferFunctions(walaRes : WalaAnalysisResults,
     val javaAnnots =
       Set("Ljava/lang/Integer.valueOf(I)Ljava/lang/Integer;",
           "Ljava/lang/Object.toString()Ljava/lang/String;",
-          g"Ljava/lang/StringBuilder.append(Ljava/lang/String;)Ljava/lang/StringBuilder;"
+          "Ljava/lang/StringBuilder.append(Ljava/lang/String;)Ljava/lang/StringBuilder;"
       )
 
     // similar story for Android library methods. unlike the java annotations, some of these annots are potentially
