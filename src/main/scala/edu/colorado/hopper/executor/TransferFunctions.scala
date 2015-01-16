@@ -1394,25 +1394,44 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
           val resultNum = s.getResult()
           val tbl = n.getIR().getSymbolTable          
           val x = Var.makeLPK(resultNum, n, hm)
-          
+
           edge.snk match {
             case ptA@ObjVar(rgnA) =>
               if (tbl.isNullConstant(resultNum)) false // refuted by returning null
-              else getPt(x, qry.localConstraints, hg) match {
-                case Some((ptX, xEdge)) =>
-                  val rgnInter = rgnA intersect ptX.rgn // do A \cap pt(x)
+              else getConstraintEdge(x, qry.localConstraints) match {
+                case Some(xEdge@LocalPtEdge(_, ptX@ObjVar(ptXRgn))) =>
+                  val rgnInter = rgnA intersect ptXRgn // do A \cap pt(x)
                   if (rgnInter.isEmpty) false // refuted
-                  else {  
+                  else {
                     val interVar = ObjVar(rgnInter)
                     if (!qry.substitute(interVar, ptA, hg)) false
-                    else if (xEdge.isDefined && !qry.substitute(interVar, ptX, hg)) false 
+                    else if (!qry.substitute(interVar, ptX, hg)) false
                     else {
                       if (!tbl.isConstant(resultNum)) qry.addLocalConstraint(PtEdge.make(x, interVar)) // add edge x -> (A \cap pt(x))
                       true
                     }
                   }
-                case None => false // refuted by returning null
-              }             
+                case Some(xEdge@LocalPtEdge(_, p@PureVar(_))) =>
+                  if (qry.isNull(p)) false // refuted
+                  else {
+                    qry.removeLocalConstraint(xEdge)
+                    if (!tbl.isConstant(resultNum)) qry.addLocalConstraint(PtEdge.make(x, ptA)) // add edge x -> (A \cap pt(x))
+                    true
+                  }
+                  // TODO: check for null
+                case None =>
+                  val ptXRgn = getPt(x, hg)
+                  val rgnInter = rgnA intersect ptXRgn
+                  if (rgnInter.isEmpty) false // refuted
+                  else {
+                    val interVar = ObjVar(rgnInter)
+                    if (!qry.substitute(interVar, ptA, hg)) false
+                    else {
+                      if (!tbl.isConstant(resultNum)) qry.addLocalConstraint(PtEdge.make(x, interVar))
+                      true
+                    }
+                  }
+              }
           
             case p@PureVar(_) =>
               if (tbl.isConstant(resultNum)) qry.addPureConstraint(Pure.makeEqConstraint(p, Pure.makePureVal(tbl, resultNum)))
