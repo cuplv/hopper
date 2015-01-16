@@ -248,28 +248,31 @@ class NullDereferenceTransferFunctions(walaRes : WalaAnalysisResults,
 
   /** parse annotations produced by Nit and @return the set of methods whose return values are always non-null */
   def parseNitNonNullAnnotations() : Set[String] = {
-    // potentially unsound, but reasonable annots to reduce false positives. can fix some of these by using Droidel's
-    // instrumentation functionality
-    val unsoundAnnots =
-      Set("Landroid/view/View.findViewById(I)Landroid/view/View;",
-        "Landroid/content/Context.getSystemService(Ljava/lang/String;)Ljava/lang/Object;",
-        "Landroid/app/Activity.getSystemService(Ljava/lang/String;)Ljava/lang/Object;",
-        "Landroid/content/Context.getResources()Landroid/content/res/Resources;",
-        "Landroid/view/ContextThemeWrapper.getResources()Landroid/content/res/Resources;",
-        "Landroid/content/res/Resources.getDrawable(I)Landroid/graphics/drawable/Drawable;",
-        "Landroid/view/Window.findViewById(I)Landroid/view/View;",
-        "Landroid/widget/TextView.getText()Ljava/lang/CharSequence;"
-      )
-
-    // set of library methods that are known to return non-null values, but use native code or reflection that confuse
-    // Nit / the analysis
-    val libraryAnnots =
+    // set of Java library methods that are known to return non-null values, but use native code or reflection that
+    // confuse Nit / the analysis
+    val javaAnnots =
       Set("Ljava/lang/Integer.valueOf(I)Ljava/lang/Integer;",
-        "Ljava/lang/StringBuilder.append(Ljava/lang/String;)Ljava/lang/StringBuilder;",
-        "Landroid/content/ContentResolver.openInputStream(Landroid/net/Uri;)Ljava/io/InputStream;"
+          "Ljava/lang/Object.toString()Ljava/lang/String;",
+          g"Ljava/lang/StringBuilder.append(Ljava/lang/String;)Ljava/lang/StringBuilder;"
       )
 
-    val defaultAnnots = libraryAnnots ++ unsoundAnnots
+    // similar story for Android library methods. unlike the java annotations, some of these annots are potentially
+    // unsound, but are generally reasonable and/or required to eliminate dumb false positives. can fix some of these by
+    // using Droidel's instrumentation functionality (i.e., for findViewByID)
+    val androidAnnots =
+      Set("Landroid/app/Activity.getSystemService(Ljava/lang/String;)Ljava/lang/Object;",
+          "Landroid/content/ContentResolver.openInputStream(Landroid/net/Uri;)Ljava/io/InputStream;",
+          "Landroid/content/Context.getResources()Landroid/content/res/Resources;",
+          "Landroid/content/Context.getSystemService(Ljava/lang/String;)Ljava/lang/Object;",
+          "Landroid/content/res/Resources.getDrawable(I)Landroid/graphics/drawable/Drawable;",
+          "Landroid/content/res/Resources.getText(I)Ljava/lang/CharSequence",
+          "Landroid/view/ContextThemeWrapper.getResources()Landroid/content/res/Resources;",
+          "Landroid/view/View.findViewById(I)Landroid/view/View;",
+          "Landroid/view/Window.findViewById(I)Landroid/view/View;",
+          "Landroid/widget/TextView.getText()Ljava/lang/CharSequence;"
+      )
+
+    val defaultAnnots = javaAnnots ++ androidAnnots
     if (nitAnnotsXmlFile.exists()) {
       println(s"Parsing Nit annotations from ${nitAnnotsXmlFile.getAbsolutePath}")
       (XML.loadFile(nitAnnotsXmlFile) \\ "class").foldLeft (defaultAnnots) ((s, c) =>
