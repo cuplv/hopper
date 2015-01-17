@@ -243,6 +243,7 @@ class NullDereferenceTransferFunctions(walaRes : WalaAnalysisResults,
   }
 
   private val nonNullRetMethods = parseNitNonNullAnnotations()
+  println("annots are " + nonNullRetMethods)
 
   /** parse annotations produced by Nit and @return the set of methods whose return values are always non-null */
   def parseNitNonNullAnnotations() : Set[String] = {
@@ -298,11 +299,14 @@ class NullDereferenceTransferFunctions(walaRes : WalaAnalysisResults,
   // use Nit annotations to get easy refutation when we have a null constraint on a callee with a known non-null retval
   override def isRetvalFeasible(call : SSAInvokeInstruction, caller : CGNode, callee : CGNode, qry : Qry) : Boolean =
     !call.hasDef || {
+      println("checking for nit annot on " + callee)
       val m = callee.getMethod
       val methodIdentifier = s"${ClassUtil.pretty(m.getDeclaringClass)}.${m.getSelector}"
       if (nonNullRetMethods.contains(methodIdentifier)) {
+        println("got annot")
         getConstraintEdgeForDef(call, qry.localConstraints, caller) match {
           case Some(LocalPtEdge(_, p@PureVar(_))) if qry.isNull(p) =>
+            println("got ref")
             if (Options.PRINT_REFS) println(s"Refuted by Nit annotation on ${ClassUtil.pretty(callee)}")
             false
           case _ => true

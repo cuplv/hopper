@@ -25,7 +25,7 @@ class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelCli
   lazy val rr = new AndroidRelevanceRelation(walaRes.cg, walaRes.hg, walaRes.hm, walaRes.cha)
 
   // TODO: mixin null deref transfer functions and pw transfer functions, or otherwise allow code reuse
-  lazy val tf = new NullDereferenceTransferFunctions(walaRes) {
+  lazy val tf = new NullDereferenceTransferFunctions(walaRes, new File(s"$appPath/nit_annots.xml")) {
 
     override def isCallRelevant(i : SSAInvokeInstruction, caller : CGNode, callee : CGNode, qry : Qry) : Boolean =
       if (Options.PIECEWISE_EXECUTION)
@@ -179,9 +179,11 @@ class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelCli
       callbackClasses.exists(c => cha.isSubclassOf(declClass, c) || cha.implementsInterface(declClass, c))
     }
 
-    def shouldCheck(n : CGNode) : Boolean =
-      n.getMethod.getDeclaringClass.getName.toString.contains("DuckDuckGo") && n.getMethod.getName.toString == "onPreferenceChange" && // TODO: TMP, for testing
+    def shouldCheck(n : CGNode) : Boolean = {
+      val checkMethod = if (Options.MAIN_METHOD == "main") true else n.getMethod.getName.toString == Options.MAIN_METHOD
+      n.getMethod.getDeclaringClass.getName.toString.contains("DuckDuckGo") && checkMethod && // TODO: TMP, for testing
       !ClassUtil.isLibrary(n)
+    }
 
     val nullDerefs =
       walaRes.cg.foldLeft (0) ((count, n) =>
