@@ -28,9 +28,12 @@ import com.ibm.wala.types.TypeReference
 import com.ibm.wala.types.ClassLoaderReference
 
 object Path {
-  val methodNameBlacklist = Set("equals", "hash", "println", "print", "indexOf", "charAt", "hashCode", "intValue", "parseInt", "eq")
-  val classNameBlacklist = Set("Ljava/io/PrintWriter", "Ljava/lang/String", "Ljava/security/AccessController", "Ljava/lang/Character", "Lsun/misc/VM",
-                               "Ljava/lang/Class", "Ljava/io/BufferedReader", "Ljava/lang/Float")  
+  val methodNameBlacklist =
+    Set("toString", "equals", "hash", "println", "print", "indexOf", "append", "charAt", "hashCode", "intValue",
+        "parseInt", "eq")
+  val classNameBlacklist =
+    Set("Ljava/io/PrintWriter", "Ljava/lang/String", "Ljava/security/AccessController", "Ljava/lang/Character",
+        "Lsun/misc/VM", "Ljava/lang/Class", "Ljava/io/BufferedReader", "Ljava/lang/Float")
   
   val SYSTEM_EXIT = MethodReference.findOrCreate(TypeReference.findOrCreate(ClassLoaderReference.Primordial, "Ljava/lang/System"), "exit", "(I)V")
   
@@ -254,11 +257,8 @@ class Path(val qry : Qry, var lastBlk : WalaBlock = null,
     val res0 = tf.executePhi(phi, phiIndex, qry, node)
     res0
   }
-  
-  def isDispatchFeasible(call : SSAInvokeInstruction, caller : CGNode, callee : CGNode, tf : TransferFunctions) : Boolean = 
-    tf.isDispatchFeasible(call, caller, callee, qry)   
-    
-   // TODO: should we have a special flag for this instead?
+
+  // TODO: should we have a special flag for this instead?
   def isClinitPath(cg : CallGraph) : Boolean = {
     val fakeWorldClinit = CGNodeUtil.getFakeWorldClinitNode(cg).get //WALACFGUtil.getFakeWorldClinitNode(cg)
     qry.callStack.stack.exists(frame => frame.node.equals(fakeWorldClinit) || frame.node.getMethod().isClinit() || (

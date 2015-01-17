@@ -97,47 +97,34 @@ class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelCli
       override def shouldJump(p : Path) : Option[(Path, Qry => Boolean, Unit => Any)] =
         Some((p.deepCopy, ((q : Qry) => true), Util.NOP))
 
-      override def executeInstr(paths : List[Path], instr : SSAInstruction, blk : ISSABasicBlock, node : CGNode,
+      /*override def executeInstr(paths : List[Path], instr : SSAInstruction, blk : ISSABasicBlock, node : CGNode,
                                 cfg : SSACFG, isLoopBlk : Boolean, callStackSize : Int) : List[Path] = instr match {
         case i : SSAInvokeInstruction if !i.isStatic =>
-          val hm = tf.hm
-          val okPaths =
-            paths.filter(p =>
-              PtUtil.getConstraintEdge(Var.makeLPK(i.getReceiver(), p.node,hm), p.qry.localConstraints) match {
-                case Some(LocalPtEdge(_, pv@PureVar(_))) if p.qry.isNull(pv) =>
-                  // y is null--we could never have reached the current program point because executing this instruction would
-                  // have thrown a NPE
-                  if (Options.PRINT_REFS) println("Refuted by dominating null check!")
-                  false
-                case _ => true
-              }
-            )
-          if (okPaths.isEmpty) Nil
-          else {
-            val retPaths = super.executeInstr(okPaths, instr, blk, node, cfg, isLoopBlk, callStackSize)
-            val tbl = node.getIR.getSymbolTable
-            if (!i.isStatic && !tbl.isConstant(i.getReceiver())) {
-              val receiverLPK = Var.makeLPK(i.getReceiver, node, hm)
-              retPaths.filter(p => {
-                val qry = p.qry
-                PtUtil.getConstraintEdge(receiverLPK, qry.localConstraints) match {
-                  case Some(_) => true
-                  case None =>
-                    PtUtil.getPt(receiverLPK, tf.hg) match {
-                      case rgn if rgn.isEmpty =>
-                        if (Options.PRINT_REFS) println("Refuting based on empty points-to set for receiver!")
-                        false // should leak to a refutation
-                      case rgn =>
-                        // add constraint y != null (effectively)
-                        qry.addLocalConstraint(PtEdge.make(receiverLPK, ObjVar(rgn)))
-                        true
-                    }
+          val retPaths = super.executeInstr(paths, instr, blk, node, cfg, isLoopBlk, callStackSize)
+          val tbl = node.getIR.getSymbolTable
+          if (!tbl.isConstant(i.getReceiver())) {
+            val receiverLPK = Var.makeLPK(i.getReceiver, node, tf.hm)
+            retPaths.filter(p => {
+              val qry = p.qry
+              PtUtil.getConstraintEdge(receiverLPK, qry.localConstraints) match {
+                case Some(LocalPtEdge(_, pure@PureVar(_))) if qry.isNull(pure) => false // refuted by null dispatch
+                case Some(_) => true // edge already exists
+                case None =>
+                  PtUtil.getPt(receiverLPK, tf.hg) match {
+                    case rgn if rgn.isEmpty =>
+                      if (Options.PRINT_REFS) println("Refuting based on empty points-to set for receiver!")
+                      false // should leak to a refutation
+                    case rgn =>
+                      // TODO: don't always add--should check if use may be relevant, like we do for fields
+                      // add constraint y != null (effectively)
+                      qry.addLocalConstraint(PtEdge.make(receiverLPK, ObjVar(rgn)))
+                      true
+                  }
                 }
-              })
-            } else retPaths
-          }
+            })
+          } else retPaths
         case _ => super.executeInstr(paths, instr, blk, node, cfg, isLoopBlk, callStackSize)
-      }
+      }*/
 
     }
     else new DefaultSymbolicExecutor(tf)
@@ -193,7 +180,7 @@ class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelCli
     }
 
     def shouldCheck(n : CGNode) : Boolean =
-      n.getMethod.getDeclaringClass.getName.toString.contains("DuckDuckGo") && n.getMethod.getName.toString.equals("onTextChanged") && // TODO: TMP, for testing
+      n.getMethod.getDeclaringClass.getName.toString.contains("DuckDuckGo") && n.getMethod.getName.toString == "cancelSourceFilter" && // TODO: TMP, for testing
       !ClassUtil.isLibrary(n)
 
     val nullDerefs =

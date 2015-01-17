@@ -11,7 +11,6 @@ import edu.colorado.hopper.piecewise.{DefaultPiecewiseSymbolicExecutor, Relevanc
 import edu.colorado.hopper.state._
 import edu.colorado.hopper.util.PtUtil
 import edu.colorado.thresher.core.Options
-import edu.colorado.walautil.Types.MSet
 import edu.colorado.walautil._
 
 import scala.collection.JavaConversions._
@@ -232,6 +231,8 @@ class NullDereferenceTransferFunctions(walaRes : WalaAnalysisResults,
                     println("Refuting based on empty points-to set for receiver!")
                     false // should leak to a refutation
                   case rgn =>
+                    println("adding extra edge after")
+                    // TODO: check if this constraint will help us
                     // add constraint y != null (effectively)
                     qry.addLocalConstraint(PtEdge.make(refLPK, ObjVar(rgn)))
                     true
@@ -296,29 +297,19 @@ class NullDereferenceTransferFunctions(walaRes : WalaAnalysisResults,
     }
   }
 
-  // use Nit annotations to get easy refutation when we have a null constraint on a callee with a known non-null
-  // return value
-  override def tryBindReturnValue(call : SSAInvokeInstruction, qry : Qry, caller : CGNode,
-                                  callee : CGNode) : Option[MSet[LocalPtEdge]] = {
-    val calleeLocalConstraints = Util.makeSet[LocalPtEdge]
-    val m = callee.getMethod
-    val methodIdentifier = s"${ClassUtil.pretty(m.getDeclaringClass)}.${m.getSelector}"
-    // check the Nit annotations to see if callee has a non-null annotation
-    val calleeHasNonNullAnnotation = nonNullRetMethods.contains(methodIdentifier)
-
-    if (call.hasDef) // x = call m(a, b, ...)
-      getConstraintEdgeForDef(call, qry.localConstraints, caller) match {
-        case Some(LocalPtEdge(_, p@PureVar(t))) if calleeHasNonNullAnnotation && t.isReferenceType && qry.isNull(p) =>
-          if (Options.PRINT_REFS) println(s"Refuted by Nit annotation on ${ClassUtil.pretty(callee)}")
-          None
-        case Some(edge) => // found return value in constraints
-          qry.removeLocalConstraint(edge) // remove x -> A constraint
-          // add ret_callee -> A constraint
-          calleeLocalConstraints += PtEdge.make(Var.makeReturnVar(callee, hm), edge.snk)
-          Some(calleeLocalConstraints)
-        case None => Some(calleeLocalConstraints) // return value not in constraints, no need to do anything
-      }
-    else Some(calleeLocalConstraints)
-  }
+  // use Nit annotations to get easy refutation when we have a null constraint on a callee with a known non-null retval
+  override def isRetvalFeasible(call : SSAInvokeInstruction, caller : CGNode, callee : CGNode, qry : Qry) : Boolean =
+    !call.hasDef || {
+      val m = callee.getMethod
+      val methodIdentifier = s"${ClassUtil.pretty(m.getDeclaringClass)}.${m.getSelector}"
+      if (nonNullRetMethods.contains(methodIdentifier)) {
+        getConstraintEdgeForDef(call, qry.localConstraints, caller) match {
+          case Some(LocalPtEdge(_, p@PureVar(_))) if qry.isNull(p) =>
+            if (Options.PRINT_REFS) println(s"Refuted by Nit annotation on ${ClassUtil.pretty(callee)}")
+            false
+          case _ => true
+        }
+      } else super.isRetvalFeasible(call, caller, callee, qry)
+    }
 
 }

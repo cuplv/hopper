@@ -420,49 +420,34 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
         qry.addPureConstraint(PureAtomicConstraint(lhs, op, rhs))
       }
     }
-  } 
-  
-  def isDispatchFeasible(call : SSAInvokeInstruction, caller : CGNode, callee : CGNode, qry : Qry) : Boolean = {
-    def receiverFeasible  : Boolean = call.isStatic || {
-      val receiver = Var.makeLPK(call.getUse(0), caller, hm)
-      qry.localConstraints.find(e => e.src.key == receiver) match {
-        case Some(LocalPtEdge(_, o@ObjVar(rgnReceiver))) =>
-          //val calleeClass = callee.getMethod().getDeclaringClass()
-          //rgnReceiver.filter(i => cha.isAssignableFrom(i.getConcreteType(), calleeClass))
-          // TODO: use context-sensitivity information and o vs callee information here
-          true 
-        case Some(LocalPtEdge(_, p@PureVar(_))) =>
-          try {
-            // make sure the receiver is non-null
-            val res = qry.checkTmpPureConstraint(Pure.makeNeNullConstraint(p))
-            if (!res && Options.PRINT_REFS) println("Refuted by null dispatch!")
-            res
-          } catch {
-            case _ : UnknownSMTResult => true
-          }
-        case None => true // no constraint on receiver, assume feasible
+  }
+
+  def isDispatchFeasible(call : SSAInvokeInstruction, caller : CGNode, qry : Qry) : Boolean =
+    call.isStatic || {
+      val receiver = Var.makeLPK(call.getReceiver, caller, hm)
+      getConstraintEdge(receiver, qry.localConstraints) match {
+        case Some(LocalPtEdge(_, p@PureVar(_))) if qry.isNull(p) => false // refuted by null dispatch
+        case _ => true
       }
     }
-    
-    def retvalFeasible = !call.hasDef || {
+
+  def isRetvalFeasible(call : SSAInvokeInstruction, caller : CGNode, callee : CGNode, qry : Qry) : Boolean =
+    !call.hasDef || {
       val callerRet = Var.makeLPK(call.getDef(), caller, hm)
       val calleeRet = Var.makeRVK(callee, hm)
-      qry.localConstraints.find(e => e.src.key == callerRet) match {
+      getConstraintEdge(callerRet, qry.localConstraints) match {
         case Some(LocalPtEdge(_, retObj@ObjVar(_))) =>
           getPt(calleeRet, hg) match {
-            case rgn if rgn.isEmpty =>              
+            case rgn if rgn.isEmpty =>
               if (EMPTY_PT_WARNING) println(s"(4) Warning: returning null for $calleeRet based on empty PT set")
               false // callee only returns null, but we need it to return an ObjVar
-            case rgn => // dispatch is onlyFeasible if rgn(retObj) \cap rgn(retObj) is non-empty 
-              qry.intersectAndSubstitute(retObj, ObjVar(rgn), hg).isDefined 
-          }      
-        case _ => true // constraint is on a PureVal or there is no constraint. assume feasible     
+            case rgn => // dispatch is onlyFeasible if rgn(retObj) \cap rgn(retObj) is non-empty
+              qry.intersectAndSubstitute(retObj, ObjVar(rgn), hg).isDefined
+          }
+        case _ => true // constraint is on a PureVal or there is no constraint. assume feasible
       }
     }
-    
-    receiverFeasible && retvalFeasible    
-  }
-  
+
   /** @return false if call to Object.clone() could not have returned an object of the correct type, true otherwise */
   def handleCallToObjectClone(i : SSAInvokeInstruction, qry : Qry, node : CGNode) : Boolean = {
     getConstraintEdgeForDef(i, qry.localConstraints, node) match {
@@ -939,11 +924,16 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
                 getConstraintPt(ptX.rgn, fld, qry.heapConstraints) match {
                   case Some(edges) => 
                     val cases = edges.foldLeft (List.empty[Qry]) ((l, e) => processPut(Some(e), qry.clone, l))
-                    //if (!cases.isEmpty) {
-                      // add "edge not consumed" case by adding x -> ptX constraint
-                      qry.addLocalConstraint(PtEdge.make(x, ptX))
-                      qry :: cases
-                    //} else cases
+                    // add "edge not consumed" case by adding x -> ptX constraint
+                    qry.addLocalConstraint(PtEdge.make(x, ptX))
+                    edges.foreach(e => e match {
+                      case ObjPtEdge(o@ObjVar(rgn), _, _) =>
+                        // in order for the edge to not be consumed, ptX can't alias with A for any of the A.f -> B
+                        // edges in our query
+                        Var.markCantAlias(ptX, o)
+                      case _ => ()
+                    })
+                    qry :: cases
                   case None => List(qry) // no edges that can be produced by this instruction
                 }
             }
