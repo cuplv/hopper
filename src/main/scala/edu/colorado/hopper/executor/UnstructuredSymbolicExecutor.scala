@@ -109,10 +109,12 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
       case None =>
         val callees = cg.getPossibleTargets(caller, i.getCallSite())
         if (callees.isEmpty()) {
+          // check for null dispatch
+          val okPaths = paths.filter(p => tf.isDispatchFeasible(i, caller, p.qry))
           if (DEBUG) println("Dropping retval constraint because we have no targets")
           // callee is a native method or cannot be resolved for some reason. drop any retval constraints we have
-          paths.foreach(p => p.dropReturnValueConstraints(i, caller, tf))
-          (List.empty[Path], paths)
+          okPaths.foreach(p => p.dropReturnValueConstraints(i, caller, tf))
+          (List.empty[Path], okPaths)
         } else paths.foldLeft (List.empty[Path], List.empty[Path]) ((pair, p) =>
           callees.foldLeft (pair) ((pair, callee) => {
             val calleePath = p.deepCopy
@@ -126,7 +128,7 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
               (cg.getSuccNodes(callee).foldLeft (Set.empty[MethodReference]) ((s, n) =>
                 s + n.getMethod().getReference())).contains(Path.SYSTEM_EXIT)
 
-            val qry = calleePath.qry
+            val qry = p.qry
             if (tf.isDispatchFeasible(i, caller, qry) && tf.isRetvalFeasible(i, caller, callee, qry) &&
                 callee.getMethod().getReference() != Path.SYSTEM_EXIT) {
               if (Path.methodBlacklistContains(callee.getMethod())) {

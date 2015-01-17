@@ -227,11 +227,8 @@ class NullDereferenceTransferFunctions(walaRes : WalaAnalysisResults,
               case Some(_) => true // edge is already in our constraints
               case None =>
                 PtUtil.getPt(refLPK, hg) match {
-                  case rgn if rgn.isEmpty =>
-                    println("Refuting based on empty points-to set for receiver!")
-                    false // should leak to a refutation
+                  case rgn if rgn.isEmpty => false // should leak to a refutation
                   case rgn =>
-                    println("adding extra edge after")
                     // TODO: check if this constraint will help us
                     // add constraint y != null (effectively)
                     qry.addLocalConstraint(PtEdge.make(refLPK, ObjVar(rgn)))
@@ -254,7 +251,8 @@ class NullDereferenceTransferFunctions(walaRes : WalaAnalysisResults,
     val javaAnnots =
       Set("Ljava/lang/Integer.valueOf(I)Ljava/lang/Integer;",
           "Ljava/lang/Object.toString()Ljava/lang/String;",
-          "Ljava/lang/StringBuilder.append(Ljava/lang/String;)Ljava/lang/StringBuilder;"
+          "Ljava/lang/StringBuilder.append(Ljava/lang/String;)Ljava/lang/StringBuilder;",
+          "Ljava/lang/StringBuilder.append(I)Ljava/lang/StringBuilder;"
       )
 
     // similar story for Android library methods. unlike the java annotations, some of these annots are potentially
