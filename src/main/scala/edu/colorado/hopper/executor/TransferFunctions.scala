@@ -755,14 +755,15 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
   }  
   
   private def doAliasingCaseSplit(qry : Qry, xEdge : Option[LocalPtEdge], yVar : LocalVar, 
-                                   ptY : ObjVar) : List[(Qry, ObjVar, Option[LocalPtEdge])] = {
+                                  ptY : ObjVar) : List[(Qry, ObjVar, Option[LocalPtEdge])] = {
     val notAliasedCase = qry.clone
     val maybeAliased = notAliasedCase.getAllObjVars
     val splits = maybeAliased.foldLeft (List((notAliasedCase, ptY, xEdge))) ((l, v) => {
       val rgnInter = ptY.rgn.intersect(v.rgn)
       if (rgnInter.isEmpty) l
       else {
-        //println("Maybe aliased: " + v + " and " + ptY)
+        // v and ptY may be aliased
+        Var.markCantAlias(ptY, v) // reflect that ptY and v can't be aliased (for the benefit of notAliasedCase)
         val newQry = qry.clone
         val interVar = ObjVar(rgnInter)
         newQry.addLocalConstraint(LocalPtEdge(yVar, interVar))
