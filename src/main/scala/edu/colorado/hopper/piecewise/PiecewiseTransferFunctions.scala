@@ -1,17 +1,17 @@
 package edu.colorado.hopper.piecewise
 
 import com.ibm.wala.analysis.pointers.HeapGraph
-import com.ibm.wala.ipa.callgraph.propagation.{HeapModel, InstanceKey}
+import com.ibm.wala.ipa.callgraph.propagation.{PointerKey, HeapModel, InstanceKey}
 import com.ibm.wala.ipa.callgraph.{CGNode, CallGraph}
 import com.ibm.wala.ipa.cha.IClassHierarchy
 import com.ibm.wala.ssa.SSAInvokeInstruction
-import com.ibm.wala.util.graph.traverse.{BFSPathFinder, DFS}
+import com.ibm.wala.util.graph.traverse.{BFSIterator, BFSPathFinder, DFS}
 import edu.colorado.hopper.executor.TransferFunctions
 import edu.colorado.hopper.executor.TransferFunctions._
 import edu.colorado.hopper.piecewise.PiecewiseTransferFunctions._
 import edu.colorado.hopper.state.Qry
 import edu.colorado.thresher.core.Options
-import edu.colorado.walautil.{ClassUtil, GraphUtil}
+import edu.colorado.walautil.{ClassUtil, GraphUtil, Util}
 
 import scala.collection.JavaConversions._
 
@@ -48,7 +48,7 @@ object PiecewiseTransferFunctions {
           if (!isKReachable && rr.getProducers(entry._1, qry).exists(pair => pair._1 == node)) {
             // if node not k-reachable from callee AND node contains a producer statement for the current constraint, the node is relevant
             qry.removeConstraint(entry._1) // node not k-reachable. drop constraints
-          } else if (DEBUG) println(s"Callee is Relevant: ${ClassUtil.pretty(callee)} because transitive callee is relevant: ${ClassUtil.pretty(node)}")
+          } else if (DEBUG) println(s"callee is relevant: ${ClassUtil.pretty(callee)} because transitive callee is relevant: ${ClassUtil.pretty(node)}")
           // if isKReachable is true, the callee is relevant and we will exit via the double exists above
           isKReachable
         }})
@@ -69,6 +69,37 @@ object PiecewiseTransferFunctions {
       }))
     }
   }
+
+  /** @param frontierFilter - function to filter away parts of the call graph not to explore. useful in the case that
+    * the call graph is imprecise in a predictable way */
+  def dropCallConstraints(qry : Qry, callee : CGNode, rr : RelevanceRelation, cg : CallGraph,
+                          frontierFilter : CGNode => Boolean = _ => true) : Unit = {
+    val iter =
+      new BFSIterator[CGNode](cg, callee) {
+        override def getConnected(n : CGNode) : java.util.Iterator[_ <: CGNode] =
+          cg.getSuccNodes(n).filter(n => frontierFilter(n))
+      }
+    val reachable = Util.makeSet[CGNode]
+    while (iter.hasNext) reachable.add(iter.next())
+
+    val constraintProdMap = rr.getConstraintModifierMap(qry, ignoreLocalConstraints = true)
+    constraintProdMap.foreach(pair => {
+      val (constraint, producers) = pair
+      producers.find(pair => reachable.contains(pair._1)) match {
+        case Some(snk) =>
+          qry.removeConstraint(constraint)
+          if (DEBUG) {
+            println("Dropping " + constraint + " due to reachability")
+            val finder = new BFSPathFinder(cg, callee, snk._1)
+            val path = finder.find()
+            println("Path is: ");
+            path.foreach(n => println(ClassUtil.pretty(n)))
+          }
+        case None => ()
+      }
+    })
+  }
+
 }
 
 /** extension of ordinary Thresher transfer functions using the relevance relation to do some things more precisely/efficiently */
@@ -77,5 +108,10 @@ class PiecewiseTransferFunctions(cg : CallGraph, hg : HeapGraph[InstanceKey], hm
 
   override def isCallRelevant(i : SSAInvokeInstruction, caller : CGNode, callee : CGNode, qry : Qry) : Boolean =
     isRetvalRelevant(i, caller, qry) || doesCalleeModifyHeap(callee, qry, rr, cg)
+
+  override def dropCallConstraints(qry : Qry, callee : CGNode,
+                                   modRef : java.util.Map[CGNode,com.ibm.wala.util.intset.OrdinalSet[PointerKey]],
+                                   loopDrop : Boolean) : Unit =
+    PiecewiseTransferFunctions.dropCallConstraints(qry, callee, rr, cg)
 
 }

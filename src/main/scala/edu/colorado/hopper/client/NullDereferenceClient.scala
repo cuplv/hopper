@@ -76,7 +76,6 @@ class NullDereferenceClient(appPath : String, libPath : Option[String], mainClas
                 if (!i.isStatic) {
                   val receiverLPK = Var.makeLPK(i.getReceiver, node, tf.hm)
                   retPaths.foreach(p => if (p.qry.localMayPointIntoQuery(receiverLPK, node, tf.hm, tf.hg)) {
-                    //retPaths.foreach(p => if (useMayBeRelevantToQuery(i.getReceiver, p.qry, node, tf.hm, tf.hg)) {
                     PtUtil.getPt(receiverLPK, tf.hg) match {
                       case rgn if rgn.isEmpty => sys.error("handle this case!") // should leak to a refutation
                       case rgn =>
@@ -217,25 +216,28 @@ class NullDereferenceTransferFunctions(walaRes : WalaAnalysisResults,
           // have thrown a NPE
           if (Options.PRINT_REFS) println("Refuted by dominating null check!")
           Nil
-        case _ =>
+        case Some(e) => super.execute(s, qry, n)
+        case None =>
           val retPaths = super.execute(s, qry, n)
           val tbl = n.getIR.getSymbolTable
-          retPaths.filter(p => if (tbl.isConstant(i.getRef)) true else {
-            val qry = p.qry
-            // have to check for edge again here because it may be added by call to super.execute()
-            PtUtil.getConstraintEdge(refLPK, qry.localConstraints) match {
-              case Some(_) => true // edge is already in our constraints
-              case None =>
-                PtUtil.getPt(refLPK, hg) match {
-                  case rgn if rgn.isEmpty => false // should leak to a refutation
-                  case rgn =>
-                    // TODO: check if this constraint will help us
-                    // add constraint y != null (effectively)
-                    qry.addLocalConstraint(PtEdge.make(refLPK, ObjVar(rgn)))
-                    true
-                }
+          retPaths.filter(p =>
+            if (tbl.isConstant(i.getRef)) true
+            else {
+              val qry = p.qry
+              // have to check for edge again here because it may be added by call to super.execute()
+              PtUtil.getConstraintEdge(refLPK, qry.localConstraints) match {
+                case None if qry.localMayPointIntoQuery(refLPK, n, hm, hg) =>
+                  PtUtil.getPt(refLPK, hg) match {
+                    case rgn if rgn.isEmpty => false // should leak to a refutation
+                    case rgn =>
+                      // add constraint y != null (effectively)
+                      qry.addLocalConstraint(PtEdge.make(refLPK, ObjVar(rgn)))
+                      true
+                  }
+                case _ => true
+              }
             }
-          })
+          )
       }
     case i : SSAInvokeInstruction if !i.isStatic() => // x = y.m(...)
       sys.error("This case should be handled in SymbolicExcutor.executeInstr")
@@ -243,7 +245,6 @@ class NullDereferenceTransferFunctions(walaRes : WalaAnalysisResults,
   }
 
   private val nonNullRetMethods = parseNitNonNullAnnotations()
-  println("annots are " + nonNullRetMethods)
 
   /** parse annotations produced by Nit and @return the set of methods whose return values are always non-null */
   def parseNitNonNullAnnotations() : Set[String] = {
@@ -261,6 +262,7 @@ class NullDereferenceTransferFunctions(walaRes : WalaAnalysisResults,
     // using Droidel's instrumentation functionality (i.e., for findViewByID)
     val androidAnnots =
       Set("Landroid/app/Activity.getSystemService(Ljava/lang/String;)Ljava/lang/Object;",
+          "Landroid/app/Activity.findViewById(I)Landroid/view/View;",
           "Landroid/content/ContentResolver.openInputStream(Landroid/net/Uri;)Ljava/io/InputStream;",
           "Landroid/content/Context.getResources()Landroid/content/res/Resources;",
           "Landroid/content/Context.getSystemService(Ljava/lang/String;)Ljava/lang/Object;",
@@ -296,17 +298,35 @@ class NullDereferenceTransferFunctions(walaRes : WalaAnalysisResults,
     }
   }
 
+  override def isDispatchFeasible(call : SSAInvokeInstruction, caller : CGNode, qry : Qry) : Boolean =
+    call.isStatic || {
+      val receiverLPK = Var.makeLPK(call.getReceiver, caller, hm)
+      println("checking dispatch feasibility for " + call)
+      PtUtil.getConstraintEdge(receiverLPK, qry.localConstraints) match {
+        case Some(LocalPtEdge(_, p@PureVar(_))) if qry.isNull(p) => false // refuted by null dispatch
+        case None if qry.localMayPointIntoQuery(receiverLPK, caller, hm, hg) =>
+          println("local may point into query")
+          PtUtil.getPt(receiverLPK, hg) match {
+            case rgn if rgn.isEmpty =>
+              false // refuted by null dispatch
+            case rgn =>
+              println("adding extra constraint on v" + receiverLPK.getValueNumber)
+              // add constraint retval != null (effectively)
+              qry.addLocalConstraint(PtEdge.make(receiverLPK, ObjVar(rgn)))
+              true
+          }
+        case _ => true
+      }
+    }
+
   // use Nit annotations to get easy refutation when we have a null constraint on a callee with a known non-null retval
   override def isRetvalFeasible(call : SSAInvokeInstruction, caller : CGNode, callee : CGNode, qry : Qry) : Boolean =
     !call.hasDef || {
-      println("checking for nit annot on " + callee)
       val m = callee.getMethod
       val methodIdentifier = s"${ClassUtil.pretty(m.getDeclaringClass)}.${m.getSelector}"
       if (nonNullRetMethods.contains(methodIdentifier)) {
-        println("got annot")
         getConstraintEdgeForDef(call, qry.localConstraints, caller) match {
           case Some(LocalPtEdge(_, p@PureVar(_))) if qry.isNull(p) =>
-            println("got ref")
             if (Options.PRINT_REFS) println(s"Refuted by Nit annotation on ${ClassUtil.pretty(callee)}")
             false
           case _ => true

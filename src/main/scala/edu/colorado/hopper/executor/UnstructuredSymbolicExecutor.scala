@@ -128,7 +128,7 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
               (cg.getSuccNodes(callee).foldLeft (Set.empty[MethodReference]) ((s, n) =>
                 s + n.getMethod().getReference())).contains(Path.SYSTEM_EXIT)
 
-            val qry = p.qry
+            val qry = calleePath.qry
             if (tf.isDispatchFeasible(i, caller, qry) && tf.isRetvalFeasible(i, caller, callee, qry) &&
                 callee.getMethod().getReference() != Path.SYSTEM_EXIT) {
               if (Path.methodBlacklistContains(callee.getMethod())) {
@@ -144,10 +144,10 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
                     else if (callee == caller) "recursion"
                     else "blacklist")
                   )
-                calleePath.dropConstraintsProduceableInCall(i, caller, callee, tf)
+                tf.dropConstraintsFromInstructions(List(i), caller, qry, Some(callee))
                 (enterPaths, if (skipPaths.contains(calleePath)) skipPaths else calleePath :: skipPaths)
               } else if (calleePath.isCallRelevant(i, caller, callee, tf) || mayDirectlyCallExitMethod)
-              // calling enterCallee pushes callee onto call stack
+                // calling enterCallee pushes callee onto call stack
                 (if (tf.enterCallee(i, calleePath.qry, calleePath.node, callee)) calleePath :: enterPaths else enterPaths,
                   skipPaths)
               else {

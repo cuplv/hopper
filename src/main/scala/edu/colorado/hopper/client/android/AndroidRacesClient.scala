@@ -5,7 +5,7 @@ import java.io.File
 import com.ibm.wala.analysis.pointers.HeapGraph
 import com.ibm.wala.classLoader.{IField, IClass}
 import com.ibm.wala.ipa.callgraph.CGNode
-import com.ibm.wala.ipa.callgraph.propagation.{InstanceKey, StaticFieldKey, InstanceFieldKey, HeapModel}
+import com.ibm.wala.ipa.callgraph.propagation._
 import com.ibm.wala.ssa._
 import edu.colorado.droidel.driver.AbsurdityIdentifier
 import edu.colorado.hopper.client.NullDereferenceTransferFunctions
@@ -26,11 +26,6 @@ class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelCli
 
   // TODO: mixin null deref transfer functions and pw transfer functions, or otherwise allow code reuse
   lazy val tf = new NullDereferenceTransferFunctions(walaRes, new File(s"$appPath/nit_annots.xml")) {
-
-    override def isCallRelevant(i : SSAInvokeInstruction, caller : CGNode, callee : CGNode, qry : Qry) : Boolean =
-      if (Options.PIECEWISE_EXECUTION)
-        isRetvalRelevant(i, caller, qry) || PiecewiseTransferFunctions.doesCalleeModifyHeap(callee, qry, rr, cg)
-      else super.isCallRelevant(i, caller, callee, qry)
 
     def useMayBeRelevantToQuery(use : Int, qry : Qry, n : CGNode, hm : HeapModel,
                                  hg : HeapGraph[InstanceKey]) : Boolean = {
@@ -55,6 +50,23 @@ class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelCli
       }
       shouldAdd
     }
+
+    override def isCallRelevant(i : SSAInvokeInstruction, caller : CGNode, callee : CGNode, qry : Qry) : Boolean =
+      if (Options.PIECEWISE_EXECUTION)
+        isRetvalRelevant(i, caller, qry) || PiecewiseTransferFunctions.doesCalleeModifyHeap(callee, qry, rr, cg)
+      else super.isCallRelevant(i, caller, callee, qry)
+
+    val HANDLER_CLASS = "Landroid/os/Handler"
+    val DISPATCH_MESSAGE = "dispatchMessage"
+    def frontierFilter(n : CGNode) : Boolean = {
+      val m = n.getMethod
+      m.getDeclaringClass.getName.toString == HANDLER_CLASS && m.getName.toString == DISPATCH_MESSAGE
+    }
+
+    override def dropCallConstraints(qry : Qry, callee : CGNode,
+                                     modRef : java.util.Map[CGNode,com.ibm.wala.util.intset.OrdinalSet[PointerKey]],
+                                     loopDrop : Boolean) : Unit =
+      PiecewiseTransferFunctions.dropCallConstraints(qry, callee, rr, cg, frontierFilter)
 
     override def executeCond(cond : SSAConditionalBranchInstruction, qry : Qry, n : CGNode,
                              isThenBranch : Boolean) : Boolean =
@@ -96,35 +108,6 @@ class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelCli
 
       override def shouldJump(p : Path) : Option[(Path, Qry => Boolean, Unit => Any)] =
         Some((p.deepCopy, ((q : Qry) => true), Util.NOP))
-
-      /*override def executeInstr(paths : List[Path], instr : SSAInstruction, blk : ISSABasicBlock, node : CGNode,
-                                cfg : SSACFG, isLoopBlk : Boolean, callStackSize : Int) : List[Path] = instr match {
-        case i : SSAInvokeInstruction if !i.isStatic =>
-          val retPaths = super.executeInstr(paths, instr, blk, node, cfg, isLoopBlk, callStackSize)
-          val tbl = node.getIR.getSymbolTable
-          if (!tbl.isConstant(i.getReceiver())) {
-            val receiverLPK = Var.makeLPK(i.getReceiver, node, tf.hm)
-            retPaths.filter(p => {
-              val qry = p.qry
-              PtUtil.getConstraintEdge(receiverLPK, qry.localConstraints) match {
-                case Some(LocalPtEdge(_, pure@PureVar(_))) if qry.isNull(pure) => false // refuted by null dispatch
-                case Some(_) => true // edge already exists
-                case None =>
-                  PtUtil.getPt(receiverLPK, tf.hg) match {
-                    case rgn if rgn.isEmpty =>
-                      if (Options.PRINT_REFS) println("Refuting based on empty points-to set for receiver!")
-                      false // should leak to a refutation
-                    case rgn =>
-                      // TODO: don't always add--should check if use may be relevant, like we do for fields
-                      // add constraint y != null (effectively)
-                      qry.addLocalConstraint(PtEdge.make(receiverLPK, ObjVar(rgn)))
-                      true
-                  }
-                }
-            })
-          } else retPaths
-        case _ => super.executeInstr(paths, instr, blk, node, cfg, isLoopBlk, callStackSize)
-      }*/
 
     }
     else new DefaultSymbolicExecutor(tf)

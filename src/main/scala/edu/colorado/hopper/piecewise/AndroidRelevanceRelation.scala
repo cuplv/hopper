@@ -80,6 +80,9 @@ class AndroidRelevanceRelation(cg : CallGraph, hg : HeapGraph[InstanceKey], hm :
     isNotBackwardReachableFrom(toFilter, curNode) || {
       val path = new BFSPathFinder(cg, toFilter, curNode).find()
       // TODO: this is *very* unsound, but need to do it for now to avoid absurd paths. fix CG issues that cause this later
+      // I think these CG paths happen whenever a function call places a message on the event queue--this starts a thread
+      // that calls dispatchMessage() and then can pull *any* message off of the event queue. We can prevent this from
+      // happening by cutting off paths that pass through Handler.dispatchMessage() (or Looper.loop())
       val reachable =
         path != null && path.size > 0 && path.exists(n => n != toFilter && n != curNode && !ClassUtil.isLibrary(n)) &&
         path.size < 20

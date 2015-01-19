@@ -1854,7 +1854,7 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
     isRetvalRelevant(i, caller, qry) ||
     dropCallConstraintsOrCheckCallRelevant(callee, qry.heapConstraints, dropConstraints = false, loopDrop = false, qry)
   
-  private def dropCallConstraints(qry : Qry, callee : CGNode, 
+  def dropCallConstraints(qry : Qry, callee : CGNode,
     modRef : java.util.Map[CGNode,com.ibm.wala.util.intset.OrdinalSet[PointerKey]], loopDrop : Boolean) : Unit = 
     dropCallConstraintsOrCheckCallRelevant(callee, qry.heapConstraints, dropConstraints = true, loopDrop, qry)
   
@@ -1877,7 +1877,7 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
       }
     }
     
-  def dropHeapConstraintsFromInstruction(i : SSAInstruction, n : CGNode, qry : Qry, 
+  def dropHeapConstraintsFromInstruction(i : SSAInstruction, n : CGNode, qry : Qry,
                                          modRef : java.util.Map[CGNode,com.ibm.wala.util.intset.OrdinalSet[PointerKey]],
                                          loopDrop : Boolean, callee : Option[CGNode] = None) : Unit = {
 
