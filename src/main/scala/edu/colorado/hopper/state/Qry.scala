@@ -24,9 +24,9 @@ object Qry {
     NULL
   }
   
-  def getStartLoc(i : SSAInstruction, n : CGNode) : (ISSABasicBlock,Int) = CFGUtil.findInstr(n, i) match {
+  def getStartLoc(i : SSAInstruction, n : CGNode) : (ISSABasicBlock,Int) = CFGUtil.findInstr(n.getIR, i) match {
     case Some(pair) => pair
-    case None => sys.error("Couldn't find instruction " + i + " in IR for " + n)
+    case None => sys.error(s"Couldn't find instruction $i in IR for $n")
   }
   
   def constraintsToString(s : MSet[_], sep : String) : String = Util.toCSVStr(s, sep) 

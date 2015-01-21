@@ -1,5 +1,7 @@
 package edu.colorado.hopper.state
 
+import com.ibm.wala.ipa.cfg.ExceptionPrunedCFG
+import com.ibm.wala.util.graph.dominators.Dominators
 import edu.colorado.hopper.util._
 import edu.colorado.walautil.WalaBlock
 
@@ -59,14 +61,16 @@ object Path {
   def fork(p : Path, node : CGNode, instrs : Set[SSAInstruction], jmpNum : Int, cg : CallGraph,
            hg : HeapGraph[InstanceKey], hm : HeapModel, cha : IClassHierarchy, paths : List[Path] = Nil) : List[Path] = {
     val alreadyDidInitCase = Util.makeSet[CGNode]
-    //val fakeWorldClinit = WALACFGUtil.getFakeWorldClinitNode(cg) 
     val fakeWorldClinit = CGNodeUtil.getFakeWorldClinitNode(cg).get
+
+    val instrsWithBlocks = instrs.map(i => (i, CFGUtil.findInstr(node.getIR, i)))
     
-    instrs.foldLeft (paths) ((paths, instr) => {
+    instrsWithBlocks.foldLeft (paths) ((paths, pair) => {
+      val (instr, blkOpt) = pair
       val newPath = p.deepCopy
-      CFGUtil.findInstr(node, instr) match {
+      blkOpt match {
         case Some((blk, index)) => 
-          setupJumpPath(newPath, instr, blk, index, node, hm, hg, cha, jmpNum)    
+          setupJumpPath(newPath, instr, blk, index, node, instrsWithBlocks, hm, hg, cha, jmpNum)
           newPath :: paths
         case None => 
           // this happens when we get an instruction that is one of our custom-generated
@@ -82,50 +86,50 @@ object Path {
             // case split for each one. instead, we consider a single case where we initialize every field to its
             // default value in one go.
             if (alreadyDidInitCase.add(node)) {
-              setupJumpPath(newPath, instr, node.getIR().getControlFlowGraph().entry(), -1, node, hm, hg, cha, jmpNum)
+              setupJumpPath(newPath, instr, node.getIR().getControlFlowGraph().entry(), -1, node, instrsWithBlocks, hm,
+                            hg, cha, jmpNum)
               newPath.qry.localConstraints.find(e => e match {
                 case LocalPtEdge(LocalVar(key), ObjVar(_)) => key.getValueNumber() == 1                  
                 case _ => false
               }) match {
                 case Some(LocalPtEdge(_, receiverObj@ObjVar(_))) =>
-                  if (TransferFunctions.initializeInstanceFieldsToDefaultValues(newPath.qry, node, Set(receiverObj))) newPath :: paths
+                  if (TransferFunctions.initializeInstanceFieldsToDefaultValues(newPath.qry, node, Set(receiverObj)))
+                    newPath :: paths
                   else paths // refuted by initialization to default vals
                 case other => sys.error("Couldn't find local pointer to receiver in " + newPath + "; got " + other)
               }            
             } else paths // refuted by initialization to default values or we already did the init case for this node
           } else if (method.isClinit() || node.equals(fakeWorldClinit)) {
             if (TransferFunctions.initializeStaticFieldsToDefaultValues(newPath.qry, fakeWorldClinit)) {
-              setupJumpPath(newPath, instr, fakeWorldClinit.getIR().getControlFlowGraph().entry(), -1, node, hm, hg, cha, jmpNum)
+              setupJumpPath(newPath, instr, fakeWorldClinit.getIR().getControlFlowGraph().entry(), -1, node,
+                            instrsWithBlocks, hm, hg, cha, jmpNum)
               newPath :: paths
             } else paths // refuted by initialization to default values
           } else sys.error("Couldn't find instr " + instr + " in " + node + " ir " + node.getIR())           
       }
     })  
   }
-  
+
   def setupJumpPath(p : Path, instr : SSAInstruction, node : CGNode, hm : HeapModel, hg : HeapGraph[InstanceKey],
-                    cha : IClassHierarchy, jmpNum : Int = 0) : Unit = {
-    val (blk, index) = CFGUtil.findInstr(node, instr) match {
+                    cha : IClassHierarchy) : Unit = {
+    setupJumpPath(p, instr, node, Nil, hm, hg, cha, 0)
+  }
+  
+  private def setupJumpPath(p : Path, instr : SSAInstruction, node : CGNode,
+                            relInstrsWithBlocks : Iterable[(SSAInstruction,Option[(ISSABasicBlock,Int)])], hm : HeapModel,
+                            hg : HeapGraph[InstanceKey], cha : IClassHierarchy, jmpNum : Int = 0) : Unit = {
+    val (blk, index) = CFGUtil.findInstr(node.getIR, instr) match {
       case Some(p) => p
       case None => sys.error("Couldn't find instr " + instr + " in node " + node)
     }
-    setupJumpPath(p, instr, blk, index, node, hm, hg, cha, jmpNum)
+    setupJumpPath(p, instr, blk, index, node, relInstrsWithBlocks, hm, hg, cha, jmpNum)
   }
   
-  def setupJumpPath(p : Path, i : SSAInstruction, blk : ISSABasicBlock, index : Int, node : CGNode, hm : HeapModel,
-                    hg : HeapGraph[InstanceKey], cha : IClassHierarchy, jmpNum : Int) = {
-    val qry = p.qry
-    require(qry.callStack.isEmpty)      
-   
-    val jmpLoc = new CallStackFrame(node, Util.makeSet[LocalPtEdge], blk, index)
-    qry.callStack.push(jmpLoc)
-    // need distinct copies because the StackFrame on the call stack will be mutated
-    val copy = jmpLoc.clone
-    assert(!p.jumpMap.values.toSet.contains(copy), "already jumped to " + jmpLoc)
-    p.jumpMap += (jmpNum -> copy)
-    p.jumpHistory += copy
+  private def setupJumpPath(p : Path, i : SSAInstruction, blk : ISSABasicBlock, index : Int, node : CGNode,
+                            relInstrsWithBlocks : Iterable[(SSAInstruction,Option[(ISSABasicBlock,Int)])],
+                            hm : HeapModel, hg : HeapGraph[InstanceKey], cha : IClassHierarchy, jmpNum : Int) = {
 
-    def addLocalConstraintOnConsumedEdge(pred : HeapPtEdge => Boolean, lhsLocNum : Int) : Unit = {
+    def addLocalConstraintOnConsumedEdge(qry : Qry, pred : HeapPtEdge => Boolean, lhsLocNum : Int) : Unit = {
       // we need to set up x to point to the base obj A of the constraint A.f -> B or A[i] -> B to be consumed
       def addLocalConstraintOnLHS(lhs : ObjVar) = {
         val x = Var.makeLPK(lhsLocNum, node, hm)
@@ -156,19 +160,75 @@ object Path {
       }
     }
 
-    // TODO: add context-sensitivity constraints from node
+    def setupBlockAndCallStack(p : Path, blk : ISSABasicBlock, index : Int) : Unit = {
+      val qry = p.qry
+      // TODO: push this code into switch on instructions below
+      val jmpLoc = new CallStackFrame(node, Util.makeSet[LocalPtEdge], blk, index)
+      qry.callStack.push(jmpLoc)
+      // need distinct copies because the StackFrame on the call stack will be mutated
+      val copy = jmpLoc.clone
+      assert(!p.jumpMap.values.toSet.contains(copy), "already jumped to " + jmpLoc)
+      p.jumpMap += (jmpNum -> copy)
+      p.jumpHistory += copy
+    }
+
+    val qry = p.qry
+    require(qry.callStack.isEmpty)
+
+    // TODO: add context-sensitivity constraints from node?
     // setup local constraints based on instruction we're jumping to
     // the idea is that we're jumping to an instruction that will consume some edge in our constraints,
     // so we set up the local constraints in a way that guarantee the edge will be consumed
     i match {
       case i : SSAPutInstruction => // x.f = y
+        setupBlockAndCallStack(p, blk, index)
         if (!i.isStatic()) // if it's static, no setup necessary
-          addLocalConstraintOnConsumedEdge(e => e match {
+          addLocalConstraintOnConsumedEdge(qry, e => e match {
             case e@ObjPtEdge(_, InstanceFld(fld), _) => cha.resolveField(i.getDeclaredField) == fld
             case _ => false
           }, i.getRef)
       case i : SSAArrayStoreInstruction => // x[i] = y
-        addLocalConstraintOnConsumedEdge(e => e.isInstanceOf[ArrayPtEdge], i.getArrayRef)
+        setupBlockAndCallStack(p, blk, index)
+        addLocalConstraintOnConsumedEdge(qry, e => e.isInstanceOf[ArrayPtEdge], i.getArrayRef)
+      case i : SSAConditionalBranchInstruction =>
+        val ir = node.getIR
+        val cfg = ir.getControlFlowGraph
+        val succs = cfg.getNormalSuccessors(blk).toList
+        assert(succs.size == 2)
+        val (succ1, succ2) = (succs(0), succs(1))
+        val blksForRelInstructions =
+          relInstrsWithBlocks.foldLeft (List.empty[ISSABasicBlock]) ((l, pair) => pair._2 match {
+            case Some((blk, _)) => blk :: l
+            case None => l
+          })
+        val domInfo = Dominators.make(ExceptionPrunedCFG.make(cfg), cfg.entry())
+
+        // TODO: handle this case
+        assert(!blksForRelInstructions.contains(succ1), "blks for rel instructions contains cond succ " + succ1)
+        assert(!blksForRelInstructions.contains(succ2), "blks for rel instructions contains cond succ " + succ2)
+
+        val succ1DominatesRelInstr =
+          blksForRelInstructions.exists(b => b != succ1 && domInfo.isDominatedBy(b, succ1))
+        val succ2DominatesRelInstr =
+          blksForRelInstructions.exists(b => b != succ2 && domInfo.isDominatedBy(b, succ2))
+
+        if (succ1DominatesRelInstr) {
+          // this would imply that we did something wrong in our relevant instr filtering
+          assert(!succ2DominatesRelInstr) // this would imply that we did something wrong in our relevant instr filtering
+          // use succ2
+          p.lastBlk = succ2
+          setupBlockAndCallStack(p, blk, index)
+        } else if (succ2DominatesRelInstr)  {
+          // this would imply that we did something wrong in our relevant instr filtering
+          assert(!succ1DominatesRelInstr)
+          // use succ1
+          p.lastBlk = succ1
+          setupBlockAndCallStack(p, blk, index)
+        } else {
+          // TODO: I think this also implies that we did something wrong while filtering
+          sys.error("Can both succs of conditional be relevant?")
+        }
+
       case s => sys.error("Implement me: setup for " + s)
     }
   }

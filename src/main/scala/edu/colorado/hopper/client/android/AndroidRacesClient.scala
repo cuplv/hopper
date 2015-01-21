@@ -163,9 +163,11 @@ class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelCli
     }
 
     def shouldCheck(n : CGNode) : Boolean = {
+      // TODO: tmp, just for testing
+      val checkClass = if (Options.MAIN_CLASS == "Main") true else n.getMethod.getDeclaringClass.getName.toString.contains(Options.MAIN_CLASS)
       val checkMethod = if (Options.MAIN_METHOD == "main") true else n.getMethod.getName.toString == Options.MAIN_METHOD
-      n.getMethod.getDeclaringClass.getName.toString.contains("DuckDuckGo") && checkMethod && // TODO: TMP, for testing
-      !ClassUtil.isLibrary(n)
+      //println("Node is " + ClassUtil.pretty(n) + " checkClass " + checkClass + " checkMethod " + checkMethod)
+      checkClass && checkMethod && !ClassUtil.isLibrary(n)
     }
 
     val nullDerefs =

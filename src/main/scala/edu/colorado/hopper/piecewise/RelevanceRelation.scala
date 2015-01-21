@@ -86,7 +86,7 @@ class RelevanceRelation(val cg : CallGraph, val hg : HeapGraph[InstanceKey], val
           val callInstrs = IRUtil.getAllInstructions(caller).collect({ case i : SSAInvokeInstruction if sites.contains(i.getCallSite()) => i })
           callInstrs.foreach(call => {
             addEdgeInstr(caller, call)
-            val callBlk = CFGUtil.findInstr(caller, call) match {
+            val callBlk = CFGUtil.findInstr(caller.getIR, call) match {
               case Some((callBlk,_)) => callBlk
               case None => sys.error("couldn't find " + call + " in " + caller)
             }
@@ -181,6 +181,10 @@ class RelevanceRelation(val cg : CallGraph, val hg : HeapGraph[InstanceKey], val
     val downSet = computeDownSet(upSet, edgeInstrMap)
     (upSet, downSet)  
   }
+
+  def getNodeRelevantInstrsMap(q : Qry, ignoreLocalConstraints : Boolean) : Map[CGNode,Set[SSAInstruction]] =
+    // default to using producers, but can soundly change to use modifiers or any other superset of producers
+    getNodeProducerMap(q, ignoreLocalConstraints)
   
   /** return Some(paths) if we should jump, None if we should not jump */
   def getPiecewisePaths(p : Path, jmpNum : Int) : Option[List[Path]] = {   
@@ -188,24 +192,24 @@ class RelevanceRelation(val cg : CallGraph, val hg : HeapGraph[InstanceKey], val
     if (!p.qry.hasConstraint) return None
 
     // get producers
-    val prodMap = getNodeProducerMap(p.qry, ignoreLocalConstraints = true)
+    val relMap = getNodeRelevantInstrsMap(p.qry, ignoreLocalConstraints = true)
 
     if (DEBUG) {
-      val producers = prodMap.values.flatten
-      println(s"Overall, have ${prodMap.size} producers")
+      val producers = relMap.values.flatten
+      println(s"Overall, have ${relMap.size} relevant instrs")
       producers.foreach(println)
     }
      
     if (!USE_REACHABILITY_INFO && !DO_DOMINATOR_CHECK) {
       p.clearCallStack 
-      Some(prodMap.foldLeft (List.empty[Path]) ((paths, pair) => Path.fork(p, pair._1, pair._2, jmpNum, cg, hg, hm, cha, paths)))
+      Some(relMap.foldLeft (List.empty[Path]) ((paths, pair) => Path.fork(p, pair._1, pair._2, jmpNum, cg, hg, hm, cha, paths)))
     } else if (!USE_REACHABILITY_INFO) {
       val curNode = p.node
       p.clearCallStack
       // TODO: it's not always sound to do the dominator filtering without the up set. the problem is that we could enter the method 
       // from many different places (callees) and even if one relevant instruction dominates the other, we might enter from a callee
       // that lets us skip that instruction
-      Some(prodMap.foldLeft (List.empty[Path]) ((paths, pair) =>
+      Some(relMap.foldLeft (List.empty[Path]) ((paths, pair) =>
         if (curNode == pair._1) Path.fork(p, pair._1, pair._2, jmpNum, cg, hg, hm, cha, paths) // current node same as relevant node. not (necessarily) sound to do filtering
         else doLocalDominatorFiltering(p, pair._1, pair._2, jmpNum, paths)))
     } else {
@@ -214,7 +218,7 @@ class RelevanceRelation(val cg : CallGraph, val hg : HeapGraph[InstanceKey], val
       val downSetAll = downSet.values.toSet.flatten
       val curNode = p.node
       p.clearCallStack // this needs to be done *after* computing UP set
-      val paths = prodMap.foldLeft (List.empty[Path]) ((paths, pair) => {
+      val paths = relMap.foldLeft (List.empty[Path]) ((paths, pair) => {
         val (relevantNode, instrs) = pair
         // if neither the up set nor the down set contains the relevant node/instruction, we can skip it because it is unreachable
         // TODO: should perhaps add context to nodes when we jump (particularly if they're in the up set)
@@ -247,7 +251,7 @@ class RelevanceRelation(val cg : CallGraph, val hg : HeapGraph[InstanceKey], val
       // initInstrs is the set of instructions that do not belong to any block in the CFG. this occurs because we
       // generate our own "initialization to default values" instructions that do not occur in any block
       val (blkMap, initInstrs) = pair 
-      CFGUtil.findInstr(relevantNode, instr) match {
+      CFGUtil.findInstr(relevantNode.getIR, instr) match {
         case Some((blk, index)) => 
           val newMap = blkMap.get(blk) match {
             case Some((oldInstr,oldIndex)) =>
@@ -302,17 +306,16 @@ class RelevanceRelation(val cg : CallGraph, val hg : HeapGraph[InstanceKey], val
       res
     })
   }
-  
-  //def alreadyChecked : MSet[IField]
     
   private def flowSensitiveRefuted(p : Path, e : HeapPtEdge, prodMap : Map[PtEdge, List[(CGNode,SSAInstruction)]]) : Boolean = {
     val prods = prodMap(e)
     if (prods.size == 1 && p.callStackSize == 1) {      
       val (node, instr) = prods.head
       println("got single prod " + ClassUtil.pretty(node))
-      val cfg = node.getIR().getControlFlowGraph()
+      val ir = node.getIR
+      val cfg = ir.getControlFlowGraph()
       
-      val prodBlk = CFGUtil.findInstr(node, instr) match {
+      val prodBlk = CFGUtil.findInstr(ir, instr) match {
         case Some((blk, _)) => blk     
         case None => sys.error("Couldn't find " + instr + " in " + node)
       }
@@ -382,7 +385,7 @@ class RelevanceRelation(val cg : CallGraph, val hg : HeapGraph[InstanceKey], val
   /**
    * @return map of (modifier CG Node -> modifier commands for that CGNode)
    */
-  def getNodeModifierMap(q : Qry, ignoreLocalConstraints : Boolean = false) : Map[CGNode,Set[SSAInstruction]] = 
+  def getNodeModifierMap(q : Qry, ignoreLocalConstraints : Boolean = false) : Map[CGNode,Set[SSAInstruction]] =
     getProducerOrModifierMap(q, getNodeProducerOrModifierMapInternal, ignoreLocalConstraints, getMods = false)
   
   /**
