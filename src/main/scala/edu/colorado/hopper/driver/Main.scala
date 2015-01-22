@@ -35,8 +35,6 @@ object Main {
           println(s"Running tests for client ${client.getClass.getName()}")
           client.runRegressionTests
           Options.restoreDefaults() // reset default values for option flags, including PIECEWISE_EXECUTION
-          Options.SCALA_DEBUG = true
-          Options.PRINT_REFS = true
         }             
       })
       
