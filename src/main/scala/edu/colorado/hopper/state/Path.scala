@@ -216,14 +216,14 @@ object Path {
           // this would imply that we did something wrong in our relevant instr filtering
           assert(!succ2DominatesRelInstr) // this would imply that we did something wrong in our relevant instr filtering
           // use succ2
-          p.lastBlk = succ2
           setupBlockAndCallStack(p, blk, index)
+          p.lastBlk = succ2
         } else if (succ2DominatesRelInstr)  {
           // this would imply that we did something wrong in our relevant instr filtering
           assert(!succ1DominatesRelInstr)
           // use succ1
-          p.lastBlk = succ1
           setupBlockAndCallStack(p, blk, index)
+          p.lastBlk = succ1
         } else {
           // TODO: I think this also implies that we did something wrong while filtering
           sys.error("Can both succs of conditional be relevant?")

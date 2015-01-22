@@ -91,6 +91,7 @@ class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelCli
           qry.localConstraints.clear()
 
           // only keep constraints on null
+          // TODO: is keeping access paths sufficient to show safety of our example?
           // TODO: keep access paths of constraints on null as well?
           qry.heapConstraints.foreach(e => e match {
             case e@ObjPtEdge(_, _, p@PureVar(_)) if qry.isNull(p) => ()

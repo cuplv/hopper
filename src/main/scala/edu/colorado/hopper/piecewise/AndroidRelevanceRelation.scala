@@ -90,12 +90,14 @@ class AndroidRelevanceRelation(cg : CallGraph, hg : HeapGraph[InstanceKey], hm :
                                 reachedBlocks : Set[ISSABasicBlock] = Set.empty[ISSABasicBlock]) : (Set[SSAInstruction], Set[ISSABasicBlock]) =
       if (iter.hasNext) {
         val blk = iter.next()
+
         // assuming that each block contains only one relevant instruction and that it is the last one--this is safe
         // given the way WALA translates
         val newFilteredRelInstrs =
-          if (blk.getLastInstructionIndex > -1 && allRelInstrs.contains(blk.getLastInstruction))
-            filteredRelInstrs + blk.getLastInstruction
-          else filteredRelInstrs
+          blk.find(instr => allRelInstrs.contains(instr)) match {
+            case Some(instr) => filteredRelInstrs + instr
+            case None => filteredRelInstrs
+          }
         filterRelevantInstrsRec(iter, allRelInstrs, newFilteredRelInstrs, reachedBlocks + blk)
       } else (filteredRelInstrs, reachedBlocks)
 
@@ -137,12 +139,16 @@ class AndroidRelevanceRelation(cg : CallGraph, hg : HeapGraph[InstanceKey], hm :
           if (otherInstrs.isEmpty)
             node -> RelevantNodeInfo(relInstrs, callableFromCurNode = isCallableFromCurNode, instructionsFormCut = true)
           else {
+            if (DEBUG) {
+              println("Before filtering")
+              relInstrs.foreach(i => { ClassUtil.pp_instr(i, node.getIR); println })
+            }
             val cfg = node.getIR.getControlFlowGraph
             // perform backward BFS that terminates search along a path when it hits a relevant instruction
             val iter =
               new BFSIterator[ISSABasicBlock](cfg, cfg.exit()) {
                 override def getConnected(blk: ISSABasicBlock) =
-                  if (blk.getLastInstructionIndex > -1 && relInstrs.contains(blk.getLastInstruction))
+                  if (blk.exists(instr => relInstrs.contains(blk.getLastInstruction)))
                     java.util.Collections.emptyIterator()
                   // TODO: this isn't sound w.r.t exceptions--make sure none of the relevant instructions aren't contained
                   // in a try blocks
@@ -158,10 +164,7 @@ class AndroidRelevanceRelation(cg : CallGraph, hg : HeapGraph[InstanceKey], hm :
             if (DEBUG) {
               println("Found relevant cut? " + relevantInstructionsFormCut)
               println("After filtering")
-              finalRelevantInstrs.foreach(i => {
-                ClassUtil.pp_instr(i, node.getIR);
-                println
-              })
+              finalRelevantInstrs.foreach(i => { ClassUtil.pp_instr(i, node.getIR); println })
             }
             node ->
               RelevantNodeInfo(finalRelevantInstrs, callableFromCurNode = isCallableFromCurNode,
@@ -179,7 +182,6 @@ class AndroidRelevanceRelation(cg : CallGraph, hg : HeapGraph[InstanceKey], hm :
             val m = n.getMethod
             !m.isInit && !m.isClinit
             m.getDeclaringClass == toFilterMethod.getDeclaringClass
-            // TODO: replace isGuardedByConditional with cut check, filter relevant instructions accordingly
           } && nodeRelevanceMap(n).instructionsFormCut
         )
     }
@@ -198,14 +200,22 @@ class AndroidRelevanceRelation(cg : CallGraph, hg : HeapGraph[InstanceKey], hm :
       val (toFilter, relInfo) = entry
       // can refute if there's no way to get from curNode to toFilter
       if (isNotBackwardReachableFrom(toFilter, curNode)) m
-      else if (relInfo.callableFromCurNode) m + (toFilter -> relInfo.relevantInstrs)
+      else if (relInfo.callableFromCurNode) {
+        if (DEBUG) println(s"${ClassUtil.pretty(curNode)} callable from ${ClassUtil.pretty(toFilter)}, can't filter")
+        m + (toFilter -> relInfo.relevantInstrs)
+      }
       else {
         // try to filter
         if (canFilterDueToConstructor(toFilter, intraprocFilteredNodeModMap) ||
-            canFilterDueToClassInit(toFilter, intraprocFilteredNodeModMap))
-            // TODO: add canFilterDueToMethodOrdering
+            canFilterDueToClassInit(toFilter, intraprocFilteredNodeModMap)) {
+          if (DEBUG) println(s"Filtered node $toFilter!")
+          // TODO: add canFilterDueToMethodOrdering
           m
-        else m + (toFilter -> relInfo.relevantInstrs)
+        }
+        else {
+          if (DEBUG) println(s"Can't filter node $toFilter due to lack of ordering constraints")
+          m + (toFilter -> relInfo.relevantInstrs)
+        }
       }
     })
   }
@@ -228,7 +238,7 @@ class AndroidRelevanceRelation(cg : CallGraph, hg : HeapGraph[InstanceKey], hm :
           else CFGUtil.findInstr(ir, i) match {
             case Some((blk, _)) =>
               getDominatingCondBlks(blk, cfg).foldLeft (relInstructions) ((relInstructions, blk) => {
-                relInstructions + blk.getLastInstruction
+                relInstructions ++ blk
               })
             case None => relInstructions
           }

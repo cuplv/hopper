@@ -301,16 +301,12 @@ class NullDereferenceTransferFunctions(walaRes : WalaAnalysisResults,
   override def isDispatchFeasible(call : SSAInvokeInstruction, caller : CGNode, qry : Qry) : Boolean =
     call.isStatic || {
       val receiverLPK = Var.makeLPK(call.getReceiver, caller, hm)
-      println("checking dispatch feasibility for " + call)
       PtUtil.getConstraintEdge(receiverLPK, qry.localConstraints) match {
         case Some(LocalPtEdge(_, p@PureVar(_))) if qry.isNull(p) => false // refuted by null dispatch
         case None if qry.localMayPointIntoQuery(receiverLPK, caller, hm, hg) =>
-          println("local may point into query")
           PtUtil.getPt(receiverLPK, hg) match {
-            case rgn if rgn.isEmpty =>
-              false // refuted by null dispatch
+            case rgn if rgn.isEmpty => false // refuted by null dispatch
             case rgn =>
-              println("adding extra constraint on v" + receiverLPK.getValueNumber)
               // add constraint retval != null (effectively)
               qry.addLocalConstraint(PtEdge.make(receiverLPK, ObjVar(rgn)))
               true
