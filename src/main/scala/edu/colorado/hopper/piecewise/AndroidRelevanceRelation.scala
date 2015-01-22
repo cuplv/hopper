@@ -148,21 +148,20 @@ class AndroidRelevanceRelation(cg : CallGraph, hg : HeapGraph[InstanceKey], hm :
             val iter =
               new BFSIterator[ISSABasicBlock](cfg, cfg.exit()) {
                 override def getConnected(blk: ISSABasicBlock) =
-                  if (blk.exists(instr => relInstrs.contains(blk.getLastInstruction)))
-                    java.util.Collections.emptyIterator()
-                  // TODO: this isn't sound w.r.t exceptions--make sure none of the relevant instructions aren't contained
-                  // in a try blocks
+                  if (blk.exists(instr => relInstrs.contains(instr))) java.util.Collections.emptyIterator()
+                  // TODO: this isn't sound w.r.t exceptions--make sure none of the relevant instructions aren't
+                  // contained in a try block
                   else cfg.getNormalPredecessors(blk).iterator()
               }
             val (filteredInstrs, reachedBlocks) = filterRelevantInstrsRec(iter, otherInstrs)
-            // if the filtering search did not reach the entry block, we found a cut in the CFG consisting only of relevant
-            // blocks
+            // if the filtering search did not reach the entry block, we found a cut in the CFG consisting only of
+            // relevant blocks
             val relevantInstructionsFormCut = !reachedBlocks.contains(cfg.entry())
             val finalRelevantInstrs =
               if (relevantInstructionsFormCut) filteredInstrs else filteredInstrs ++ generatedInstrs
             assert(!finalRelevantInstrs.isEmpty, "Filtered instructions empty--something went very wrong")
             if (DEBUG) {
-              println("Found relevant cut? " + relevantInstructionsFormCut)
+              println(s"Found relevant cut? $relevantInstructionsFormCut")
               println("After filtering")
               finalRelevantInstrs.foreach(i => { ClassUtil.pp_instr(i, node.getIR); println })
             }
@@ -203,20 +202,17 @@ class AndroidRelevanceRelation(cg : CallGraph, hg : HeapGraph[InstanceKey], hm :
       else if (relInfo.callableFromCurNode) {
         if (DEBUG) println(s"${ClassUtil.pretty(curNode)} callable from ${ClassUtil.pretty(toFilter)}, can't filter")
         m + (toFilter -> relInfo.relevantInstrs)
-      }
-      else {
+      } else
         // try to filter
         if (canFilterDueToConstructor(toFilter, intraprocFilteredNodeModMap) ||
             canFilterDueToClassInit(toFilter, intraprocFilteredNodeModMap)) {
           if (DEBUG) println(s"Filtered node $toFilter!")
           // TODO: add canFilterDueToMethodOrdering
           m
-        }
-        else {
+        } else {
           if (DEBUG) println(s"Can't filter node $toFilter due to lack of ordering constraints")
           m + (toFilter -> relInfo.relevantInstrs)
         }
-      }
     })
   }
 

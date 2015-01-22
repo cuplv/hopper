@@ -92,7 +92,11 @@ class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelCli
 
           // drop all local constraints
           qry.localConstraints.clear()
-
+          // drop constraint on inner class this
+          /*qry.heapConstraints.foreach(e => e.fld match {
+            case InstanceFld(f) if ClassUtil.isInnerClassThis(f) => qry.removeHeapConstraint(e)
+            case _ => ()
+          })*/
           // keep one constraint on null and the access path to the constraint--drop all other constraints
           qry.heapConstraints.find(e => e.snk match {
             case p@PureVar(_) => qry.isNull(p)
