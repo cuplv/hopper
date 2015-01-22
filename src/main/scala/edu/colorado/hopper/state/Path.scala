@@ -201,35 +201,24 @@ object Path {
             case Some((blk, _)) => blk :: l
             case None => l
           })
+
         val domInfo = Dominators.make(ExceptionPrunedCFG.make(cfg), cfg.entry())
-
-        // TODO: handle this case
-        assert(!blksForRelInstructions.contains(succ1), "blks for rel instructions contains cond succ " + succ1)
-        assert(!blksForRelInstructions.contains(succ2), "blks for rel instructions contains cond succ " + succ2)
-
-        val succ1DominatesRelInstr =
-          blksForRelInstructions.exists(b => b != succ1 && domInfo.isDominatedBy(b, succ1))
-        val succ2DominatesRelInstr =
-          blksForRelInstructions.exists(b => b != succ2 && domInfo.isDominatedBy(b, succ2))
+        val succ1DominatesRelInstr = blksForRelInstructions.exists(b => domInfo.isDominatedBy(b, succ1))
+        val succ2DominatesRelInstr = blksForRelInstructions.exists(b => domInfo.isDominatedBy(b, succ2))
 
         if (succ1DominatesRelInstr) {
-          // this would imply that we did something wrong in our relevant instr filtering
-          assert(!succ2DominatesRelInstr) // this would imply that we did something wrong in our relevant instr filtering
-          // use succ2
+          assert(!succ2DominatesRelInstr) // this would imply that we did something wrong in our rel instr filtering
           setupBlockAndCallStack(p, blk, index)
-          p.lastBlk = succ2
+          p.lastBlk = succ2 // say that we came from succ2 so current conditional condition will be added
         } else if (succ2DominatesRelInstr)  {
-          // this would imply that we did something wrong in our relevant instr filtering
-          assert(!succ1DominatesRelInstr)
-          // use succ1
+          assert(!succ1DominatesRelInstr) // this would imply that we did something wrong in our rel instr filtering
           setupBlockAndCallStack(p, blk, index)
-          p.lastBlk = succ1
-        } else {
+          p.lastBlk = succ1 // say that we came from succ1 so current conditional condition will be added
+        } else
           // TODO: I think this also implies that we did something wrong while filtering
-          sys.error("Can both succs of conditional be relevant?")
-        }
+          sys.error(s"$ir\nCan both succs of conditional $blk be relevant? rel blks: $blksForRelInstructions")
 
-      case s => sys.error("Implement me: setup for " + s)
+      case s => sys.error(s"Implement me: setup for jumping to instruction $s")
     }
   }
   
