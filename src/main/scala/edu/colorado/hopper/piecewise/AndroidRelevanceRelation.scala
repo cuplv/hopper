@@ -238,7 +238,10 @@ class AndroidRelevanceRelation(cg : CallGraph, hg : HeapGraph[InstanceKey], hm :
           else CFGUtil.findInstr(ir, i) match {
             case Some((blk, _)) =>
               getDominatingCondBlks(blk, cfg).foldLeft (relInstructions) ((relInstructions, blk) => {
-                relInstructions ++ blk
+                blk.foldLeft (relInstructions) ((relInstructions, i) => i match {
+                  case i : SSAConditionalBranchInstruction => relInstructions + i
+                  case _ => relInstructions
+                })
               })
             case None => relInstructions
           }
