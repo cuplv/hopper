@@ -1,31 +1,13 @@
 package edu.colorado.hopper.util
 
-import scala.collection.JavaConversions.asScalaIterator
-import scala.collection.JavaConversions.setAsJavaSet
-
 import com.ibm.wala.analysis.pointers.HeapGraph
 import com.ibm.wala.classLoader.IField
-import com.ibm.wala.ipa.callgraph.propagation.ArrayContentsKey
-import com.ibm.wala.ipa.callgraph.propagation.HeapModel
-import com.ibm.wala.ipa.callgraph.propagation.InstanceFieldKey
-import com.ibm.wala.ipa.callgraph.propagation.InstanceKey
-import com.ibm.wala.ipa.callgraph.propagation.LocalPointerKey
-import com.ibm.wala.ipa.callgraph.propagation.PointerKey
+import com.ibm.wala.ipa.callgraph.propagation.{ArrayContentsKey, HeapModel, InstanceFieldKey, InstanceKey, LocalPointerKey, PointerKey}
 import com.ibm.wala.ipa.cha.IClassHierarchy
-
-import edu.colorado.hopper.state.ArrayPtEdge
-import edu.colorado.hopper.state.ClassVar
-import edu.colorado.hopper.state.Fld
-import edu.colorado.hopper.state.HeapPtEdge
-import edu.colorado.hopper.state.LocalPtEdge
-import edu.colorado.hopper.state.ObjPtEdge
-import edu.colorado.hopper.state.ObjVar
-import edu.colorado.hopper.state.Pure
-import edu.colorado.hopper.state.PureVal
-import edu.colorado.hopper.state.PureVar
-import edu.colorado.hopper.state.StaticFld
-import edu.colorado.hopper.state.Val
+import edu.colorado.hopper.state.{ArrayPtEdge, ClassVar, Fld, HeapPtEdge, LocalPtEdge, ObjPtEdge, ObjVar, Pure, PureVar, StaticFld, Val}
 import edu.colorado.walautil.Types.MSet
+
+import scala.collection.JavaConversions.{asScalaIterator, setAsJavaSet}
 
 
 object PtUtil {
@@ -77,7 +59,7 @@ object PtUtil {
     heapConstraints.collectFirst({ case edg@ObjPtEdge(o, f, _) if obj == o && fld == f.fld => edg }) match {
       case Some(edg) => edg match {
         case edg@ObjPtEdge(_, _, snk@ObjVar(_)) => (snk, Some(edg)) 
-        case edg@ObjPtEdge(_, _, p : PureVal) => sys.error("pure snk")
+        case edg@ObjPtEdge(_, _, _) => sys.error("pure snk")
       }
       case None => 
         val pt = getPt(obj, fld, hg)

@@ -20,7 +20,7 @@ sealed trait Val {
 }
 sealed trait Var
 
-trait PureConstraint {  
+sealed trait PureConstraint {
   def isStringConstraint : Boolean 
   def isBitwiseConstraint : Boolean
   def isFloatConstraint : Boolean
@@ -28,7 +28,7 @@ trait PureConstraint {
   def getVars(s : Set[PureVar] = Set.empty) : Set[PureVar]
 }
 
-case class PureAtomicConstraint(val lhs : PureExpr, val op : CmpOp, val rhs : PureExpr) extends PureConstraint {  
+sealed case class PureAtomicConstraint(val lhs : PureExpr, val op : CmpOp, val rhs : PureExpr) extends PureConstraint {
   def isEqualityConstraint : Boolean = Pure.isEqualityOp(op)
   def isInequalityConstraint : Boolean = Pure.isInequalityOp(op)
   override def isStringConstraint : Boolean = lhs.isStringExpr || rhs.isStringExpr
@@ -46,7 +46,7 @@ case class PureAtomicConstraint(val lhs : PureExpr, val op : CmpOp, val rhs : Pu
   override def toString : String = lhs.toString + " " + Pure.cmpOpToString(op) + " " + rhs.toString()
 }
 
-case class PureDisjunctiveConstraint(val terms : Set[PureAtomicConstraint]) extends PureConstraint {
+sealed case class PureDisjunctiveConstraint(val terms : Set[PureAtomicConstraint]) extends PureConstraint {
   require(!terms.isEmpty)
   override def isStringConstraint : Boolean = terms.exists(p => p.isStringConstraint)
   override def isBitwiseConstraint : Boolean = terms.exists(p => p.isBitwiseConstraint)
@@ -63,7 +63,7 @@ case class PureDisjunctiveConstraint(val terms : Set[PureAtomicConstraint]) exte
   override def toString : String = Util.toCSVStr(terms, " V ")
 }
 
-abstract class PureExpr {
+sealed abstract class PureExpr {
   def substitute(toSub : PureExpr, subFor : PureVar) : PureExpr
   def isStringExpr : Boolean = false
   def isBitwiseExpr : Boolean = false
@@ -75,7 +75,7 @@ abstract class PureExpr {
 }
 
 // constant values
-abstract class PureVal(val v : Any) extends PureExpr {
+sealed abstract class PureVal(val v : Any) extends PureExpr {
   override def substitute(toSub : PureExpr, subFor : PureVar) : PureVal = this     
   
   def >(p : PureVal) : Boolean = sys.error("GT for arbitrary PureVal")
@@ -93,42 +93,48 @@ abstract class PureVal(val v : Any) extends PureExpr {
   override def toString : String = v.toString
 }
 
-case class BoolVal(override val v : Boolean) extends PureVal(v)
-case class IntVal(override val v : Int) extends PureVal(v) {
+sealed case class BoolVal(override val v : Boolean) extends PureVal(v)
+
+sealed case class IntVal(override val v : Int) extends PureVal(v) {
   override def >(p : PureVal) : Boolean = v > p.asInstanceOf[IntVal].v 
   override def <(p : PureVal) : Boolean = v < p.asInstanceOf[IntVal].v 
   override def >=(p : PureVal) : Boolean = v >= p.asInstanceOf[IntVal].v 
   override def <=(p : PureVal) : Boolean = v <= p.asInstanceOf[IntVal].v 
 }
-case class DoubleVal(override val v : Double) extends PureVal(v) {
+
+sealed case class DoubleVal(override val v : Double) extends PureVal(v) {
   override def >(p : PureVal) : Boolean = v > p.asInstanceOf[DoubleVal].v 
   override def <(p : PureVal) : Boolean = v < p.asInstanceOf[DoubleVal].v 
   override def >=(p : PureVal) : Boolean = v >= p.asInstanceOf[DoubleVal].v 
   override def <=(p : PureVal) : Boolean = v <= p.asInstanceOf[DoubleVal].v 
 }
-case class FloatVal(override val v : Float) extends PureVal(v) {
+
+sealed case class FloatVal(override val v : Float) extends PureVal(v) {
   override def isFloatExpr : Boolean = true
   override def >(p : PureVal) : Boolean = v > p.asInstanceOf[FloatVal].v 
   override def <(p : PureVal) : Boolean = v < p.asInstanceOf[FloatVal].v 
   override def >=(p : PureVal) : Boolean = v >= p.asInstanceOf[FloatVal].v 
   override def <=(p : PureVal) : Boolean = v <= p.asInstanceOf[FloatVal].v 
 }
-case class LongVal(override val v : Long) extends PureVal(v) {
+
+sealed case class LongVal(override val v : Long) extends PureVal(v) {
   override def isLongExpr : Boolean = true
   override def >(p : PureVal) : Boolean = v > p.asInstanceOf[LongVal].v 
   override def <(p : PureVal) : Boolean = v < p.asInstanceOf[LongVal].v 
   override def >=(p : PureVal) : Boolean = v >= p.asInstanceOf[LongVal].v 
   override def <=(p : PureVal) : Boolean = v <= p.asInstanceOf[LongVal].v 
 }
-case class CharVal(override val v : Char) extends PureVal(v) {
+
+sealed case class CharVal(override val v : Char) extends PureVal(v) {
   override def >(p : PureVal) : Boolean = v > p.asInstanceOf[CharVal].v 
   override def <(p : PureVal) : Boolean = v < p.asInstanceOf[CharVal].v 
   override def >=(p : PureVal) : Boolean = v >= p.asInstanceOf[CharVal].v 
   override def <=(p : PureVal) : Boolean = v <= p.asInstanceOf[CharVal].v 
 }
-case class StringVal(override val v : String) extends PureVal(v)   
 
-case class PureVar(val typ : TypeReference) extends PureExpr with Val {
+sealed case class StringVal(override val v : String) extends PureVal(v)
+
+sealed case class PureVar(val typ : TypeReference) extends PureExpr with Val {
   val id : Int = Var.getFreshPureVarId
   
   override def isArrayType : Boolean = false
@@ -154,7 +160,7 @@ case class PureVar(val typ : TypeReference) extends PureExpr with Val {
   override def toString : String = "p-" + id
 }
 
-case class PureBinExpr(lhs : PureExpr, op : BinOp, rhs : PureExpr) extends PureExpr {
+sealed case class PureBinExpr(lhs : PureExpr, op : BinOp, rhs : PureExpr) extends PureExpr {
   override def substitute(toSub : PureExpr, subFor : PureVar) : PureBinExpr = 
     PureBinExpr(lhs.substitute(toSub, subFor), op, rhs.substitute(toSub, subFor))
   override def getVars(s : Set[PureVar]) : Set[PureVar] = lhs.getVars(rhs.getVars(s))
@@ -177,7 +183,7 @@ case class PureBinExpr(lhs : PureExpr, op : BinOp, rhs : PureExpr) extends PureE
   override def toString : String = lhs.toString + " " + Pure.binOpToString(op) + " " + rhs.toString
 }
 
-abstract class StackVar(val key : PointerKey) extends Var {
+sealed abstract class StackVar(val key : PointerKey) extends Var {
   def getNode : CGNode
   override def hashCode : Int = key.hashCode()
   override def equals(other : Any) : Boolean = other match {
@@ -185,22 +191,24 @@ abstract class StackVar(val key : PointerKey) extends Var {
     case _ => false
   }
 }
-case class LocalVar(override val key : LocalPointerKey) extends StackVar(key) {
+
+sealed case class LocalVar(override val key : LocalPointerKey) extends StackVar(key) {
   def isParam : Boolean = key.isParameter  
   override def getNode : CGNode = key.getNode()
   override def toString : String = key.getNode().getMethod.getName.toString + "-v" + key.getValueNumber()
   //override def toString : String = ClassUtil.pretty(key.getNode()) + "-v" + key.getValueNumber()
 }
-case class ReturnVar(override val key : ReturnValueKey) extends StackVar(key) {
+
+sealed case class ReturnVar(override val key : ReturnValueKey) extends StackVar(key) {
   override def getNode : CGNode = key.getNode()
   override def toString : String = ClassUtil.pretty(key.getNode()) + "-ret"
 }
 
-abstract class HeapVar extends Var {
+sealed abstract class HeapVar extends Var {
   def isClinitVar : Boolean
 }
 
-case class ClassVar(cls : IClass) extends HeapVar {
+sealed case class ClassVar(cls : IClass) extends HeapVar {
   override def isClinitVar : Boolean = true
   override def hashCode : Int = cls.hashCode()
   override def equals(other : Any) : Boolean = other match {
@@ -210,7 +218,7 @@ case class ClassVar(cls : IClass) extends HeapVar {
   override def toString : String = ClassUtil.pretty(cls)
 }
 
-case class ObjVar(rgn : Set[InstanceKey]) extends HeapVar with Val {  
+case class ObjVar(rgn : Set[InstanceKey]) extends HeapVar with Val {
   require(!rgn.isEmpty, "Can't create ObjVar from empty region!")
   
   val cantAlias : MSet[Int] = Util.makeSet
@@ -230,10 +238,12 @@ case class ObjVar(rgn : Set[InstanceKey]) extends HeapVar with Val {
   }
   
   override def hashCode : Int = id * Util.PRIME
+
   override def equals(other : Any) : Boolean = other match {
     case o@ObjVar(_) => this.id == o.id
     case _ => false
   }
+
   override def toString : String = if (rgn.size == 1) id + "-" + ClassUtil.pretty(rgn.head)
     else s"$id-${ClassUtil.pretty(rgn.head.getConcreteType())}(${rgn.size})"
   //override def toString : String =  

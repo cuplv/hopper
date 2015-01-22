@@ -10,7 +10,7 @@ import com.ibm.wala.ssa._
 import edu.colorado.droidel.driver.AbsurdityIdentifier
 import edu.colorado.hopper.client.NullDereferenceTransferFunctions
 import edu.colorado.hopper.executor.DefaultSymbolicExecutor
-import edu.colorado.hopper.piecewise.{AndroidRelevanceRelation, DefaultPiecewiseSymbolicExecutor, PiecewiseTransferFunctions}
+import edu.colorado.hopper.piecewise.{RelevanceRelation, AndroidRelevanceRelation, DefaultPiecewiseSymbolicExecutor, PiecewiseTransferFunctions}
 import edu.colorado.hopper.state._
 import edu.colorado.hopper.util.PtUtil
 import edu.colorado.thresher.core.Options
@@ -22,7 +22,9 @@ import scala.xml.XML
 
 class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelClient(appPath, androidLib) {
   val DEBUG = false
-  lazy val rr = new AndroidRelevanceRelation(walaRes.cg, walaRes.hg, walaRes.hm, walaRes.cha)
+  lazy val rr =
+    if (Options.CONTROL_FEASIBILITY) new AndroidRelevanceRelation(walaRes.cg, walaRes.hg, walaRes.hm, walaRes.cha)
+    else new RelevanceRelation(walaRes.cg, walaRes.hg, walaRes.hm, walaRes.cha)
 
   // TODO: mixin null deref transfer functions and pw transfer functions, or otherwise allow code reuse
   lazy val tf = new NullDereferenceTransferFunctions(walaRes, new File(s"$appPath/nit_annots.xml")) {
@@ -87,17 +89,22 @@ class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelCli
           println(s"at function boundary of entrypoint cb ${p.node}")
           val jmpPath = p.deepCopy
           val qry = jmpPath.qry
+
           // drop all local constraints
           qry.localConstraints.clear()
 
-          // only keep constraints on null
-          // TODO: is keeping access paths sufficient to show safety of our example?
-          // TODO: keep access paths of constraints on null as well?
-          qry.heapConstraints.foreach(e => e match {
-            case e@ObjPtEdge(_, _, p@PureVar(_)) if qry.isNull(p) => ()
-            case e@StaticPtEdge(_, _, p@PureVar(_)) if qry.isNull(p) => ()
-            case _ => qry.removeHeapConstraint(e)
-          })
+          // keep one constraint on null and the access path to the constraint--drop all other constraints
+          qry.heapConstraints.find(e => e.snk match {
+            case p@PureVar(_) => qry.isNull(p)
+            case _ => false
+          }) match {
+            case Some(e) =>
+              val keepEdges = qry.getAccessPrefixPathFor(e)
+              qry.heapConstraints.foreach(e => if (!keepEdges.contains(e)) qry.removeHeapConstraint(e))
+            case None => () // keep entire query
+          }
+
+          if (DEBUG) println("After weakening, query is " + qry)
 
           if (piecewiseJumpRefuted(jmpPath)) List.empty[Path] else super.returnFromCall(p)
         } else super.returnFromCall(p)

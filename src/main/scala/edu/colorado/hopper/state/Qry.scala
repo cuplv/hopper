@@ -477,31 +477,46 @@ class Qry(val heapConstraints : MSet[HeapPtEdge], val pureConstraints : MSet[Pur
     val allKeepEdges = getConstraintsNotReachableFromRec(keepVars, keepEdges)
     heapConstraints.foreach(e => if (!allKeepEdges.contains(e)) this.heapConstraints.remove(e))
   }
-  
+
+  @annotation.tailrec
+  private def buildFwEdgeSequenceRec(matchVar: ObjVar, matchedList: List[HeapPtEdge]): Option[List[HeapPtEdge]] =
+    if (matchedList.size == this.heapConstraints.size) Some(matchedList.reverse)
+    else heapConstraints.find(e => e.src == matchVar) match {
+      case Some(e@ObjPtEdge(_, _, snk@ObjVar(_))) => buildFwEdgeSequenceRec(snk, e :: matchedList)
+      case Some(e@ArrayPtEdge(_, _, snk@ObjVar(_))) => buildFwEdgeSequenceRec(snk, e :: matchedList)
+      case _ => None
+    }
+
+  @annotation.tailrec
+  private def buildBwEdgeSequenceRec(matchVal: Val, matchedList: List[HeapPtEdge]): List[HeapPtEdge] =
+    heapConstraints.find(e => e.snk == matchVal) match {
+      case Some(e@ObjPtEdge(src, _, _)) => buildBwEdgeSequenceRec(src, e :: matchedList)
+      case Some(e@ArrayPtEdge(src, _, _)) => buildBwEdgeSequenceRec(src, e :: matchedList)
+      case Some(e@StaticPtEdge(_, _, _)) => e :: matchedList
+      case None => matchedList
+    }
+
   // @return if we can view *all* the local and heap constraints as a linear sequence A.f -> B, B.g -> C, etc., return the sequence of heap constraints
   def constraintsAsLinearSequence : Option[List[HeapPtEdge]] = {
-    @annotation.tailrec
-    def buildSequenceRec(matchVar: ObjVar, matchedList: List[HeapPtEdge]): Option[List[HeapPtEdge]] =
-      if (matchedList.size == this.heapConstraints.size) Some(matchedList.reverse)
-      else heapConstraints.find(e => e.src == matchVar) match {
-        case Some(e@ObjPtEdge(_, _, snk@ObjVar(_))) => buildSequenceRec(snk, e :: matchedList)
-        case Some(e@ArrayPtEdge(_, _, snk@ObjVar(_))) => buildSequenceRec(snk, e :: matchedList)
-        case _ => None
-      }
 
     if (this.localConstraints.size == 1 && this.heapConstraints.size >= 1) localConstraints.head.snk match {
-      case snk@ObjVar(_) =>
-        buildSequenceRec(snk, Nil)
+      case snk@ObjVar(_) => buildFwEdgeSequenceRec(snk, Nil)
       case _ => None
     } else if (localConstraints.isEmpty && this.heapConstraints.size >= 1)
       this.heapConstraints.foldLeft(None: Option[List[HeapPtEdge]])((l, e) =>
         if (l.isDefined) l
         else e.snk match {
-          case o@ObjVar(_) => buildSequenceRec(o, List(e))
+          case o@ObjVar(_) => buildFwEdgeSequenceRec(o, List(e))
           case _ => None
         }
       )
     else None
+  }
+
+  // for an edge A.f -> B, get the longest access path prefix Z.g ->, ... , A.f -> B available in the query
+  def getAccessPrefixPathFor(e : HeapPtEdge) : List[HeapPtEdge] = e.src match {
+    case o@ObjVar(_) => buildBwEdgeSequenceRec(o, List(e))
+    case c@ClassVar(_) => List(e)
   }
 
   /** @return true if @param local may point at a value also pointed to by they query */
