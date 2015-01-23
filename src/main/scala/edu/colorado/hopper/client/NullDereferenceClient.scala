@@ -261,8 +261,9 @@ class NullDereferenceTransferFunctions(walaRes : WalaAnalysisResults,
     // unsound, but are generally reasonable and/or required to eliminate dumb false positives. can fix some of these by
     // using Droidel's instrumentation functionality (i.e., for findViewByID)
     val androidAnnots =
-      Set("Landroid/app/Activity.getSystemService(Ljava/lang/String;)Ljava/lang/Object;",
-          "Landroid/app/Activity.findViewById(I)Landroid/view/View;",
+      Set("Landroid/app/Activity.findViewById(I)Landroid/view/View;",
+          "Landroid/app/Activity.getFragmentManager()Landroid/app/FragmentManager;",
+          "Landroid/app/Activity.getSystemService(Ljava/lang/String;)Ljava/lang/Object;",
           "Landroid/content/ContentResolver.openInputStream(Landroid/net/Uri;)Ljava/io/InputStream;",
           "Landroid/content/Context.getResources()Landroid/content/res/Resources;",
           "Landroid/content/Context.getSystemService(Ljava/lang/String;)Ljava/lang/Object;",
