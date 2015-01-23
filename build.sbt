@@ -6,7 +6,7 @@ organization := "University of Colorado Boulder"
 
 scalaVersion := "2.10.2"
 
-offline := true
+//offline := true
 
 scalacOptions ++= Seq("-deprecation", "-feature")
 
@@ -21,4 +21,4 @@ libraryDependencies ++= Seq(
 	"com.ibm.wala" % "com.ibm.wala.util" % "1.3.7-SNAPSHOT",
 	"com.ibm.wala" % "com.ibm.wala.core" % "1.3.7-SNAPSHOT",
 	"com.twitter" %% "util-collection" % "6.12.1",
-	"com.squareup" % "javawriter" % "2.5.0")
+	"com.squareup" % "javawriter" % "2.2.1")
