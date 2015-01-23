@@ -6,7 +6,9 @@ organization := "University of Colorado Boulder"
 
 scalaVersion := "2.10.2"
 
-//offline := true
+offline := true
+
+ivyScala := ivyScala.value map { _.copy(overrideScalaVersion = true) }
 
 scalacOptions ++= Seq("-deprecation", "-feature")
 
