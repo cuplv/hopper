@@ -322,7 +322,7 @@ class NullDereferenceTransferFunctions(walaRes : WalaAnalysisResults,
 
   // use Nit annotations to get easy refutation when we have a null constraint on a callee with a known non-null retval
   override def isRetvalFeasible(call : SSAInvokeInstruction, caller : CGNode, callee : CGNode, qry : Qry) : Boolean =
-    !call.hasDef || {
+    !call.hasDef || !call.getDeclaredResultType.isReferenceType || {
       val m = callee.getMethod
       val methodIdentifier = s"${ClassUtil.pretty(m.getDeclaringClass)}.${m.getSelector}"
       if (nonNullRetMethods.contains(methodIdentifier)) {

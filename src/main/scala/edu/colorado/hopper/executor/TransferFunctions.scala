@@ -432,7 +432,7 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
     }
 
   def isRetvalFeasible(call : SSAInvokeInstruction, caller : CGNode, callee : CGNode, qry : Qry) : Boolean =
-    !call.hasDef || {
+    !call.hasDef || !call.getDeclaredResultType.isReferenceType || {
       val callerRet = Var.makeLPK(call.getDef(), caller, hm)
       val calleeRet = Var.makeRVK(callee, hm)
       getConstraintEdge(callerRet, qry.localConstraints) match {
