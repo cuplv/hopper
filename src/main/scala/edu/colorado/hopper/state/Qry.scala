@@ -270,7 +270,7 @@ class Qry(val heapConstraints : MSet[HeapPtEdge], val pureConstraints : MSet[Pur
         val neqNullConstraint = Pure.makeNeNullConstraint(p)         
         if (pureConstraints.add(neqNullConstraint)) solver.mkAssertWithAssumption(id.toString, neqNullConstraint)          
       case p => sys.error("Unexpected pure atomic constraint " + p)
-    } else if (p.isBitwiseConstraint || p.isFloatConstraint || p.isLongConstraint) p match {
+    } else if (p.isBitwiseConstraint || p.isFloatConstraint || p.isLongConstraint || p.isDoubleConstraint) p match {
       case PureAtomicConstraint(p@PureVar(_), _, _) => 
         // TODO: bitvector, long, and float ops unsuppored for now. drop related constraints
         localConstraints.foreach(e => if (e.snk == p) localConstraints.remove(e))

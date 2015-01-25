@@ -25,6 +25,7 @@ sealed trait PureConstraint {
   def isBitwiseConstraint : Boolean
   def isFloatConstraint : Boolean
   def isLongConstraint : Boolean
+  def isDoubleConstraint : Boolean
   def getVars(s : Set[PureVar] = Set.empty) : Set[PureVar]
 }
 
@@ -35,6 +36,7 @@ sealed case class PureAtomicConstraint(val lhs : PureExpr, val op : CmpOp, val r
   override def isBitwiseConstraint : Boolean = lhs.isBitwiseExpr || rhs.isBitwiseExpr
   override def isFloatConstraint : Boolean = lhs.isFloatExpr || rhs.isFloatExpr
   override def isLongConstraint : Boolean = lhs.isLongExpr || rhs.isLongExpr
+  override def isDoubleConstraint : Boolean = lhs.isDoubleExpr || rhs.isDoubleExpr
   override def getVars(s : Set[PureVar]) : Set[PureVar] = lhs.getVars(rhs.getVars(s))
   
   override def clone : PureConstraint = this
@@ -52,6 +54,7 @@ sealed case class PureDisjunctiveConstraint(val terms : Set[PureAtomicConstraint
   override def isBitwiseConstraint : Boolean = terms.exists(p => p.isBitwiseConstraint)
   override def isFloatConstraint : Boolean = terms.exists(p => p.isFloatConstraint)
   override def isLongConstraint : Boolean = terms.exists(p => p.isLongConstraint)
+  override def isDoubleConstraint : Boolean = terms.exists(p => p.isDoubleConstraint)
   override def getVars(s : Set[PureVar]) : Set[PureVar] = terms.foldLeft (Set.empty[PureVar]) ((s, t) => t.getVars(s))
   
   override def clone : PureConstraint = this
@@ -69,6 +72,7 @@ sealed abstract class PureExpr {
   def isBitwiseExpr : Boolean = false
   def isFloatExpr : Boolean = false
   def isLongExpr : Boolean = false
+  def isDoubleExpr : Boolean = false
   def getVars(s : Set[PureVar] = Set.empty) : Set[PureVar]
   
   override def clone : PureExpr = this
@@ -103,6 +107,7 @@ sealed case class IntVal(override val v : Int) extends PureVal(v) {
 }
 
 sealed case class DoubleVal(override val v : Double) extends PureVal(v) {
+  override def isDoubleExpr : Boolean = true
   override def >(p : PureVal) : Boolean = v > p.asInstanceOf[DoubleVal].v 
   override def <(p : PureVal) : Boolean = v < p.asInstanceOf[DoubleVal].v 
   override def >=(p : PureVal) : Boolean = v >= p.asInstanceOf[DoubleVal].v 
