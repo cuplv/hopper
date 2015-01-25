@@ -127,30 +127,39 @@ class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelCli
   /* @return true if @param i can perform a null dereference */
   def canDerefFail(i : SSAInstruction, n : CGNode, hm : HeapModel, count : Int) = {
     val ir = n.getIR()
+    val tbl = ir.getSymbolTable
     val srcLine = IRUtil.getSourceLine(i, ir)
     print(s"Checking possible null deref #$count ")
     ClassUtil.pp_instr(i, ir); println(s" at source line $srcLine of ${ClassUtil.pretty(n)}")
-    // create the query
-    val lpk = Var.makeLPK(i.getUse(0), n, hm)
-    val nullPure = Pure.makePureVar(lpk)
-    val locEdge = PtEdge.make(lpk, nullPure)
-    val qry = Qry.make(List(locEdge), i, n, hm, startBeforeI = true)
-    qry.addPureConstraint(Pure.makeEqNullConstraint(nullPure))
-    // invoke Thresher and check it
-    val foundWitness =
-      try {
-        exec.executeBackward(qry)
-      } catch {
-        case e : Throwable =>
-          println(s"Error: $e \n${e.getStackTraceString}")
-          if (Options.SCALA_DEBUG) throw e
-          else true // soundly assume we got a witness
-      }
-    print(s"Deref #$count ")
-    ClassUtil.pp_instr(i, ir)
-    println(s" at source line $srcLine of ${ClassUtil.pretty(n)} can fail? $foundWitness")
-
-    foundWitness
+    val possiblyNullUse = i.getUse(0)
+    if (tbl.isNullConstant(possiblyNullUse)) {
+      // have null.foo() or null.f = ... or x = null.f
+      // technically, this can still be safe if the code is unreachable or protected by a try block, but philosophically
+      // this is useless code and ought to be reported as on error
+      println("Found definite null deref!")
+      true
+    } else {
+      // create the query
+      val lpk = Var.makeLPK(possiblyNullUse, n, hm)
+      val nullPure = Pure.makePureVar(lpk)
+      val locEdge = PtEdge.make(lpk, nullPure)
+      val qry = Qry.make(List(locEdge), i, n, hm, startBeforeI = true)
+      qry.addPureConstraint(Pure.makeEqNullConstraint(nullPure))
+      // invoke Thresher and check it
+      val foundWitness =
+        try {
+          exec.executeBackward(qry)
+        } catch {
+          case e: Throwable =>
+            println(s"Error: $e \n${e.getStackTraceString}")
+            if (Options.SCALA_DEBUG) throw e
+            else true // soundly assume we got a witness
+        }
+      print(s"Deref #$count ")
+      ClassUtil.pp_instr(i, ir)
+      println(s" at source line $srcLine of ${ClassUtil.pretty(n)} can fail? $foundWitness")
+      foundWitness
+    }
   }
 
   def isEntrypointCallback(n : CGNode) : Boolean =
