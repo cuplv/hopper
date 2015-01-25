@@ -1551,9 +1551,12 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
           
           getConstraintEdge(y, qry.localConstraints) match {
             case yEdge@Some(LocalPtEdge(_, ptY@ObjVar(_))) => handleObjY(ptY, yEdge)
-            case Some(LocalPtEdge(_, pureY@PureVar(_))) =>
+            case Some(yEdge@LocalPtEdge(_, pureY@PureVar(_))) =>
               if (qry.isNull(pureY)) true
-              else handleMissingYEdge
+              else {
+                qry.removeLocalConstraint(yEdge)
+                handleMissingYEdge
+              }
             case None => handleMissingYEdge
           }     
           
