@@ -308,9 +308,13 @@ class NullDereferenceTransferFunctions(walaRes : WalaAnalysisResults,
           PtUtil.getPt(receiverLPK, hg) match {
             case rgn if rgn.isEmpty => false // refuted by null dispatch
             case rgn =>
-              // add constraint retval != null (effectively)
-              qry.addLocalConstraint(PtEdge.make(receiverLPK, ObjVar(rgn)))
-              true
+              val tbl = caller.getIR.getSymbolTable
+              if (tbl.isNullConstant(call.getReceiver)) false
+              else {
+                if (!tbl.isConstant(call.getReceiver))
+                  qry.addLocalConstraint(PtEdge.make(receiverLPK, ObjVar(rgn)))
+                true
+              }
           }
         case _ => true
       }
