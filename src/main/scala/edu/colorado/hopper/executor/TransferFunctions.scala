@@ -1664,7 +1664,14 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
                        if (!ok && Options.PRINT_REFS) println("Refuted by loadMetadata instruction! ")                         
                        else qry.removeLocalConstraint(edge)                              
                        ok
-                    case PureVar(_) => sys.error("Excpected ObjVar snk, but got PureVar snk in " + edge)
+                    case p@PureVar(_) =>
+                      if (qry.isNull(p))
+                        // refuted--reading .class will never return null
+                        false
+                      else {
+                        qry.removeLocalConstraint(edge)
+                        true
+                      }
                   }                 
                 case _ => Util.unimp("Load metadata instruction " + s)
               }
