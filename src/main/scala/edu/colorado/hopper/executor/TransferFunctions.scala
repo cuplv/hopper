@@ -190,6 +190,10 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
              case ptX@ObjVar(rgnX) => 
                if (qry.isNull(purePhi)) false // refuted by assignment to null
                else {
+                 edge match {
+                   case Some(edge) => qry.removeLocalConstraint(edge)
+                   case None => ()
+                 }
                  qry.addLocalConstraint(PtEdge.make(useKey, ptX))
                  true
                }
