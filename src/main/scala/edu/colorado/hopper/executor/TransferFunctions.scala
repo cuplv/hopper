@@ -695,16 +695,8 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
         case p@PureVar(_) => 
           if (!edge.isDefined) qry.addLocalConstraint(PtEdge.make(lpk, p))
           p
-        case ObjVar(rgn) => // string constant case
-          assert(!edge.isDefined) // TODO: add edge here?
-          /*if (DEBUG) {
-            assert(rgn.size == 1, "Expecting region of size 1, but size is " + rgn.size)
-            rgn.head match {
-              case k : ConcreteTypeKey => 
-                assert(k.getType().getReference() == TypeReference.JavaLangString)
-              case k => sys.error("Unexpected instance key " + k)
-            }
-          }*/
+        case o@ObjVar(rgn) =>
+          if (!edge.isDefined) qry.addLocalConstraint(PtEdge.make(lpk, o))
           Pure.NON_NULL
       }
     }
