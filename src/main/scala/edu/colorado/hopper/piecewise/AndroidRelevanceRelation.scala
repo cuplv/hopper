@@ -155,20 +155,21 @@ class AndroidRelevanceRelation(cg : CallGraph, hg : HeapGraph[InstanceKey], hm :
     @annotation.tailrec
     def filterRelevantInstrsRec(iter : BFSIterator[ISSABasicBlock],
                                 allRelInstrs : Set[SSAInstruction],
-                                filteredRelInstrs : Set[SSAInstruction] = Set.empty[SSAInstruction],
+                                visitedRelInstrs : Set[SSAInstruction] = Set.empty[SSAInstruction],
                                 reachedBlocks : Set[ISSABasicBlock] = Set.empty[ISSABasicBlock]) : (Set[SSAInstruction], Set[ISSABasicBlock]) =
       if (iter.hasNext) {
         val blk = iter.next()
+        println("visiting block BB" + blk.getNumber)
 
         // assuming that each block contains only one relevant instruction and that it is the last one--this is safe
         // given the way WALA translates
-        val newFilteredRelInstrs =
+        val newVisitedRelInstrs =
           blk.find(instr => allRelInstrs.contains(instr)) match {
-            case Some(instr) => filteredRelInstrs + instr
-            case None => filteredRelInstrs
+            case Some(instr) => visitedRelInstrs + instr
+            case None => visitedRelInstrs
           }
-        filterRelevantInstrsRec(iter, allRelInstrs, newFilteredRelInstrs, reachedBlocks + blk)
-      } else (filteredRelInstrs, reachedBlocks)
+        filterRelevantInstrsRec(iter, allRelInstrs, newVisitedRelInstrs, reachedBlocks + blk)
+      } else (visitedRelInstrs, reachedBlocks)
 
     def isCallableFrom(snk : CGNode, src : CGNode) : Boolean = {
       val path = new BFSPathFinder(cg, src, snk).find()
@@ -228,7 +229,9 @@ class AndroidRelevanceRelation(cg : CallGraph, hg : HeapGraph[InstanceKey], hm :
             val relevantInstructionsFormCut = !reachedBlocks.contains(cfg.entry())
             val finalRelevantInstrs =
               if (relevantInstructionsFormCut) filteredInstrs else filteredInstrs ++ generatedInstrs
-            assert(!finalRelevantInstrs.isEmpty, "Filtered instructions empty--something went very wrong")
+            // this can happen in the case that a method always throws an exception at the end
+            //assert(!finalRelevantInstrs.isEmpty,
+              //     s"Filtered instructions empty--something went very wrong. IR ${node.getIR}")
             if (DEBUG) {
               println(s"Found relevant cut? $relevantInstructionsFormCut")
               println("After filtering")
