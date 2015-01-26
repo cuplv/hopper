@@ -99,7 +99,7 @@ class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelCli
           })*/
           // keep one constraint on null and the access path to the constraint--drop all other constraints
           qry.heapConstraints.find(e => e.snk match {
-            case p@PureVar(_) => qry.isNull(p)
+            case p@PureVar(t) if t.isReferenceType => qry.isNull(p)
             case _ => false
           }) match {
             case Some(e) =>

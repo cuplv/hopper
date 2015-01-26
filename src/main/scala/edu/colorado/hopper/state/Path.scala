@@ -207,11 +207,13 @@ object Path {
         val succ2DominatesRelInstr = blksForRelInstructions.exists(b => domInfo.isDominatedBy(b, succ2))
 
         if (succ1DominatesRelInstr) {
-          assert(!succ2DominatesRelInstr) // this would imply that we did something wrong in our rel instr filtering
+          // this would imply that we did something wrong in our rel instr filtering
+          assert(!succ2DominatesRelInstr, s"bad dominance for cond $blk. rel blks: $blksForRelInstructions")
           setupBlockAndCallStack(p, blk, index)
           p.lastBlk = succ2 // say that we came from succ2 so current conditional condition will be added
         } else if (succ2DominatesRelInstr)  {
-          assert(!succ1DominatesRelInstr) // this would imply that we did something wrong in our rel instr filtering
+          // this would imply that we did something wrong in our rel instr filtering
+          assert(!succ1DominatesRelInstr, s"bad dominance for cond $blk. rel blks: $blksForRelInstructions")
           setupBlockAndCallStack(p, blk, index)
           p.lastBlk = succ1 // say that we came from succ1 so current conditional condition will be added
         } else
