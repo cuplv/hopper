@@ -89,7 +89,7 @@ class AndroidRelevanceRelation(cg : CallGraph, hg : HeapGraph[InstanceKey], hm :
             val (succ1, succ2) = (succs(0), succs(1))
             val succ1DominatesRelInstr = blksForRelInstructions.exists(b => domInfo.isDominatedBy(b, succ1))
             val succ2DominatesRelInstr = blksForRelInstructions.exists(b => domInfo.isDominatedBy(b, succ2))
-            
+
             if (succ1DominatesRelInstr && succ2DominatesRelInstr)
               // each branch of the conditional contains a relevant instruction--no need to fork conditional path
               paths

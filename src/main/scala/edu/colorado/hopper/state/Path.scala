@@ -57,8 +57,8 @@ object Path {
       val newPath = p.deepCopy
       blkOpt match {
         case Some((blk, index)) => 
-          setupJumpPath(newPath, instr, blk, index, node, hm, hg, cha, jmpNum)
-          newPath :: paths
+          if (setupJumpPath(newPath, instr, blk, index, node, hm, hg, cha, jmpNum)) newPath :: paths
+          else paths
         case None => 
           // this happens when we get an instruction that is one of our custom-generated
           // "initialize instance/static fields to default value" instructions
@@ -72,9 +72,9 @@ object Path {
             // initialization to default value instructions for a given node, but we don't want to do a separate
             // case split for each one. instead, we consider a single case where we initialize every field to its
             // default value in one go.
-            if (alreadyDidInitCase.add(node)) {
-              setupJumpPath(newPath, instr, node.getIR().getControlFlowGraph().entry(), -1, node,
-                            hm, hg, cha, jmpNum)
+            if (alreadyDidInitCase.add(node) &&
+                setupJumpPath(newPath, instr, node.getIR().getControlFlowGraph().entry(), -1, node,
+                              hm, hg, cha, jmpNum))
               newPath.qry.localConstraints.find(e => e match {
                 case LocalPtEdge(LocalVar(key), ObjVar(_)) => key.getValueNumber() == 1                  
                 case _ => false
@@ -85,20 +85,20 @@ object Path {
                   else paths // refuted by initialization to default vals
                 case other => sys.error("Couldn't find local pointer to receiver in " + newPath + "; got " + other)
               }            
-            } else paths // refuted by initialization to default values or we already did the init case for this node
+            else paths // refuted by initialization to default values or we already did the init case for this node
           } else if (method.isClinit() || node.equals(fakeWorldClinit)) {
-            if (TransferFunctions.initializeStaticFieldsToDefaultValues(newPath.qry, fakeWorldClinit)) {
+            if (TransferFunctions.initializeStaticFieldsToDefaultValues(newPath.qry, fakeWorldClinit) &&
               setupJumpPath(newPath, instr, fakeWorldClinit.getIR().getControlFlowGraph().entry(), -1, node,
-                            hm, hg, cha, jmpNum)
+                            hm, hg, cha, jmpNum))
               newPath :: paths
-            } else paths // refuted by initialization to default values
+            else paths // refuted by initialization to default values
           } else sys.error("Couldn't find instr " + instr + " in " + node + " ir " + node.getIR())           
       }
     })  
   }
 
   def setupJumpPath(p : Path, instr : SSAInstruction, node : CGNode, hm : HeapModel,
-                            hg : HeapGraph[InstanceKey], cha : IClassHierarchy, jmpNum : Int = 0) : Unit = {
+                            hg : HeapGraph[InstanceKey], cha : IClassHierarchy, jmpNum : Int = 0) : Boolean = {
     val (blk, index) = CFGUtil.findInstr(node.getIR, instr) match {
       case Some(p) => p
       case None => sys.error("Couldn't find instr " + instr + " in node " + node)
@@ -119,19 +119,22 @@ object Path {
   }
 
   private def setupJumpPath(p : Path, i : SSAInstruction, blk : ISSABasicBlock, index : Int, node : CGNode,
-                            hm : HeapModel, hg : HeapGraph[InstanceKey], cha : IClassHierarchy, jmpNum : Int) = {
+                            hm : HeapModel, hg : HeapGraph[InstanceKey], cha : IClassHierarchy,
+                            jmpNum : Int) : Boolean = {
 
-    def addLocalConstraintOnConsumedEdge(qry : Qry, pred : HeapPtEdge => Boolean, lhsLocNum : Int) : Unit = {
+    def addLocalConstraintOnConsumedEdge(qry : Qry, pred : HeapPtEdge => Boolean, lhsLocNum : Int) : Boolean = {
       // we need to set up x to point to the base obj A of the constraint A.f -> B or A[i] -> B to be consumed
-      def addLocalConstraintOnLHS(lhs : ObjVar) = {
+      def addLocalConstraintOnLHS(lhs : ObjVar) : Boolean = {
         val x = Var.makeLPK(lhsLocNum, node, hm)
         val ptX = PtUtil.getPt(x, hg)
         val rgnInter = ptX.intersect(lhs.rgn)
-        assert(!rgnInter.isEmpty)
-        val interVar = ObjVar(rgnInter)
-        val res = qry.substitute(interVar, lhs, hg)
-        assert(res)
-        qry.addLocalConstraint(PtEdge.make(x, interVar))
+        !rgnInter.isEmpty && {
+          val interVar = ObjVar(rgnInter)
+          if (qry.substitute(interVar, lhs, hg)) {
+            qry.addLocalConstraint(PtEdge.make(x, interVar))
+            true
+          } else false
+        }
       }
 
       val consumedEdges = qry.heapConstraints.filter(pred)
@@ -163,10 +166,12 @@ object Path {
       case i : SSAPutInstruction => // x.f = y
         setupBlockAndCallStack(p, node, blk, index, jmpNum)
         if (!i.isStatic()) // if it's static, no setup necessary
-          addLocalConstraintOnConsumedEdge(qry, e => e match {
-            case e@ObjPtEdge(_, InstanceFld(fld), _) => cha.resolveField(i.getDeclaredField) == fld
-            case _ => false
-          }, i.getRef)
+          addLocalConstraintOnConsumedEdge(qry,
+            e => e match {
+              case e@ObjPtEdge(_, InstanceFld(fld), _) => cha.resolveField(i.getDeclaredField) == fld
+              case _ => false
+            }, i.getRef)
+        else true
       case i : SSAArrayStoreInstruction => // x[i] = y
         setupBlockAndCallStack(p, node, blk, index, jmpNum)
         addLocalConstraintOnConsumedEdge(qry, e => e.isInstanceOf[ArrayPtEdge], i.getArrayRef)

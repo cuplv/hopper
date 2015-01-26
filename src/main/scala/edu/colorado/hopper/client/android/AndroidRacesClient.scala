@@ -191,27 +191,29 @@ class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelCli
       checkClass && checkMethod && !ClassUtil.isLibrary(n)
     }
 
-    val nullDerefs =
-      walaRes.cg.foldLeft (0) ((count, n) =>
+    val (nullDerefs, derefsChecked) =
+      walaRes.cg.foldLeft (0,0) ((countPair, n) => {
         if (shouldCheck(n)) n.getIR match {
-          case null => count
+          case null => countPair
           case ir =>
             val tbl = ir.getSymbolTable
-            ir.getInstructions.foldLeft (count) ((count, i) => i match {
-              case i : SSAInvokeInstruction if !i.isStatic && !IRUtil.isThisVar(i.getReceiver) &&
-                                               !i.getDeclaredTarget.isInit && !tbl.isStringConstant(i.getReceiver) =>
-                if (canDerefFail(i, n, walaRes.hm, count)) count + 1
-                else count
+            ir.getInstructions.foldLeft (countPair) ((countPair, i) => {
+              val (failCount, totalCount) = countPair
+              i match {
+                case i: SSAInvokeInstruction if !i.isStatic && !IRUtil.isThisVar(i.getReceiver) &&
+                  !i.getDeclaredTarget.isInit && !tbl.isStringConstant(i.getReceiver) =>
+                  if (canDerefFail(i, n, walaRes.hm, totalCount)) (failCount + 1, totalCount + 1)
+                  else (failCount, totalCount + 1)
+                case i: SSAFieldAccessInstruction if !i.isStatic && !IRUtil.isThisVar(i.getRef) =>
+                  if (canDerefFail(i, n, walaRes.hm, totalCount)) (failCount + 1, totalCount + 1)
+                  else (failCount, totalCount + 1)
 
-              case i : SSAFieldAccessInstruction if !i.isStatic && !IRUtil.isThisVar(i.getRef) =>
-                if (canDerefFail(i, n, walaRes.hm, count)) count + 1
-                else count
-
-              case _ => count
+                case _ => countPair
+              }
             })
-        } else count
-      )
+        } else countPair
+      })
 
-    println(s"Found $nullDerefs potential null derefs")
+    println(s"Found $nullDerefs potential null derefs out of $derefsChecked derefs checked")
   }
 }
