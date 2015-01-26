@@ -144,79 +144,70 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
      case Some(xEdge) => // found edge x -> A
        qry.removeLocalConstraint(xEdge) // remove x -> A edge
        val phiUse = phi.getUse(phiIndex)
-       val useKey = Var.makeLPK(phiUse, n, hm)  
-       val tbl = n.getIR().getSymbolTable()
-       if (tbl.isConstant(phiUse)) 
-         if (tbl.isNullConstant(phiUse)) xEdge.snk match {
-           case ObjVar(_) => 
-             if (DEBUG) println("Refuted by assignment to null (phi!)")
-             false
-           case p@PureVar(_) => 
-             val qrySaysNull = qry.isNull(p)
-             if (!qrySaysNull && DEBUG) println("Refuted by assignment to null (phi!)")
-             qrySaysNull
-         } else xEdge.snk match {
-           case o@ObjVar(_) => true // this can happen if x -> [String] and the phiUse is a string constant
-           case p@PureVar(_) => qry.addPureConstraint(Pure.makeEqConstraint(p, Pure.makePureVal(tbl, phiUse)))
-         }
-       else getPtVal(useKey, qry.localConstraints, hg) match {
-         case (ptPhi@ObjVar(rgnPhi), edge) => 
-           xEdge.snk match {
-             case ptX@ObjVar(rgnX) =>
-               val rgnInter = rgnPhi.intersect(rgnX)
-               if (rgnInter.isEmpty) {
-                 if (Options.PRINT_REFS) println("refuted by from empty in phi instruction")
-                 false 
-               } else {
-                 // construct var from pt(x) \cap pt(y_i)
-                 val interVar = ObjVar(rgnInter)
-                 // remove y -> interVar edge if it existed
-                 if (edge.isDefined) qry.removeLocalConstraint(edge.get)
-                 qry.addLocalConstraint(PtEdge.make(useKey, interVar)) // add y -> interVar edge
-                 if (!qry.substitute(interVar, ptX, hg)) false // sub interVar for pt(x)
-                 else if (edge.isDefined) qry.substitute(interVar, ptPhi, hg) // sub interVar for pt(y_i) (it could already be in our constraints)
-                 else true
-              }
-             case p@PureVar(_) => 
-               if (edge.isDefined) qry.addPureConstraint(Pure.makeNeNullConstraint(p))
-               else {
-                 qry.addLocalConstraint(PtEdge.make(useKey, p))
-                 true
-               }
-           }
-            
-         case (purePhi@PureVar(_), edge) => 
-           xEdge.snk match {
-             case ptX@ObjVar(rgnX) => 
-               if (qry.isNull(purePhi)) false // refuted by assignment to null
-               else {
-                 edge match {
-                   case Some(edge) => qry.removeLocalConstraint(edge)
-                   case None => ()
-                 }
-                 qry.addLocalConstraint(PtEdge.make(useKey, ptX))
-                 true
-               }
+       if (phiUse < 0)
+         // this happens in the rare case that the phi instructions contains a TOP instead of a use. assume feasible
+         true
+       else {
+         val tbl = n.getIR().getSymbolTable()
+         val useKey = Var.makeLPK(phiUse, n, hm)
+         if (tbl.isConstant(phiUse))
+           if (tbl.isNullConstant(phiUse)) xEdge.snk match {
+             case ObjVar(_) =>
+               if (DEBUG) println("Refuted by assignment to null (phi!)")
+               false
              case p@PureVar(_) =>
-               if (edge.isDefined) qry.addPureConstraint(Pure.makeEqConstraint(p, purePhi))
-               else {
-                 qry.addLocalConstraint(PtEdge.make(useKey, p))
-                 true
-               }               
-           }/*
-           edge match {
-             case Some(LocalPtEdge(loc, p@PureVar(_))) =>
-               // add A == B constraint and return result of SAT check . no need to add local constraint; already encoded in edge              
-               qry.addPureConstraint(Pure.makeEqConstraint(purePhi, p))
-             case None => // no matching edge
-               assert(!n.getIR().getSymbolTable().isConstant(useKey.getValueNumber()))
-               // this is a very odd case; y_i is not a constant (null or otherwise), but it's points-to set is empty
-               // this either means that y_i is definitely null or that there is some kind of unsoundness in the points-to
-               // analysis (due to reflection e.t.c). we handle this by doing nothing
-               //qry.addLocalConstraint(PtEdge.make(useKey, purePhi))
-               true
-             case Some(edge) => sys.error("Expecting PureVar as snk of " + edge)               
-           }    */   
+               val qrySaysNull = qry.isNull(p)
+               if (!qrySaysNull && DEBUG) println("Refuted by assignment to null (phi!)")
+               qrySaysNull
+           } else xEdge.snk match {
+             case o@ObjVar(_) => true // this can happen if x -> [String] and the phiUse is a string constant
+             case p@PureVar(_) => qry.addPureConstraint(Pure.makeEqConstraint(p, Pure.makePureVal(tbl, phiUse)))
+           }
+         else getPtVal(useKey, qry.localConstraints, hg) match {
+           case (ptPhi@ObjVar(rgnPhi), edge) =>
+             xEdge.snk match {
+               case ptX@ObjVar(rgnX) =>
+                 val rgnInter = rgnPhi.intersect(rgnX)
+                 if (rgnInter.isEmpty) {
+                   if (Options.PRINT_REFS) println("refuted by from empty in phi instruction")
+                   false
+                 } else {
+                   // construct var from pt(x) \cap pt(y_i)
+                   val interVar = ObjVar(rgnInter)
+                   // remove y -> interVar edge if it existed
+                   if (edge.isDefined) qry.removeLocalConstraint(edge.get)
+                   qry.addLocalConstraint(PtEdge.make(useKey, interVar)) // add y -> interVar edge
+                   if (!qry.substitute(interVar, ptX, hg)) false // sub interVar for pt(x)
+                   else if (edge.isDefined) qry.substitute(interVar, ptPhi, hg) // sub interVar for pt(y_i) (it could already be in our constraints)
+                   else true
+                 }
+               case p@PureVar(_) =>
+                 if (edge.isDefined) qry.addPureConstraint(Pure.makeNeNullConstraint(p))
+                 else {
+                   qry.addLocalConstraint(PtEdge.make(useKey, p))
+                   true
+                 }
+             }
+           case (purePhi@PureVar(_), edge) =>
+             xEdge.snk match {
+               case ptX@ObjVar(rgnX) =>
+                 if (qry.isNull(purePhi)) false // refuted by assignment to null
+                 else {
+                   edge match {
+                     case Some(edge) => qry.removeLocalConstraint(edge)
+                     case None => ()
+                   }
+                   qry.addLocalConstraint(PtEdge.make(useKey, ptX))
+                   true
+                 }
+               case p@PureVar(_) =>
+                 if (edge.isDefined) qry.addPureConstraint(Pure.makeEqConstraint(p, purePhi))
+                 else {
+                   qry.addLocalConstraint(PtEdge.make(useKey, p))
+                   true
+                 }
+             }
+         }
        }
      case None => true // no matching edge in localConstraints
     }
