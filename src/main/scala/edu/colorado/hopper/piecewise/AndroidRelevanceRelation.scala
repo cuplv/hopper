@@ -89,15 +89,13 @@ class AndroidRelevanceRelation(cg : CallGraph, hg : HeapGraph[InstanceKey], hm :
             val (succ1, succ2) = (succs(0), succs(1))
             val succ1DominatesRelInstr = blksForRelInstructions.exists(b => domInfo.isDominatedBy(b, succ1))
             val succ2DominatesRelInstr = blksForRelInstructions.exists(b => domInfo.isDominatedBy(b, succ2))
-            if (succ1DominatesRelInstr) {
-              // this would imply that we did something wrong in our rel instr filtering
-              assert(!succ2DominatesRelInstr, s"bad dominance for cond $condBlk. rel blks: $blksForRelInstructions")
-              setupCondPath(node, condBlk, succ2, condIndex, paths)
-            } else if (succ2DominatesRelInstr) {
-              // this would imply that we did something wrong in our rel instr filtering
-              assert(!succ1DominatesRelInstr, s"bad dominance for cond $condBlk. rel blks: $blksForRelInstructions")
-              setupCondPath(node, condBlk, succ1, condIndex, paths)
-            } else {
+            
+            if (succ1DominatesRelInstr && succ2DominatesRelInstr)
+              // each branch of the conditional contains a relevant instruction--no need to fork conditional path
+              paths
+            else if (succ1DominatesRelInstr) setupCondPath(node, condBlk, succ2, condIndex, paths)
+            else if (succ2DominatesRelInstr) setupCondPath(node, condBlk, succ1, condIndex, paths)
+            else {
               // both true and false branches are relevant -- fork two paths
               val newPaths = setupCondPath(node, condBlk, succ1, condIndex, paths)
               setupCondPath(node, condBlk, succ2, condIndex, newPaths)
