@@ -4,7 +4,7 @@ import com.ibm.wala.analysis.pointers.HeapGraph
 import com.ibm.wala.classLoader.IMethod
 import com.ibm.wala.ipa.callgraph.propagation.{HeapModel, InstanceKey, LocalPointerKey, PointerKey}
 import com.ibm.wala.ipa.callgraph.{CGNode, CallGraph}
-import com.ibm.wala.ipa.cfg.{ExceptionPrunedCFG, PrunedCFG}
+import com.ibm.wala.ipa.cfg.PrunedCFG
 import com.ibm.wala.ipa.cha.IClassHierarchy
 import com.ibm.wala.ssa._
 import com.ibm.wala.util.graph.dominators.Dominators
@@ -77,7 +77,7 @@ class AndroidRelevanceRelation(cg : CallGraph, hg : HeapGraph[InstanceKey], hm :
               case Some((blk, _)) => blk :: l
               case None => l
             })
-          val domInfo = Dominators.make(ExceptionPrunedCFG.make(cfg), cfg.entry())
+          val domInfo = Dominators.make(cfg, cfg.entry())
           condInstrs.foldLeft(paths)((paths, condInstr) => {
             val (condBlk, condIndex) =
               CFGUtil.findInstr(ir, condInstr) match {
@@ -157,7 +157,6 @@ class AndroidRelevanceRelation(cg : CallGraph, hg : HeapGraph[InstanceKey], hm :
                                 reachedBlocks : Set[ISSABasicBlock] = Set.empty[ISSABasicBlock]) : (Set[SSAInstruction], Set[ISSABasicBlock]) =
       if (iter.hasNext) {
         val blk = iter.next()
-        println("visiting block BB" + blk.getNumber)
 
         // assuming that each block contains only one relevant instruction and that it is the last one--this is safe
         // given the way WALA translates
