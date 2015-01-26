@@ -4,9 +4,10 @@ import com.ibm.wala.analysis.pointers.HeapGraph
 import com.ibm.wala.classLoader.IMethod
 import com.ibm.wala.ipa.callgraph.propagation.{HeapModel, InstanceKey, LocalPointerKey, PointerKey}
 import com.ibm.wala.ipa.callgraph.{CGNode, CallGraph}
-import com.ibm.wala.ipa.cfg.PrunedCFG
+import com.ibm.wala.ipa.cfg.{ExceptionPrunedCFG, PrunedCFG}
 import com.ibm.wala.ipa.cha.IClassHierarchy
 import com.ibm.wala.ssa._
+import com.ibm.wala.util.graph.dominators.Dominators
 import com.ibm.wala.util.graph.impl.GraphInverter
 import com.ibm.wala.util.graph.traverse.{BFSIterator, BFSPathFinder}
 import com.ibm.wala.util.intset.OrdinalSet
@@ -37,6 +38,74 @@ class AndroidRelevanceRelation(cg : CallGraph, hg : HeapGraph[InstanceKey], hm :
     })*/
 
     constraintProducerMap
+  }
+
+  /** return Some(paths) if we should jump, None if we should not jump */
+  override def getPiecewisePaths(p : Path, jmpNum : Int) : Option[List[Path]] = {
+    if (DEBUG) println("computing relevance graph")
+    if (!p.qry.hasConstraint) None
+    else {
+      val relMap = getNodeRelevantInstrsMap(p.qry, ignoreLocalConstraints = true)
+      if (DEBUG) {
+        val producers = relMap.values.flatten
+        println(s"Overall, have ${relMap.size} relevant instrs")
+        producers.foreach(println)
+      }
+
+      p.clearCallStack
+
+      def setupCondPath(node: CGNode, condBlk: ISSABasicBlock, succBlk: ISSABasicBlock, condIndex: Int,
+                        paths: List[Path]): List[Path] = {
+        val copy = p.deepCopy
+        Path.setupBlockAndCallStack(copy, node, condBlk, condIndex, jmpNum)
+        copy.lastBlk = succBlk // say that we came from the succ block so correct condition will be added
+        copy :: paths
+      }
+
+      Some(relMap.foldLeft(List.empty[Path])((paths, entry) => {
+        val (node, relInstrs) = entry
+        val (condInstrs, otherInstrs) = relInstrs.partition(i => i.isInstanceOf[SSAConditionalBranchInstruction])
+        if (condInstrs.isEmpty) Path.fork(p, node, relInstrs, jmpNum, cg, hg, hm, cha, paths) // "normal" case
+        else {
+          // conditionals need to be handled with care because we don't know what part of a conditional is relevant: the
+          // true branch, the false branch, or both branches
+          val ir = node.getIR
+          val cfg = ir.getControlFlowGraph
+          val relInstrsWithBlocks = otherInstrs.map(i => (i, CFGUtil.findInstr(node.getIR, i)))
+          val blksForRelInstructions =
+            relInstrsWithBlocks.foldLeft(List.empty[ISSABasicBlock])((l, pair) => pair._2 match {
+              case Some((blk, _)) => blk :: l
+              case None => l
+            })
+          val domInfo = Dominators.make(ExceptionPrunedCFG.make(cfg), cfg.entry())
+          condInstrs.foldLeft(paths)((paths, condInstr) => {
+            val (condBlk, condIndex) =
+              CFGUtil.findInstr(ir, condInstr) match {
+                case Some((blk, index)) => (blk, index)
+                case None => sys.error(s"Couldn't find conditional instr $condInstr in $ir")
+              }
+            val succs = cfg.getNormalSuccessors(condBlk).toList
+            assert(succs.size == 2)
+            val (succ1, succ2) = (succs(0), succs(1))
+            val succ1DominatesRelInstr = blksForRelInstructions.exists(b => domInfo.isDominatedBy(b, succ1))
+            val succ2DominatesRelInstr = blksForRelInstructions.exists(b => domInfo.isDominatedBy(b, succ2))
+            if (succ1DominatesRelInstr) {
+              // this would imply that we did something wrong in our rel instr filtering
+              assert(!succ2DominatesRelInstr, s"bad dominance for cond $condBlk. rel blks: $blksForRelInstructions")
+              setupCondPath(node, condBlk, succ2, condIndex, paths)
+            } else if (succ2DominatesRelInstr) {
+              // this would imply that we did something wrong in our rel instr filtering
+              assert(!succ1DominatesRelInstr, s"bad dominance for cond $condBlk. rel blks: $blksForRelInstructions")
+              setupCondPath(node, condBlk, succ1, condIndex, paths)
+            } else {
+              // both true and false branches are relevant -- fork two paths
+              val newPaths = setupCondPath(node, condBlk, succ1, condIndex, paths)
+              setupCondPath(node, condBlk, succ2, condIndex, newPaths)
+            }
+          })
+        }
+      }))
+    }
   }
 
 
@@ -149,7 +218,7 @@ class AndroidRelevanceRelation(cg : CallGraph, hg : HeapGraph[InstanceKey], hm :
               new BFSIterator[ISSABasicBlock](cfg, cfg.exit()) {
                 override def getConnected(blk: ISSABasicBlock) =
                   if (blk.exists(instr => relInstrs.contains(instr))) java.util.Collections.emptyIterator()
-                  // TODO: this isn't sound w.r.t exceptions--make sure none of the relevant instructions aren't
+                  // TODO: this isn't sound w.r.t exceptions--make sure none of the relevant instructions are
                   // contained in a try block
                   else cfg.getNormalPredecessors(blk).iterator()
               }
