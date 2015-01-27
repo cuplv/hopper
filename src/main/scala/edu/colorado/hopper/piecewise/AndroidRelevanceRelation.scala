@@ -24,7 +24,7 @@ class AndroidRelevanceRelation(cg : CallGraph, hg : HeapGraph[InstanceKey], hm :
 
   val invertedCG = GraphInverter.invert(cg)
 
-  val DEBUG = true
+  val DEBUG = false
 
   override def getConstraintProducerMap(q : Qry, ignoreLocalConstraints : Boolean = false) : Map[PtEdge,List[(CGNode,SSAInstruction)]] = {
     val constraintProducerMap = super.getConstraintProducerMap(q, ignoreLocalConstraints)
@@ -177,7 +177,7 @@ class AndroidRelevanceRelation(cg : CallGraph, hg : HeapGraph[InstanceKey], hm :
       val reachable =
         path != null && path.size > 0 && path.exists(n => n != src && n != snk && !ClassUtil.isLibrary(n)) &&
           path.size < 20
-      if (reachable) {
+      if (DEBUG && reachable) {
         println(s"can't filter $src since it may transitively call ${ClassUtil.pretty(snk)}")
         path.foreach(println)
       }

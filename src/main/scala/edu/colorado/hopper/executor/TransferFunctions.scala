@@ -25,7 +25,7 @@ import scala.collection.JavaConversions._
 object TransferFunctions {  
   def DEBUG = Options.SCALA_DEBUG
   // print warning messages about potential unsoundness in the points-to analysis
-  private val EMPTY_PT_WARNING = true 
+  private val EMPTY_PT_WARNING = false
   
    def initializeStaticFieldsToDefaultValues(qry : Qry, node : CGNode) : Boolean = {
     require(node.getMethod().isClinit() || node.getMethod().isSynthetic(), "Expecting clinit method, got " + ClassUtil.pretty(node))
