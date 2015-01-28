@@ -55,6 +55,7 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
   def cleanup() : Unit = {
     clearInvariantMaps
     domCache.clear
+    edu.colorado.thresher.core.WALACFGUtil.clearCaches()
   }
     
   protected def filterFailPaths(toProcess : Iterable[Path], passPaths : List[Path], failPaths : List[Path], test : Path => Boolean) : (List[Path], List[Path]) =     
@@ -824,7 +825,7 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
     timekeeper.clear
     domCache.clear
     // can't get rid of this until we get rid of Thresher's loop-finding functionality
-    edu.colorado.thresher.core.WALACFGUtil.clearCaches() 
+    edu.colorado.thresher.core.WALACFGUtil.clearCaches()
 
     if(SAVE_INVARIANT_MAPS) {
       oldInvMaps match {

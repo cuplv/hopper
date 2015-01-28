@@ -3,16 +3,16 @@ package edu.colorado.hopper.piecewise
 import com.ibm.wala.classLoader.IField
 import com.ibm.wala.ipa.callgraph.CGNode
 import com.ibm.wala.ssa.{IR, ISSABasicBlock}
+import edu.colorado.thresher.core.Options
 import edu.colorado.hopper.executor.{TransferFunctions, UnstructuredSymbolicExecutor}
 import edu.colorado.hopper.piecewise.PiecewiseSymbolicExecutor._
 import edu.colorado.hopper.state._
 import edu.colorado.hopper.util.PtUtil
 import edu.colorado.walautil.Types.MSet
-import edu.colorado.walautil.{WalaBlock, ClassUtil, Util}
+import edu.colorado.walautil.{ClassUtil, Util, WalaBlock}
 
 object PiecewiseSymbolicExecutor {
   // if true, when we do a piecewise jump and fail, we will continue doing path-based execution
-  private val BACKTRACK = true
   private def DEBUG = false
 }
 
@@ -42,7 +42,11 @@ trait PiecewiseSymbolicExecutor extends UnstructuredSymbolicExecutor {
      forkToPredecessorBlocksNoJump(instrPaths, startBlk, loopHeader, ir, passPaths, failPaths, test)
   
   var piecewiseInvMap = new InvariantMap[(CGNode,WalaBlock,Int)]
-  
+  /** set of fields that we tried to jump because we suspected they were involved in an invariant, but failed to get a
+    * refutation */
+  val failedObjInvariants : MSet[Set[IField]] = Util.makeSet[Set[IField]]
+
+
   // TODO: cleaner, inheritance-independent solution here
   override def getInvariantMaps : List[InvariantMap[_ <: Any]] = piecewiseInvMap :: super.getInvariantMaps
   // replace the current invariant maps with the ones in newMaps
@@ -56,6 +60,12 @@ trait PiecewiseSymbolicExecutor extends UnstructuredSymbolicExecutor {
     super.clearInvariantMaps
     piecewiseInvMap.clear
   }
+
+  override def cleanup() = {
+    super.cleanup()
+    failedObjInvariants.clear()
+    rr.cleanup()
+  }
   
   /**
    * @return true if performing a piecewise jump refuted p
@@ -68,7 +78,7 @@ trait PiecewiseSymbolicExecutor extends UnstructuredSymbolicExecutor {
         val curJmp = { jmpNum += 1; jmpNum }
         rr.getPiecewisePaths(jmpPath, curJmp) match {
           case Some(unfilteredPiecewisePaths) =>
-            val oldInvMaps = if (BACKTRACK) cloneInvariantMaps else Nil
+            val oldInvMaps = if (Options.BACKTRACK_JUMPING) cloneInvariantMaps else Nil
             val piecewisePaths =
               unfilteredPiecewisePaths.filter(p => !piecewiseInvMap.pathEntailsInv((p.node, p.blk, p.index), p))
             if (DEBUG) {
@@ -77,7 +87,7 @@ trait PiecewiseSymbolicExecutor extends UnstructuredSymbolicExecutor {
             }
      
             piecewisePaths.isEmpty || {
-              println("Performing piecewise jump " + curJmp + " from starting point " + ClassUtil.pretty(p.node))
+              if (DEBUG) println("Performing piecewise jump " + curJmp + " from starting point " + ClassUtil.pretty(p.node))
               // push all piecewise paths backward, taking note of when the invariant the jump was based on is produced
               refutePiecewisePaths(piecewisePaths,
                 // this purposely drops the old test() on the floor. this is part of losing all context when we jump,
@@ -106,9 +116,9 @@ trait PiecewiseSymbolicExecutor extends UnstructuredSymbolicExecutor {
       // push all piecewise paths backward, taking note of when the invariant the jump was based on is produced
       executeBackwardWhile(piecewisePaths, test) match {
         case newFailPaths =>
-          println("Done with piecewise jump " + curJmp)
+          if (DEBUG) println("Done with piecewise jump " + curJmp)
           if (newFailPaths.size == 0 || !newFailPaths.exists(p => p.foundWitness)) {
-            println("Refuted by piecewise jump " + curJmp + "!")
+            if (DEBUG) println("Refuted by piecewise jump " + curJmp + "!")
             true // refuted by piecewise jump!
           } else {
             if (DEBUG) println("got failPaths " + newFailPaths)
@@ -122,8 +132,8 @@ trait PiecewiseSymbolicExecutor extends UnstructuredSymbolicExecutor {
   }
   
   def handleFailedJump(oldInvMaps : List[InvariantMap[_ <: Any]], callback : Unit => Any, curJmp : Int) : Boolean = {
-    if (BACKTRACK) {
-      println("backtracking after failed piecewise jump " + curJmp)
+    if (Options.BACKTRACK_JUMPING) {
+      if (DEBUG) println("backtracking after failed piecewise jump " + curJmp)
       // need to reset invariant maps before backtracking or we may get unsound refutations
       this.resetInvariantMaps(oldInvMaps)
       callback() // invoke callback passed to us by shouldJump()
@@ -153,9 +163,6 @@ trait PiecewiseSymbolicExecutor extends UnstructuredSymbolicExecutor {
     })
     matched
   }  
-  
-   /** set of fields that we tried to jump because we suspected they were involved in an invariant, but failed to get a refutation */
-  val failedObjInvariants : MSet[Set[IField]] = Util.makeSet[Set[IField]]
 
   // TODO: make special case to exclude iterators here?
   /**
@@ -202,7 +209,7 @@ trait PiecewiseSymbolicExecutor extends UnstructuredSymbolicExecutor {
           })
 
           val failureCallback: Any => Unit = ((x: Any) => failedObjInvariants.add(flds))
-          println("Matched object invariant template; found constraints on more than one fld of var " + objVar + " flds: " + flds)
+          if (DEBUG) println(s"Matched object invariant template; found constraints on more than one fld of var $objVar flds: $flds")
           Some(p.deepCopy(q), producedInvariantCallback, failureCallback)
         }
       case None => None
@@ -216,7 +223,7 @@ trait PiecewiseSymbolicExecutor extends UnstructuredSymbolicExecutor {
     def tryWriteConstraintsAsLinearSequence() = {
       p.qry.constraintsAsLinearSequence match {
         case Some(seq) => // can write *all* constraints as x -> A, A.f -> B, B.g -> C, ...
-          println("Matched context-sensitive template!")
+          if (DEBUG) println("Matched context-sensitive template!")
           val q = p.qry.clone
           q.dropConstraintsNotReachableFrom(Set(seq.last)) // drop all constraints but the last in the sequence
           Some((p.deepCopy(q), neverProducedCallback, (_ : Any) => ()))

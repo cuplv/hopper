@@ -155,6 +155,7 @@ class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelCli
             if (Options.SCALA_DEBUG) throw e
             else true // soundly assume we got a witness
         }
+      exec.cleanup()
       print(s"Deref #$count ")
       ClassUtil.pp_instr(i, ir)
       println(s" at source line $srcLine of ${ClassUtil.pretty(n)} can fail? $foundWitness")

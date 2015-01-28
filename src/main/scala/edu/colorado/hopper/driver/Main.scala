@@ -30,6 +30,7 @@ object Main {
       val singleTest = Options.TEST
       def runTests(runPiecewise : Boolean = false) : Unit = clientTests.foreach(client => {
         Options.PIECEWISE_EXECUTION = runPiecewise
+        Options.BACKTRACK_JUMPING = runPiecewise
         Options.TEST = singleTest
         if (client.isPiecewiseCompatible || !runPiecewise) {
           println(s"Running tests for client ${client.getClass.getName()}")

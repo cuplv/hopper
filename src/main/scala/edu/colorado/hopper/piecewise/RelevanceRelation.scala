@@ -31,7 +31,7 @@ object RelevanceRelation {
   // if this is enabled, we are flow-sensitive intraprocedurally
   val DO_DOMINATOR_CHECK = true
   val DEBUG = false
-  val CACHE_SIZE = 100 
+  val CACHE_SIZE = 16
 }
 
 class RelevanceRelation(val cg : CallGraph, val hg : HeapGraph[InstanceKey], val hm : HeapModel, val cha : IClassHierarchy,
@@ -187,8 +187,8 @@ class RelevanceRelation(val cg : CallGraph, val hg : HeapGraph[InstanceKey], val
     getNodeProducerMap(q, ignoreLocalConstraints)
   
   /** return Some(paths) if we should jump, None if we should not jump */
-  def getPiecewisePaths(p : Path, jmpNum : Int) : Option[List[Path]] = {   
-    if (DEBUG) println("computing relevance graph")    
+  def getPiecewisePaths(p : Path, jmpNum : Int) : Option[List[Path]] = {
+    if (DEBUG) println("computing relevance graph")
     if (!p.qry.hasConstraint) return None
 
     // get producers
@@ -206,7 +206,7 @@ class RelevanceRelation(val cg : CallGraph, val hg : HeapGraph[InstanceKey], val
     } else if (!USE_REACHABILITY_INFO) {
       val curNode = p.node
       p.clearCallStack
-      // TODO: it's not always sound to do the dominator filtering without the up set. the problem is that we could enter the method 
+      // TODO: it's not always sound to do the dominator filtering without the up set. the problem is that we could enter the method
       // from many different places (callees) and even if one relevant instruction dominates the other, we might enter from a callee
       // that lets us skip that instruction
       Some(relMap.foldLeft (List.empty[Path]) ((paths, pair) =>
