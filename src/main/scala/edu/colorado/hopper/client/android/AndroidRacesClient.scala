@@ -22,12 +22,14 @@ import scala.xml.XML
 
 class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelClient(appPath, androidLib) {
   val DEBUG = false
-  lazy val rr =
-    if (Options.CONTROL_FEASIBILITY) new AndroidRelevanceRelation(walaRes.cg, walaRes.hg, walaRes.hm, walaRes.cha)
-    else new RelevanceRelation(walaRes.cg, walaRes.hg, walaRes.hm, walaRes.cha)
+  val rr =
+    if (Options.PIECEWISE_EXECUTION)
+      if (Options.CONTROL_FEASIBILITY) new AndroidRelevanceRelation(walaRes.cg, walaRes.hg, walaRes.hm, walaRes.cha)
+      else new RelevanceRelation(walaRes.cg, walaRes.hg, walaRes.hm, walaRes.cha)
+    else null
 
   // TODO: mixin null deref transfer functions and pw transfer functions, or otherwise allow code reuse
-  lazy val tf = new NullDereferenceTransferFunctions(walaRes, new File(s"$appPath/nit_annots.xml")) {
+  val tf = new NullDereferenceTransferFunctions(walaRes, new File(s"$appPath/nit_annots.xml")) {
 
     def useMayBeRelevantToQuery(use : Int, qry : Qry, n : CGNode, hm : HeapModel,
                                  hg : HeapGraph[InstanceKey]) : Boolean = {
@@ -77,7 +79,7 @@ class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelCli
       else true
   }
 
-  lazy val exec =
+  val exec =
     if (Options.PIECEWISE_EXECUTION) new DefaultPiecewiseSymbolicExecutor(tf, rr) {
 
       // TODO: do we want this?
