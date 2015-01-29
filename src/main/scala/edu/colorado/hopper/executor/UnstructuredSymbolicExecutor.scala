@@ -858,14 +858,12 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
         println("Exceeded timeout of " + Options.TIMEOUT + " seconds. Giving up.")
         null // TODO: this is a hack. find something reasonable to do here
       case e : Throwable =>
+        qry.dispose
         cleanup(oldInvMaps)
         throw e
     }
-    //println("Execution took " + BackwardSymbolicExecutor.seenPaths.size + " paths.")
     qry.dispose
     cleanup(oldInvMaps)
-    //if (result) cleanup(oldInvMaps)
-    //else cleanup(None)
     result
   }
 }

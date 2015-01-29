@@ -66,10 +66,16 @@ trait PiecewiseSymbolicExecutor extends UnstructuredSymbolicExecutor {
     failedObjInvariants.clear()
     rr.cleanup()
   }
+
+  override def cleanup(oldInvMaps : Option[List[InvariantMap  [_]]]) {
+    super.cleanup(oldInvMaps)
+    failedObjInvariants.clear()
+    rr.cleanup
+  }
   
   /**
-   * @return true if performing a piecewise jump refuted p
-   * @return false if we decided not to jump or if jump failed to give us a refutation 
+   * @return true if performing a piecewise jump refuted p,
+   * false if we decided not to jump or if jump failed to give us a refutation
    */
   def piecewiseJumpRefuted(p : Path) : Boolean =
     shouldJump(p) match {
@@ -256,10 +262,5 @@ trait PiecewiseSymbolicExecutor extends UnstructuredSymbolicExecutor {
       Some(p.deepCopy, neverProducedCallback, failureCallback) // TODO: add callback here?
     } else None 
   }*/
-  
-  override def cleanup(oldInvMaps : Option[List[InvariantMap  [_]]]) {
-    super.cleanup(oldInvMaps)
-    rr.cleanup
-  }
   
 }
