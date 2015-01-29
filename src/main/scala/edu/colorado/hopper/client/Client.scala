@@ -28,7 +28,7 @@ object Client {
   protected val DEBUG = false
 }
 
-class WrappedWalaAnalysisResults(override val cg : CallGraph, override val pa : PointerAnalysis[InstanceKey])
+class WrappedWalaAnalysisResults(override val cg : CallGraph, pa : PointerAnalysis[InstanceKey])
   extends WalaAnalysisResults(cg, pa) {
   override val hg = new HeapGraphWrapper(pa, cg).asInstanceOf[HeapGraph[InstanceKey]]
 }
