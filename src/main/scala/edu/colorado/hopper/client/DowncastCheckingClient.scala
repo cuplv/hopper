@@ -8,11 +8,11 @@ import com.ibm.wala.ipa.callgraph.propagation.{InstanceKey, LocalPointerKey}
 import com.ibm.wala.ipa.cha.ClassHierarchy
 import com.ibm.wala.ssa.SSACheckCastInstruction
 import com.ibm.wala.types.{ClassLoaderReference, TypeReference}
+import edu.colorado.hopper.client.DowncastCheckingClient._
 import edu.colorado.hopper.state.{ObjVar, PtEdge, Qry}
-import edu.colorado.walautil._
-import edu.colorado.walautil.WalaAnalysisResults
 import edu.colorado.thresher.core.{DemandCastChecker, Options}
-import DowncastCheckingClient._
+import edu.colorado.walautil._
+
 import scala.collection.JavaConversions.iterableAsScalaIterable
 import scala.io.Source
 
@@ -74,6 +74,7 @@ class DowncastCheckingClient(appPath : String, libPath : Option[String], mainCla
     castTimer.start
 
     val cha = walaRes.cha
+    val pa = hg.getPointerAnalysis
     // DON'T CHANGE THE COUNTING SCHEME HERE! IT WILL MAKE REGRESSIONS FAIL
     val (numSafe, numMightFail, numThresherProvedSafe, total) = 
       cg.foldLeft (0, 0, 0, 0) ((quad, node) => {
