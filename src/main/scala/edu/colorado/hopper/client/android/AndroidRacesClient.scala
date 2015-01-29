@@ -110,7 +110,18 @@ class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelCli
 
           if (DEBUG) println("After weakening, query is " + qry)
 
-          if (piecewiseJumpRefuted(jmpPath)) List.empty[Path] else super.returnFromCall(p)
+          val curJmp = { jmpNum += 1; jmpNum }
+          rr.getPiecewisePaths(jmpPath, curJmp) match {
+            case Some(unfilteredPiecewisePaths) =>
+              val piecewisePaths =
+                unfilteredPiecewisePaths.filter(p => !piecewiseInvMap.pathEntailsInv((p.node, p.blk, p.index), p))
+              if (DEBUG) {
+                println("got " + piecewisePaths.size + " piecewise paths:")
+                piecewisePaths.foreach(p => print(p.id + "X :" + ClassUtil.pretty(p.node) + ",\n" + p)); println
+              }
+              piecewisePaths
+            case None => super.returnFromCall(p)
+          }
         } else super.returnFromCall(p)
 
       override def forkToPredecessorBlocks(instrPaths : List[Path], startBlk : ISSABasicBlock,
