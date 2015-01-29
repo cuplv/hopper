@@ -490,6 +490,7 @@ class Qry(val heapConstraints : MSet[HeapPtEdge], val pureConstraints : MSet[Pur
   @annotation.tailrec
   private def buildBwEdgeSequenceRec(matchVal: Val, matchedList: List[HeapPtEdge]): List[HeapPtEdge] =
     heapConstraints.find(e => e.snk == matchVal) match {
+      case Some(e) if matchedList.contains(e) => matchedList
       case Some(e@ObjPtEdge(src, _, _)) => buildBwEdgeSequenceRec(src, e :: matchedList)
       case Some(e@ArrayPtEdge(src, _, _)) => buildBwEdgeSequenceRec(src, e :: matchedList)
       case Some(e@StaticPtEdge(_, _, _)) => e :: matchedList
