@@ -20,6 +20,7 @@ import edu.colorado.hopper.piecewise.{DefaultPiecewiseSymbolicExecutor, Relevanc
 import edu.colorado.hopper.synthesis.{SynthesisSymbolicExecutor, SynthesisTransferFunctions}
 import edu.colorado.thresher.core._
 import edu.colorado.walautil.{ClassUtil, Timer, Util, WalaAnalysisResults}
+import edu.colorado.walautil.cg.ImprovedZeroXContainerCFABuilder
 
 import scala.collection.JavaConversions.{asJavaCollection, collectionAsScalaIterable, iterableAsScalaIterable}
 
