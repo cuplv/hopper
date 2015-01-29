@@ -113,7 +113,7 @@ object Path {
     qry.callStack.push(jmpLoc)
     // need distinct copies because the StackFrame on the call stack will be mutated
     val copy = jmpLoc.clone
-    assert(!p.jumpMap.values.toSet.contains(copy), "already jumped to " + jmpLoc)
+    //assert(!p.jumpMap.values.toSet.contains(copy), "already jumped to " + jmpLoc)
     p.jumpMap += (jmpNum -> copy)
     p.jumpHistory += copy
   }
