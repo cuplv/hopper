@@ -21,7 +21,7 @@ class AndroidRelevanceRelation(cg : CallGraph, hg : HeapGraph[InstanceKey], hm :
                                cgTransitiveClosure : java.util.Map[CGNode,OrdinalSet[CGNode]] = null)
   extends RelevanceRelation(cg, hg, hm, cha, cgTransitiveClosure) {
 
-  val DEBUG = true
+  val DEBUG = false
 
   override def getConstraintProducerMap(q : Qry, ignoreLocalConstraints : Boolean = false) : Map[PtEdge,List[(CGNode,SSAInstruction)]] = {
     val constraintProducerMap = super.getConstraintProducerMap(q, ignoreLocalConstraints)

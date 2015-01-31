@@ -30,7 +30,7 @@ object RelevanceRelation {
   // should we do a local dominator analysis to cut down on the number of relevant instructions to fork to?
   // if this is enabled, we are flow-sensitive intraprocedurally
   val DO_DOMINATOR_CHECK = true
-  val DEBUG = true
+  val DEBUG = false
   val CACHE_SIZE = 16
 }
 
