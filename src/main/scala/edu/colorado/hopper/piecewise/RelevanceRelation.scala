@@ -30,12 +30,14 @@ object RelevanceRelation {
   // should we do a local dominator analysis to cut down on the number of relevant instructions to fork to?
   // if this is enabled, we are flow-sensitive intraprocedurally
   val DO_DOMINATOR_CHECK = true
-  val DEBUG = false
+  val DEBUG = true
   val CACHE_SIZE = 16
 }
 
-class RelevanceRelation(val cg : CallGraph, val hg : HeapGraph[InstanceKey], val hm : HeapModel, val cha : IClassHierarchy,
-  val cgTransitiveClosure : java.util.Map[CGNode,OrdinalSet[CGNode]] = null) { // TODO: extract relevance relation that doesn't need this
+class RelevanceRelation(val cg : CallGraph, val hg : HeapGraph[InstanceKey], val hm : HeapModel,
+                        val cha : IClassHierarchy,
+                        // TODO: extract relevance relation that doesn't need this
+                        val cgTransitiveClosure : java.util.Map[CGNode,OrdinalSet[CGNode]] = null) {
   val producerCache = new LruMap[PtEdge, List[(CGNode,SSAInstruction)]](CACHE_SIZE) 
  
   def cleanup() : Unit = {
@@ -97,15 +99,13 @@ class RelevanceRelation(val cg : CallGraph, val hg : HeapGraph[InstanceKey], val
           // make a note that we've processed this (caller, callee) pair
           relevantEdges.remove(callerNum, calleeNum)
           // if we have processed all of the relevant callees for this caller
-          val newWorklist = if (relevantEdges.getRelatedCount(callerNum) == 0) {
+          val newWorklist = if (relevantEdges.getRelatedCount(callerNum) == 0)
             if (processed.add(callerNum, calleeNum) && 
                  // TODO: this isn't sound, but is needed to avoid extreme imprecision. decide what to do with this later
-                !ClassUtil.isLibraryToApplicationCall(caller, callee)) {
-              //assert(processed.add(caller), "recursion from " + caller + " detected")
-              //println("_EDGE: " + ClassUtil.pretty(caller) + " -> " + ClassUtil.pretty(callee))
+                !ClassUtil.isLibraryToApplicationCall(caller, callee))
               makeWorklistFor(caller, rest)
-            } else rest
-          } else rest
+            else rest
+          else rest
           // is this our first time processing caller?
           val newUpSet = if (!upSet.contains(caller)) upSet + (caller -> reachable) else upSet
           computeUpSetRec(newWorklist, newUpSet)
@@ -196,7 +196,7 @@ class RelevanceRelation(val cg : CallGraph, val hg : HeapGraph[InstanceKey], val
 
     if (DEBUG) {
       val producers = relMap.values.flatten
-      println(s"Overall, have ${relMap.size} relevant instrs")
+      println(s"Overall, have ${producers.size} relevant instrs")
       producers.foreach(println)
     }
      
@@ -245,53 +245,57 @@ class RelevanceRelation(val cg : CallGraph, val hg : HeapGraph[InstanceKey], val
   }  
   
   /** filter the reachable instruction so that we only consider the ones that we would hit first when going backwards */
-  def doLocalDominatorFiltering(p : Path, relevantNode : CGNode, instrs : Set[SSAInstruction], jmpNum : Int, paths : List[Path]) : List[Path] = {    
+  def doLocalDominatorFiltering(p : Path, relevantNode : CGNode, instrs : Set[SSAInstruction], jmpNum : Int,
+                                paths : List[Path]) : List[Path] = {
     if (DEBUG) println("Doing dominator filtering for " + ClassUtil.pretty(relevantNode))
-    val (blkMap, initInstrs) = instrs.foldLeft (Map.empty[ISSABasicBlock,(SSAInstruction,Int)], Set.empty[SSAInstruction]) ((pair ,instr) => {
-      // initInstrs is the set of instructions that do not belong to any block in the CFG. this occurs because we
-      // generate our own "initialization to default values" instructions that do not occur in any block
-      val (blkMap, initInstrs) = pair 
-      CFGUtil.findInstr(relevantNode.getIR, instr) match {
-        case Some((blk, index)) => 
-          val newMap = blkMap.get(blk) match {
-            case Some((oldInstr,oldIndex)) =>
-              assert (Util.implies(oldInstr == instr, oldIndex == index))
-              if (oldIndex > index) blkMap // if the (instr, index) pair already in the map is at a *higher* index, keep it. 
-              else blkMap + (blk -> (instr, index)) // otherwise, replace it with the new pair
-            case None => blkMap + (blk -> (instr, index)) // no pair in the map yet, add this one
-          }
-          (newMap, initInstrs)
-        case None => (blkMap, initInstrs + instr) // found initInstr -- add it to the list
-      }
-    })
+    val (blkMap, initInstrs) =
+      instrs.foldLeft (Map.empty[ISSABasicBlock,(SSAInstruction,Int)], Set.empty[SSAInstruction]) ((pair ,instr) => {
+        // initInstrs is the set of instructions that do not belong to any block in the CFG. this occurs because we
+        // generate our own "initialization to default values" instructions that do not occur in any block
+        val (blkMap, initInstrs) = pair
+        CFGUtil.findInstr(relevantNode.getIR, instr) match {
+          case Some((blk, index)) =>
+            val newMap = blkMap.get(blk) match {
+              case Some((oldInstr,oldIndex)) =>
+                assert (Util.implies(oldInstr == instr, oldIndex == index))
+                // if the (instr, index) pair already in the map is at a *higher* index, keep it.
+                if (oldIndex > index) blkMap
+                else blkMap + (blk -> (instr, index)) // otherwise, replace it with the new pair
+              case None => blkMap + (blk -> (instr, index)) // no pair in the map yet, add this one
+            }
+            (newMap, initInstrs)
+          case None => (blkMap, initInstrs + instr) // found initInstr -- add it to the list
+        }
+      })
        
     if (blkMap.isEmpty) 
-      // all the instructions are init/clinit instrs. fork on these; p.fork takes care of considering all initInstrs as a single case
-      // instead of forking a separate case for each (which would be silly)
+      // all the instructions are init/clinit instrs. fork on these; p.fork takes care of considering all initInstrs as
+      // a single case instead of forking a separate case for each (which would be silly)
       Path.fork(p, relevantNode, initInstrs, jmpNum, cg, hg, hm, cha, paths)
     else {         
       val cfg = relevantNode.getIR().getControlFlowGraph()
       val reversedExceptionFreeCFG = GraphInverter.invert(ExceptionPrunedCFG.make(cfg))
       assert (reversedExceptionFreeCFG.containsNode(cfg.exit()), 
-              "exit block " + cfg.exit() + " should be in " + reversedExceptionFreeCFG + " but it's not. ir is " + relevantNode.getIR())
+              s"exit block ${cfg.exit()} should be in $reversedExceptionFreeCFG but it's not. ir is ${relevantNode.getIR()}")
       val domInfo = Dominators.make(reversedExceptionFreeCFG, cfg.exit())
       val domGraph = domInfo.getGraph()
       val blks = blkMap.keys
-      // if some block b0 in blkMap is postdominated by a differnt block b1 in blkMap, we don't need to consider jumping to b0
-      // because we will always end up visiting b1 first
-      val filtered = blkMap.foldLeft (Set.empty[SSAInstruction]) ((instrs, pair) => 
-        //if (blks.exists(blk => blk != pair._1 && domInfo.isDominatedBy(pair._1, blk))) instrs
-        if (blks.exists(blk => blk != pair._1 && (!domGraph.containsNode(blk) || !domGraph.containsNode(pair._1) || // TODO: filter nodes not in the graph away somewhere
+      // if some block b0 in blkMap is postdominated by a differnt block b1 in blkMap, we don't need to consider jumping
+      // to b0 because we will always end up visiting b1 first
+      val filtered = blkMap.foldLeft (Set.empty[SSAInstruction]) ((instrs, pair) =>
+        // TODO: filter nodes not in the graph away somewhere
+        if (blks.exists(blk => blk != pair._1 && (!domGraph.containsNode(blk) || !domGraph.containsNode(pair._1) ||
             domInfo.isDominatedBy(pair._1, blk)))) instrs
         else instrs + pair._2._1
       )
       if (DEBUG) { 
-        println("after filtering, have " + filtered.size + " relevant instructions (down from " + instrs.size + ")")
+        println(s"after filtering, have ${filtered.size} relevant instructions (down from ${instrs.size})")
         filtered.foreach(i => { ClassUtil.pp_instr(i, relevantNode.getIR()); println })
       }
-      // now, filtered only contains instructions at the "leaves" of the CFG. we only need to consider a case for each instr in filtered
-      // it is ok not to consider instructions in initInstrs (if any)  because these instructions will always execute before instrs in filtered 
-      // (because they are initializations to default values, which are the first instructions to execute in a method) 
+      // now, filtered only contains instructions at the "leaves" of the CFG. we only need to consider a case for each
+      // instr in filtered. it is ok not to consider instructions in initInstrs (if any) because these instructions will
+      // always execute before instrs in filtered (because they are initializations to default values, which are the
+      // first instructions to execute in a method)
       Path.fork(p, relevantNode, filtered, jmpNum, cg, hg, hm, cha, paths)
     }
   }
@@ -419,7 +423,8 @@ class RelevanceRelation(val cg : CallGraph, val hg : HeapGraph[InstanceKey], val
     s.foldLeft (map) ((map, e) => {
       val prodsOrMods = if (getMods) getModifiers(e, q) else getProducers(e, q)
       if (DEBUG) {
-        println(prodsOrMods.size + " producers for " + e + ": ")
+        val typ = if (getMods) "modifiers" else "producers"
+        println(s"${prodsOrMods.size} $typ for  $e : ")
         prodsOrMods.foreach(pair => { ClassUtil.pp_instr(pair._2, pair._1.getIR()); println(" in " + ClassUtil.pretty(pair._1)) }) 
       }        
       prodsOrMods.foldLeft (map) ((map, prod) => {

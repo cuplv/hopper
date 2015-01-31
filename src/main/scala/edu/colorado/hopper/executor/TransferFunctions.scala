@@ -1315,7 +1315,6 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
   protected def executeInternal(s : SSAInstruction, qry : Qry, n : CGNode) : Boolean = s match {
     case s : SSANewInstruction => // x = new_a T()      
       def processArrayConstraints(arr : ObjVar) : Boolean = !s.getNewSite().getDeclaredType().isArrayType() || {
-        val tbl = n.getIR().getSymbolTable()
         val lengthUse = s.getUse(0)
         // get or create pure val corresponding to declared length in instruction
         val arrLengthVal = getOrCreatePureExprForUse(lengthUse, n, qry)

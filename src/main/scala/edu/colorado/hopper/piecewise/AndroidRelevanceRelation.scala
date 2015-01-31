@@ -8,7 +8,6 @@ import com.ibm.wala.ipa.cfg.PrunedCFG
 import com.ibm.wala.ipa.cha.IClassHierarchy
 import com.ibm.wala.ssa._
 import com.ibm.wala.util.graph.dominators.Dominators
-import com.ibm.wala.util.graph.impl.GraphInverter
 import com.ibm.wala.util.graph.traverse.{BFSIterator, BFSPathFinder}
 import com.ibm.wala.util.intset.OrdinalSet
 import edu.colorado.hopper.state._
@@ -22,9 +21,7 @@ class AndroidRelevanceRelation(cg : CallGraph, hg : HeapGraph[InstanceKey], hm :
                                cgTransitiveClosure : java.util.Map[CGNode,OrdinalSet[CGNode]] = null)
   extends RelevanceRelation(cg, hg, hm, cha, cgTransitiveClosure) {
 
-  val invertedCG = GraphInverter.invert(cg)
-
-  val DEBUG = false
+  val DEBUG = true
 
   override def getConstraintProducerMap(q : Qry, ignoreLocalConstraints : Boolean = false) : Map[PtEdge,List[(CGNode,SSAInstruction)]] = {
     val constraintProducerMap = super.getConstraintProducerMap(q, ignoreLocalConstraints)
@@ -48,10 +45,11 @@ class AndroidRelevanceRelation(cg : CallGraph, hg : HeapGraph[InstanceKey], hm :
       val relMap = getNodeRelevantInstrsMap(p.qry, ignoreLocalConstraints = true)
       if (DEBUG) {
         val producers = relMap.values.flatten
-        println(s"Overall, have ${relMap.size} relevant instrs")
+        println(s"Overall, have ${producers.size} relevant instrs")
         producers.foreach(println)
       }
 
+      val curNode = p.node
       p.clearCallStack
 
       def setupCondPath(node: CGNode, condBlk: ISSABasicBlock, succBlk: ISSABasicBlock, condIndex: Int,
@@ -65,8 +63,10 @@ class AndroidRelevanceRelation(cg : CallGraph, hg : HeapGraph[InstanceKey], hm :
       Some(relMap.foldLeft(List.empty[Path])((paths, entry) => {
         val (node, relInstrs) = entry
         val (condInstrs, otherInstrs) = relInstrs.partition(i => i.isInstanceOf[SSAConditionalBranchInstruction])
-        if (condInstrs.isEmpty) Path.fork(p, node, relInstrs, jmpNum, cg, hg, hm, cha, paths) // "normal" case
-        else {
+        if (condInstrs.isEmpty)
+          // current node same as relevant node. not (necessarily) sound to do filtering
+          Path.fork(p, node, relInstrs, jmpNum, cg, hg, hm, cha, paths)
+        else { // "normal" case
           // conditionals need to be handled with care because we don't know what part of a conditional is relevant: the
           // true branch, the false branch, or both branches
           val ir = node.getIR
@@ -78,7 +78,7 @@ class AndroidRelevanceRelation(cg : CallGraph, hg : HeapGraph[InstanceKey], hm :
               case None => l
             })
           val domInfo = Dominators.make(cfg, cfg.entry())
-          condInstrs.foldLeft(paths)((paths, condInstr) => {
+          condInstrs.foldLeft (paths) ((paths, condInstr) => {
             val (condBlk, condIndex) =
               CFGUtil.findInstr(ir, condInstr) match {
                 case Some((blk, index)) => (blk, index)
@@ -236,7 +236,7 @@ class AndroidRelevanceRelation(cg : CallGraph, hg : HeapGraph[InstanceKey], hm :
             }
             node ->
               RelevantNodeInfo(finalRelevantInstrs, callableFromCurNode = isCallableFromCurNode,
-                instructionsFormCut = relevantInstructionsFormCut)
+                               instructionsFormCut = relevantInstructionsFormCut)
           }
         }
       })
@@ -279,7 +279,7 @@ class AndroidRelevanceRelation(cg : CallGraph, hg : HeapGraph[InstanceKey], hm :
           // TODO: add canFilterDueToMethodOrdering
           m
         } else {
-          if (DEBUG) println(s"Can't filter node $toFilter due to lack of ordering constraints")
+          if (DEBUG) println(s"Can't filter node $toFilter due to lack of ordering constraints. ${relInfo.relevantInstrs.size} rel instrs")
           m + (toFilter -> relInfo.relevantInstrs)
         }
     })

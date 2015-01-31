@@ -94,7 +94,6 @@ object Qry {
     l1.size >= l2.size && {
       // for every edge in l2, there exists some edge in l1 with a smaller concretization
       l2.forall(e1 => l1.exists(e2 => e1 |= e2))
-      //l2.forall(e1 => l1.contains(e1) || l1.exists(e2 => e1 |= e2))
     }
   }
   
@@ -103,7 +102,6 @@ object Qry {
     l1.size >= l2.size && {
       // for every edge in l2, there exists some edge in l1 with a smaller concretization
       l2.forall(e1 => l1.exists(e2 => e1 |= e2))
-      //l2.forall(e1 => l1.contains(e1) || l1.exists(e2 => e1 |= e2))
     }
   }
   
@@ -165,7 +163,6 @@ class Qry(val heapConstraints : MSet[HeapPtEdge], val pureConstraints : MSet[Pur
   // TODO: is it even necessary to remove local constraints? they just go away when we pop the call stack
   def removeLocalConstraint(e : LocalPtEdge) : Unit = {
     require(localConstraints.contains(e), "Qry does not have local constraint " + e + " " + this)
-    //println("removing local constraint " + e + " to " + id)
     localConstraints -= e
   }
   
@@ -174,7 +171,6 @@ class Qry(val heapConstraints : MSet[HeapPtEdge], val pureConstraints : MSet[Pur
   def addHeapConstraint(e : HeapPtEdge) : Boolean = if (heapConstraints.contains(e)) true else {
     
     def simultaneousPointsToError : Boolean = {
-      //if (DEBUG) println("e is " + e + " heap constraints are " + heapConstraints)
       if (Options.PRINT_REFS) println(s"Refuted by simultaneous points-to on field ${e.fld}")
       false 
     }
@@ -199,7 +195,6 @@ class Qry(val heapConstraints : MSet[HeapPtEdge], val pureConstraints : MSet[Pur
   
   def removeHeapConstraint(e : HeapPtEdge) : Unit = {
     require(heapConstraints.contains(e), "Qry does not have heap constraint " + e + " " + this)
-    //println("Removing heap constraint " + e + " to " + id)
     heapConstraints -= e
   }
   
@@ -249,18 +244,6 @@ class Qry(val heapConstraints : MSet[HeapPtEdge], val pureConstraints : MSet[Pur
     } catch {
       case e : UnknownSMTResult => false
     }
-    /*
-    pureConstraints.find(c => c.lhs == p) match {
-      case Some(c) => c.rhs match {
-        case BoolVal(b) => 
-          //if (c.isEqualityConstraint) !b else b
-          val res1 = if (c.isEqualityConstraint) !b else b
-          assert(res0 == res1, "disagreement! res0 " + res0 + " qry " + qry)
-          res1          
-        case _ => sys.error("Bad rhs for reference type " + c.rhs)
-      }
-      case None => sys.error("No related constraints for " + p)
-    }*/
   }
     
   def addPureConstraint(p : PureConstraint) : Boolean = {
@@ -292,29 +275,13 @@ class Qry(val heapConstraints : MSet[HeapPtEdge], val pureConstraints : MSet[Pur
         removePureConstraint(p)
         true
     }
-  }  
-  
-  // "assumptions" here are the id's of the current query and each of its parent queries. whenever a query adds a pure constraint p, it adds "id => p"
-  //def checkPureConstraintsSAT : Boolean = solver.checkSATWithAssumptions(assumes)
-  
-  def checkPureConstraintsSAT : Boolean = {    
-    val res = solver.checkSATWithAssumptions(assumes)
-    //if (!res) println(solver.getUNSATCore)
-    res
   }
+  
+  def checkPureConstraintsSAT : Boolean = solver.checkSATWithAssumptions(assumes)
 
   // add tmpConstraint, check SAT, (implicitly) remove tmp constraint, return result of SAT check
-  def checkTmpPureConstraint(tmpConstraint : PureConstraint) : Boolean = {
-    //val tmpConstraintId = getFreshTmpConstraintId
-    //solver.mkAssertWithAssumption(tmpConstraintId, tmpConstraint) 
-    //val res0 = solver.checkSATWithAssumptions(tmpConstraintId.toString :: assumes)
-    // TODO: assert !tmpConstraintId?
+  def checkTmpPureConstraint(tmpConstraint : PureConstraint) : Boolean =
     solver.checkTemporaryConstraint(tmpConstraint, assumes)
-    //assert(res0 == res1)
-    //res0
-  }
-  
-  //def getRelatedPureConstraints(p : PureVar) : MSet[PureConstraint] = pureConstraints.filter(c => c.lhs == p || c.rhs == p)
   
   def intersectAndSubstitute(o1 : ObjVar, rgn : Set[InstanceKey], hg : HeapGraph[InstanceKey]) : Option[ObjVar] =
     intersectAndSubstitute(o1, ObjVar(rgn), hg, subO2 = false)
@@ -339,6 +306,7 @@ class Qry(val heapConstraints : MSet[HeapPtEdge], val pureConstraints : MSet[Pur
       if (Options.PRINT_REFS) println("Refuted by non-aliasing constraints!")
       None
     }
+
   /** substitute symbolic object @param toSub for symbolic object @param subFor in our constraints*/
   def substitute(toSub : ObjVar, subFor : ObjVar, hg : HeapGraph[InstanceKey]) : Boolean = {
     
@@ -377,18 +345,14 @@ class Qry(val heapConstraints : MSet[HeapPtEdge], val pureConstraints : MSet[Pur
         if (newRgn.size < constraintObj.rgn.size || newRgn.size < ptRgn.size) m + (constraintObj -> m.getOrElse(constraintObj, newRgn).intersect(newRgn))
         else m // didn't get any narrowing
       }        
-      
-      //val objRgnMap = heapConstraints.foldLeft (Map.empty[ObjVar,Set[InstanceKey]]) ((m, e) => {
+
       val objRgnMap = heapConstraints.foldLeft (Map(subFor -> toSub.rgn.intersect(subFor.rgn))) ((m, e) => {
         val (srcMatch, snkMatch) = (e.src == subFor, e.snk == subFor)
         //assert (!(srcMatch && snkMatch), "src and snk of " + e + " both match " + subFor)
         val newM = if (srcMatch) e.snk match {
           case snk@ObjVar(_) =>
-           //println("src match")
             e.fld match {
               case InstanceFld(fld) =>
-               // println("ptO  " + toSub + "." + fld + " is " +  PtUtil.getPtO(toSub, fld, heapConstraints, hg)._1)
-                //println("snk is " + snk)
                 updateObjRgnMap(PtUtil.getPtO(toSub, fld, heapConstraints, hg)._1.rgn, snk, m)
               case ArrayFld(_, _, _) => updateObjRgnMap(PtUtil.getPtA(toSub, hg), snk, m)
               case _ => sys.error("unreachable")
@@ -398,15 +362,11 @@ class Qry(val heapConstraints : MSet[HeapPtEdge], val pureConstraints : MSet[Pur
         
         if (snkMatch) e.src match {
           case src@ObjVar(_) =>
-            //println("snk match")
             e.fld match {
               case InstanceFld(fld) =>
                 updateObjRgnMap(PtUtil.getPtByFld(toSub.rgn, fld, hg), src, newM)
               case ArrayFld(keys, _, _) =>
                 updateObjRgnMap(PtUtil.getPtByArr(toSub.rgn, hg), src, newM)
-                //assert(!PtUtil.getPtByArr(toSub.rgn, hg).intersect(toSub.rgn).isEmpty, 
-                   // "rgn " + PtUtil.getPtByArr(toSub.rgn, hg) + " and " + toSub + " lead to empty!") 
-                //newM
               case _ => sys.error("unreachable")
             }
           case _ => newM
@@ -415,30 +375,15 @@ class Qry(val heapConstraints : MSet[HeapPtEdge], val pureConstraints : MSet[Pur
       //assert(!objRgnMap.contains(toSub), toSub + " in map")
       //assert(!objRgnMap.contains(subFor), subFor + " in map")
       if (objRgnMap.values.exists(k => k.isEmpty)) {
-        //sys.error("got ref! " + objRgnMap)
         if (Options.PRINT_REFS) println("Refuted by from constraint simplification!")
         return false
       }
       objRgnMap.keys.foreach(k => assert(!objRgnMap(k).isEmpty, "refuted by " + k))
       // map of subFor -> toSub
-      //val subMap = objRgnMap.map(p => (ObjVar(p._2) -> p._1)) + (subFor -> toSub)       
       val subMap = objRgnMap.map(p => (ObjVar(p._2) -> p._1))
       substituteInternal(subMap)
     } else substituteInternal(Map(subFor -> toSub))
-   
-  /*
-    heapConstraints.foreach(edge => {  
-      val (srcMatch, snkMatch) = (edge.src == subFor, edge.snk == subFor)
-      if (srcMatch || snkMatch) {
-        val newSrc = if (srcMatch) toSub else edge.src
-        val newSnk = if (snkMatch) toSub else edge.snk
-        removeHeapConstraint(edge)
-        addHeapConstraint(PtEdge.make(newSrc, edge.fld, newSnk))
-      }     
-    })*/
-    
-    //if (DEBUG) doObjVarSanityCheck(toSub)
-  }  
+  }
   
   // drop constraints that are not of the form o.f -> _ for f in flds
   def dropConstraintsNotContaining(o : ObjVar, flds : Set[IField]) : Unit = heapConstraints.foreach(e => e match {
@@ -538,24 +483,6 @@ class Qry(val heapConstraints : MSet[HeapPtEdge], val pureConstraints : MSet[Pur
       !lpkFields.intersect(qryFields).isEmpty
     }
   }
-   
-  /*
-  // TODO: this name is dumb
-  // @return true if we can view *all* the local and heap constraints as a linear sequence A.f -> B, B.g -> C, etc.   
-  def allConstraintsFormLinearSequence : Boolean = this.localConstraints.size == 1 && this.heapConstraints.size >= 1 && {       
-    localConstraints.head.snk match {
-      case snk : HeapVar =>
-        def buildSequenceRec(matchVar : HeapVar, matchedCount : Int) : Boolean = matchedCount == this.heapConstraints.size || {
-          heapConstraints.find(e => e.src == matchVar) match {
-            case Some(ObjPtEdge(_, _, snk : HeapVar)) => buildSequenceRec(snk, matchedCount + 1)
-            case Some(ArrayPtEdge(_, _, snk : HeapVar)) => buildSequenceRec(snk, matchedCount + 1)
-            case _ => false
-          }
-        }        
-        buildSequenceRec(snk, 0)
-      case _ => false
-    }    
-  }*/
   
   // debug only
   def doFullObjVarSanityCheck() : Unit = getAllObjVars.foreach(v => doObjVarSanityCheck(v))
@@ -586,7 +513,7 @@ class Qry(val heapConstraints : MSet[HeapPtEdge], val pureConstraints : MSet[Pur
   def cleanup() : Unit = dispose
   
   override def |=(other : Concretizable) : Boolean = other match {
-    case q : Qry => Qry.heapImplies(this.heapConstraints, q.heapConstraints) && //q.heapConstraints.forall(c => this.heapConstraints.contains(c)) &&
+    case q : Qry => Qry.heapImplies(this.heapConstraints, q.heapConstraints) &&
                     // TODO: implement |= for call stack and delegate
                     q.callStack.size == this.callStack.size &&
                     q.node == this.node &&
@@ -595,14 +522,9 @@ class Qry(val heapConstraints : MSet[HeapPtEdge], val pureConstraints : MSet[Pur
     case _ => sys.error("comparing qry to " + other)
   }
   
-  private def doZ3ImplicationCheck(q1 : Qry) : Boolean = { // TODO: refactor to use existing context
-    // temporary context for performing implication checking
-    //final Z3Context tmp = new Z3Context(new Z3Config());
+  private def doZ3ImplicationCheck(q1 : Qry) : Boolean = {
     solver.push
     solver.mkNotImpliesAssert(pureConstraints, q1.pureConstraints)
-    //solver.mkAssert(solver.mkNot(solver.mkImplies(pureConstraints, q1.pureConstraints))
-    //val (implLHS, implRHS) = (solver.toConjunct(pureConstraints), solver.toConjunct(q1.pureConstraints))
-    //solver.mkAssert(solver.mkNot(solver.mkImplies(implLHS, implRHS)))
     val res = !solver.checkSAT
     solver.pop
     res
@@ -613,26 +535,10 @@ class Qry(val heapConstraints : MSet[HeapPtEdge], val pureConstraints : MSet[Pur
   override def qry = this
   
   override def toString : String = id + "Q { " + constraintsToString(localConstraints, " *\n") + " *\n" + constraintsToString(heapConstraints, " *\n") + 
-    " }\n{( " + constraintsToString(pureConstraints, " ^\n") + " )}"   
-  //override def toString : String = id + " { " + constraintsToString(localConstraints) + " *\n" + constraintsToString(heapConstraints) + " }"
-  //override def toString : String = "{ " + localConstraints + heapConstraints + " }\n{( " + pureConstraints + " )}"   
+    " }\n{( " + constraintsToString(pureConstraints, " ^\n") + " )}"
       
   override def clone : Qry = new Qry(heapConstraints.clone, pureConstraints.clone, callStack.clone, solver, id :: parents)
-  
-  /*
-  override def clone : Qry = {
-    this.poison
-    new Qry(heapConstraints.clone, pureConstraints.clone, callStack.clone, solver, id :: parents)  
-  }
-  
-  var isPoisoned : Boolean = false
-  
-  def poison : Unit = {
-    println("poisoning " + id)
-    Thread.dumpStack()
-    isPoisoned = true
-  }*/
-  
+
   override def hashCode : Int = Util.makeHash(List(heapConstraints, pureConstraints, callStack))
   
   override def equals(other : Any) : Boolean = other match {
@@ -641,18 +547,5 @@ class Qry(val heapConstraints : MSet[HeapPtEdge], val pureConstraints : MSet[Pur
                     this.callStack == q.callStack // TODO: is this too restrictive?
     case _ => false
   }
-  
-  /*
-  override def equals(other : Any) : Boolean = other match {
-    case q : Qry =>
-      println("this stack " + this.callStack.size + " and " + q.callStack.size)
-      println("comparing " + this + " and " + q)
-      println("heapEq? " + (this.heapConstraints == q.heapConstraints))
-      println("pureEq? " + (this.pureConstraints == q.pureConstraints))
-      println("call stk equal? " + (this.callStack == q.callStack))
-      this.heapConstraints == q.heapConstraints  &&
-                    this.pureConstraints == q.pureConstraints && // TODO: ask Z3 about these?                  
-                    this.callStack == q.callStack // TODO: is this too restrictive?
-    case _ => false
-  }*/
+
 }

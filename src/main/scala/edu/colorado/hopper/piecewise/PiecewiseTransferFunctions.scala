@@ -41,14 +41,16 @@ object PiecewiseTransferFunctions {
       // or dropping all constraints produceable in non-k-reachable nodes
       // the call is relevant if one or more nodes are k-reachable from callee
       // we will drop constraints from all nodes that not k-reachable
-      constraintModMap.exists(entry => entry._2.exists(pair => {
+      constraintModMap.exists(entry =>
+        entry._2.exists(pair => {
         val node = pair._1
-        calleeReachable.contains(pair) && { // node is reachable from callee
-        val isKReachable = kReachable.contains(node)
-          if (!isKReachable && rr.getProducers(entry._1, qry).exists(pair => pair._1 == node)) {
+        calleeReachable.contains(node) && { // node is reachable from callee
+          val isKReachable = kReachable.contains(node)
+          if (!isKReachable && qry.heapConstraints.contains(entry._1) &&
+              rr.getProducers(entry._1, qry).exists(pair => pair._1 == node))
             // if node not k-reachable from callee AND node contains a producer statement for the current constraint, the node is relevant
             qry.removeConstraint(entry._1) // node not k-reachable. drop constraints
-          } else if (DEBUG) println(s"callee is relevant: ${ClassUtil.pretty(callee)} because transitive callee is relevant: ${ClassUtil.pretty(node)}")
+          else if (DEBUG) println(s"callee is relevant: ${ClassUtil.pretty(callee)} because transitive callee is relevant: ${ClassUtil.pretty(node)}")
           // if isKReachable is true, the callee is relevant and we will exit via the double exists above
           isKReachable
         }})
