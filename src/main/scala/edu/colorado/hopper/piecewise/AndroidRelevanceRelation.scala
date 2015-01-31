@@ -8,12 +8,37 @@ import com.ibm.wala.ipa.cfg.PrunedCFG
 import com.ibm.wala.ipa.cha.IClassHierarchy
 import com.ibm.wala.ssa._
 import com.ibm.wala.util.graph.dominators.Dominators
-import com.ibm.wala.util.graph.traverse.{BFSIterator, BFSPathFinder}
+import com.ibm.wala.util.graph.traverse.BFSIterator
 import com.ibm.wala.util.intset.OrdinalSet
 import edu.colorado.hopper.state._
 import edu.colorado.walautil.{CFGUtil, ClassUtil, IRUtil}
 
 import scala.collection.JavaConversions._
+
+object AndroidRelevanceRelation {
+  // special reachability check to account for call graph imprecision in Android apps. the problem is that whenever a
+  // method that places a message on the event queue is reachable, this starts a thread that calls dispatchMessage()
+  // and then can pull *any* message off of the event queue (and thus call pretty much anything). we prevent this from
+  // happening by cutting off paths that pass through Handler.dispatchMessage()
+  def getReachableInAndroidCG(cg : CallGraph, n : CGNode) : Set[CGNode] = {
+    @annotation.tailrec
+    def getReachableRec(iter : BFSIterator[CGNode], reachable : Set[CGNode] = Set.empty[CGNode]) : Set[CGNode] =
+      if (iter.hasNext) getReachableRec(iter, reachable + iter.next())
+      else reachable
+    val HANDLER_CLASS = "Landroid/os/Handler"
+    val DISPATCH_MESSAGE = "dispatchMessage"
+    def frontierFilter(n : CGNode) : Boolean = {
+      val m = n.getMethod
+      m.getDeclaringClass.getName.toString == HANDLER_CLASS && m.getName.toString == DISPATCH_MESSAGE
+    }
+    val iter =
+      new BFSIterator[CGNode](cg, n) {
+        override def getConnected(n : CGNode) : java.util.Iterator[_ <: CGNode] =
+          cg.getSuccNodes(n).filter(n => frontierFilter(n))
+      }
+    getReachableRec(iter)
+  }
+}
 
 // relevance relation that filters away instructions that are not control-feasible based on domain-specific information
 // about Android
@@ -168,21 +193,8 @@ class AndroidRelevanceRelation(cg : CallGraph, hg : HeapGraph[InstanceKey], hm :
         filterRelevantInstrsRec(iter, allRelInstrs, newVisitedRelInstrs, reachedBlocks + blk)
       } else (visitedRelInstrs, reachedBlocks)
 
-    def isCallableFrom(snk : CGNode, src : CGNode) : Boolean = {
-      val path = new BFSPathFinder(cg, src, snk).find()
-      // TODO: this is *very* unsound, but need to do it for now to avoid absurd paths. fix CG issues that cause this later
-      // I think these CG paths happen whenever a function call places a message on the event queue--this starts a thread
-      // that calls dispatchMessage() and then can pull *any* message off of the event queue. We can prevent this from
-      // happening by cutting off paths that pass through Handler.dispatchMessage() (or Looper.loop())
-      val reachable =
-        path != null && path.size > 0 && path.exists(n => n != src && n != snk && !ClassUtil.isLibrary(n)) &&
-          path.size < 20
-      if (DEBUG && reachable) {
-        println(s"can't filter $src since it may transitively call ${ClassUtil.pretty(snk)}")
-        path.foreach(println)
-      }
-      reachable
-    }
+    def isCallableFrom(snk : CGNode, src : CGNode) : Boolean =
+      AndroidRelevanceRelation.getReachableInAndroidCG(cg, src).contains(snk)
 
     case class RelevantNodeInfo(val relevantInstrs : Set[SSAInstruction], val callableFromCurNode : Boolean,
                                 val instructionsFormCut : Boolean)

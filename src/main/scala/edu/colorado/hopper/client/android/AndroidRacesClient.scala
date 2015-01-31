@@ -4,9 +4,10 @@ import java.io.File
 
 import com.ibm.wala.analysis.pointers.HeapGraph
 import com.ibm.wala.classLoader.{IField, IClass}
-import com.ibm.wala.ipa.callgraph.CGNode
+import com.ibm.wala.ipa.callgraph.{CallGraph, CGNode}
 import com.ibm.wala.ipa.callgraph.propagation._
 import com.ibm.wala.ssa._
+import com.ibm.wala.util.graph.traverse.BFSIterator
 import edu.colorado.droidel.driver.AbsurdityIdentifier
 import edu.colorado.hopper.client.NullDereferenceTransferFunctions
 import edu.colorado.hopper.executor.DefaultSymbolicExecutor
@@ -57,20 +58,16 @@ class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelCli
 
     override def isCallRelevant(i : SSAInvokeInstruction, caller : CGNode, callee : CGNode, qry : Qry) : Boolean =
       if (Options.PIECEWISE_EXECUTION)
-        isRetvalRelevant(i, caller, qry) || PiecewiseTransferFunctions.doesCalleeModifyHeap(callee, qry, rr, cg)
+        isRetvalRelevant(i, caller, qry) ||
+        PiecewiseTransferFunctions.doesCalleeModifyHeap(callee, qry, rr, cg,
+                                                        getReachable = AndroidRelevanceRelation.getReachableInAndroidCG)
       else super.isCallRelevant(i, caller, callee, qry)
-
-    val HANDLER_CLASS = "Landroid/os/Handler"
-    val DISPATCH_MESSAGE = "dispatchMessage"
-    def frontierFilter(n : CGNode) : Boolean = {
-      val m = n.getMethod
-      m.getDeclaringClass.getName.toString == HANDLER_CLASS && m.getName.toString == DISPATCH_MESSAGE
-    }
 
     override def dropCallConstraints(qry : Qry, callee : CGNode,
                                      modRef : java.util.Map[CGNode,com.ibm.wala.util.intset.OrdinalSet[PointerKey]],
                                      loopDrop : Boolean) : Unit =
-      PiecewiseTransferFunctions.dropCallConstraints(qry, callee, rr, cg, frontierFilter)
+      PiecewiseTransferFunctions.dropCallConstraints(qry, callee, rr, cg,
+                                                     getReachable = AndroidRelevanceRelation.getReachableInAndroidCG)
 
     override def executeCond(cond : SSAConditionalBranchInstruction, qry : Qry, n : CGNode,
                              isThenBranch : Boolean) : Boolean =
