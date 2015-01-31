@@ -85,20 +85,27 @@ class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelCli
       // TODO: do we want this?
       override val keepLoopConstraints = true
 
+      private def doJump(p : Path) : Iterable[Path] = {
+        p.qry.localConstraints.clear()
+        if (DEBUG) println("After weakening, query is " + p.qry)
+        val curJmp = { jmpNum += 1; jmpNum }
+        rr.getPiecewisePaths(p, curJmp) match {
+          case Some(unfilteredPiecewisePaths) =>
+            val piecewisePaths =
+              unfilteredPiecewisePaths.filter(p => !piecewiseInvMap.pathEntailsInv((p.node, p.blk, p.index), p))
+            if (DEBUG) {
+              println("got " + piecewisePaths.size + " piecewise paths:")
+              piecewisePaths.foreach(p => print(p.id + "X :" + ClassUtil.pretty(p.node) + ",\n" + p)); println
+            }
+            piecewisePaths
+          case None => super.returnFromCall(p)
+        }
+      }
+
       // TODO: if callee is relevant to heap constraint only, choose to jump instead of diving in?
       override def returnFromCall(p : Path) : Iterable[Path] =
-        if (p.callStackSize == 1 && isEntrypointCallback(p.node)) {
-          println(s"at function boundary of entrypoint cb ${p.node}")
-          val jmpPath = p.deepCopy
-          val qry = jmpPath.qry
-
-          // drop all local constraints
-          qry.localConstraints.clear()
-          // drop constraint on inner class this
-          /*qry.heapConstraints.foreach(e => e.fld match {
-            case InstanceFld(f) if ClassUtil.isInnerClassThis(f) => qry.removeHeapConstraint(e)
-            case _ => ()
-          })*/
+        if (p.callStackSize == 1) {
+          val qry = p.qry
           // keep one constraint on null and the access path to the constraint--drop all other constraints
           qry.heapConstraints.find(e => e.snk match {
             case p@PureVar(t) if t.isReferenceType => qry.isNull(p)
@@ -106,23 +113,31 @@ class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelCli
           }) match {
             case Some(e) =>
               val keepEdges = qry.getAccessPrefixPathFor(e)
-              qry.heapConstraints.foreach(e => if (!keepEdges.contains(e)) qry.removeHeapConstraint(e))
-            case None => () // keep entire query
-          }
-
-          if (DEBUG) println("After weakening, query is " + qry)
-
-          val curJmp = { jmpNum += 1; jmpNum }
-          rr.getPiecewisePaths(jmpPath, curJmp) match {
-            case Some(unfilteredPiecewisePaths) =>
-              val piecewisePaths =
-                unfilteredPiecewisePaths.filter(p => !piecewiseInvMap.pathEntailsInv((p.node, p.blk, p.index), p))
-              if (DEBUG) {
-                println("got " + piecewisePaths.size + " piecewise paths:")
-                piecewisePaths.foreach(p => print(p.id + "X :" + ClassUtil.pretty(p.node) + ",\n" + p)); println
+              // guaranteed to exist because getAccessPathPrefix returns at least e
+              val accessPathHead = keepEdges.head.src
+              // see if the access path leading to the null constraint is rooted in a function parameter other than
+              // "this". if this is the case, we want to keep going backward without jumping in order to get a more
+              // complete access path to the null constraint
+              val accessPathRootedInNonThisParam =
+                qry.localConstraints.exists(e => e match {
+                  case LocalPtEdge(LocalVar(key), snk) =>
+                    snk == accessPathHead && !IRUtil.isThisVar(key.getValueNumber)
+                  case _ => false
+                })
+              // have access path originating from non-this param and not at an entrypoint callback, don't jump
+              if (accessPathRootedInNonThisParam && !isEntrypointCallback(p.node)) super.returnFromCall(p)
+              else { // have access path originating from this or at entrypoint callback, jump
+                if (DEBUG) println(s"have complete access path or at function boundary of entrypoint cb ${p.node}")
+                // weaken query by removing all constraints but access path, then jump
+                qry.heapConstraints.foreach(e => if (!keepEdges.contains(e)) qry.removeHeapConstraint(e))
+                doJump(p)
               }
-              piecewisePaths
-            case None => super.returnFromCall(p)
+            case None =>
+              // keep entire query
+              if (isEntrypointCallback(p.node)) { // at function of entrypoint callback--we should jump
+                if (DEBUG) println(s"at function boundary of entrypoint cb ${p.node}")
+                doJump(p)
+              } else super.returnFromCall(p)
           }
         } else super.returnFromCall(p)
 
