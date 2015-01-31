@@ -651,14 +651,11 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
   var joinCount = 0
   
   /** keep executing all paths in @param paths until they hit @param join; return the result of execution */
-  def executeUntilJoin(paths : List[Path], join : WalaBlock, initCallStackSize : Int, cfg : SSACFG, failPaths : List[Path] = List.empty[Path]) : List[Path] = 
+  def executeUntilJoin(paths : List[Path], join : WalaBlock, initCallStackSize : Int, cfg : SSACFG,
+                       failPaths : List[Path] = List.empty[Path]) : List[Path] =
     executeBackwardWhile(paths, p => p.blk != join || p.callStackSize != initCallStackSize, failPaths)
-    //executeBackwardWhile(paths, p => {val neqJoin = p.blk != join; println("blk " + p.blk + " neq join " + join + "? " + neqJoin); neqJoin } // debug 
-      //                   || { val eqCS = p.callStackSize != initCallStackSize; println("call stks eq? " + p.callStackSize + " and init " + 
-        //                     initCallStackSize); eqCS }, failPaths) 
-                         
   
-  // TODO: cache this
+  // TODO: cache this?
   def getSwitchMap(switchInstr : SSASwitchInstruction, ir : IR) : Map[Int,List[SSAConditionalBranchInstruction]] = {
     val tbl = ir.getSymbolTable
     val cfg = ir.getControlFlowGraph

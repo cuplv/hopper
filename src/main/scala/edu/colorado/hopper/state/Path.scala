@@ -5,7 +5,7 @@ import com.ibm.wala.classLoader.{IClass, IMethod}
 import com.ibm.wala.ipa.callgraph.{CGNode, CallGraph}
 import com.ibm.wala.ipa.callgraph.propagation.{HeapModel, InstanceKey}
 import com.ibm.wala.ipa.cha.IClassHierarchy
-import com.ibm.wala.ssa.{ISSABasicBlock, SSAArrayStoreInstruction, SSAConditionalBranchInstruction, SSAInstruction, SSAInvokeInstruction, SSAPhiInstruction, SSAPutInstruction}
+import com.ibm.wala.ssa._
 import com.ibm.wala.types.{ClassLoaderReference, MethodReference, TypeReference}
 import edu.colorado.hopper.executor.TransferFunctions
 import edu.colorado.hopper.state.Path._
@@ -175,6 +175,15 @@ object Path {
       case i : SSAArrayStoreInstruction => // x[i] = y
         setupBlockAndCallStack(p, node, blk, index, jmpNum)
         addLocalConstraintOnConsumedEdge(qry, e => e.isInstanceOf[ArrayPtEdge], i.getArrayRef)
+      case i : SSANewInstruction if i.getConcreteType.isArrayType => // x = new T[]
+        // relevant for constraints on array length
+        val allocatedInstanceKey = hm.getInstanceKeyForAllocation(node, i.getNewSite)
+        setupBlockAndCallStack(p, node, blk, index, jmpNum)
+        addLocalConstraintOnConsumedEdge(qry, e => e match {
+          case e@ObjPtEdge(ObjVar(rgn), fld, PureVar(p)) =>
+            Fld.isArrayLengthFld(fld) && rgn.contains(allocatedInstanceKey)
+          case _ => false
+        }, i.getDef)
       case s => sys.error(s"Implement me: setup for jumping to instruction $s")
     }
   }
@@ -220,69 +229,54 @@ class Path(val qry : Qry, var lastBlk : WalaBlock = null,
   def deepCopy : Path = deepCopy(qry.clone)
     
   /** "normal" return from callee to caller */
-  def returnFromCall(i : SSAInvokeInstruction, callee : CGNode, tf : TransferFunctions) : Boolean = {
-    // TODO: for testing qry!
-    val res0 = tf.returnToCallerNormal(qry)        
-    
-    res0
-  }
-  
+  def returnFromCall(i : SSAInvokeInstruction, callee : CGNode, tf : TransferFunctions) : Boolean =
+    tf.returnToCallerNormal(qry)
+
   /** return from callee to an arbitrary caller (i.e., we have no context) */
-  def returnFromCall(caller : CGNode, callee : CGNode, callBlk : WalaBlock, callLine : Int, invoke : SSAInvokeInstruction, tf : TransferFunctions) : Boolean = {    
+  def returnFromCall(caller : CGNode, callee : CGNode, callBlk : WalaBlock, callLine : Int,
+                     invoke : SSAInvokeInstruction, tf : TransferFunctions) : Boolean = {
     val res0 = tf.returnToCallerContextFree(invoke, qry, caller, callBlk, callLine)
     if (DEBUG) println("Done with return from " + ClassUtil.pretty(callee) + " to " + caller + " result is " + res0)
     res0    
   }
   
-  def executeInstr(i : SSAInstruction, tf : TransferFunctions) : Option[List[Path]] = {    
-    // TODO: for testing qry!
+  def executeInstr(i : SSAInstruction, tf : TransferFunctions) : Option[List[Path]] =
     tf.execute(i, qry, node) match {
       case l if l.isEmpty => None
       case l if l.size == 1 =>
         if (l.head.qry.id == this.qry.id) Some(List(this))
         else Some(List(this.deepCopy(l.head)))
       case l => Some(l.map(q => if (q eq this.qry) this else this.deepCopy(q)))
-    }    
-  }
+    }
   
   def dropReturnValueConstraints(invoke : SSAInvokeInstruction, caller : CGNode, tf : TransferFunctions) : Unit = 
     tf.dropLocalConstraintsFromInstruction(invoke, qry)
-  
-    
-  def isCallRelevant(i : SSAInvokeInstruction, caller : CGNode, callee : CGNode, tf : TransferFunctions) : Boolean = {
-    val res0 = tf.isCallRelevant(i, caller, callee, qry)
-    res0
-  }
-    
+
+  def isCallRelevant(i : SSAInvokeInstruction, caller : CGNode, callee : CGNode, tf : TransferFunctions) : Boolean =
+    tf.isCallRelevant(i, caller, callee, qry)
+
   // TODO: redo this the right way when we're no longer using old queries
-  def dropConstraintsProduceableInCall(invoke : SSAInvokeInstruction, caller : CGNode, callee : CGNode, tf : TransferFunctions) : Unit = {
+  def dropConstraintsProduceableInCall(invoke : SSAInvokeInstruction, caller : CGNode, callee : CGNode,
+                                       tf : TransferFunctions) : Unit =
     tf.dropConstraintsFromInstructions(List(invoke), caller, qry, Some(callee))
-  }
   
-  def executePhi(phi : SSAPhiInstruction, phiIndex : Int, tf : TransferFunctions) : Boolean = {
-    val res0 = tf.executePhi(phi, phiIndex, qry, node)
-    res0
-  }
+  def executePhi(phi : SSAPhiInstruction, phiIndex : Int, tf : TransferFunctions) : Boolean =
+    tf.executePhi(phi, phiIndex, qry, node)
 
   // TODO: should we have a special flag for this instead?
   def isClinitPath(cg : CallGraph) : Boolean = {
-    val fakeWorldClinit = CGNodeUtil.getFakeWorldClinitNode(cg).get //WALACFGUtil.getFakeWorldClinitNode(cg)
+    val fakeWorldClinit = CGNodeUtil.getFakeWorldClinitNode(cg).get
     qry.callStack.stack.exists(frame => frame.node.equals(fakeWorldClinit) || frame.node.getMethod().isClinit() || (
-    //callStack.exists(frame => frame.node.equals(fakeWorldlClinit) || frame.node.getMethod().isClinit() || (
     cg.getPredNodeCount(frame.node) == 1 && cg.getPredNodes(frame.node).contains(fakeWorldClinit)))
   }
-    
-  //def popCallStack : StackFrame2 = qry.callStack.pop//this.callStack.pop
-  def popCallStack : CallStackFrame = qry.callStack.pop//this.callStack.pop
-  
-  //def clearCallStack : Unit = this.callStack.clear
+
+  def popCallStack : CallStackFrame = qry.callStack.pop
+
   def clearCallStack() : Unit = qry.callStack.clear     
   
-  def callStackSize : Int = qry.callStack.size//this.callStack.size
+  def callStackSize : Int = qry.callStack.size
   
   def callStackIter : Iterable[CallStackFrame] = this.callStack.stack
-  
-  //def printCallStack : Unit = this.callStack.foreach(f => print(f + " "))
   
   def isInJump : Boolean = !this.jumpMap.isEmpty
   
