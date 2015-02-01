@@ -469,7 +469,6 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
         if (DEBUG) { print(" > 1 pred "); preds.foreach(p => print(s" BB${p.getNumber()}")); println }
         val p = instrPaths.head
         val blk = p.blk
-        println("blk " + blk + " startBlk " + startBlk)
         val phis = p.blk.iteratePhis().toIterable
 
         // push all paths up to the join

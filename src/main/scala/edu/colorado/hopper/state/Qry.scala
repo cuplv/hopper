@@ -533,7 +533,12 @@ class Qry(val heapConstraints : MSet[HeapPtEdge], val pureConstraints : MSet[Pur
   private def doZ3ImplicationCheck(q1 : Qry) : Boolean = {
     solver.push
     solver.mkNotImpliesAssert(pureConstraints, q1.pureConstraints)
-    val res = !solver.checkSAT
+    val res =
+      try {
+        !solver.checkSAT
+      } catch {
+        case e : UnknownSMTResult => false
+      }
     solver.pop
     res
   }  
