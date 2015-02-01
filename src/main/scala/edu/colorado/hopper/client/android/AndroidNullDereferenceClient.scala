@@ -22,7 +22,7 @@ import edu.colorado.walautil.{ClassUtil, IRUtil, Util}
 import scala.collection.JavaConversions._
 import scala.xml.XML
 
-class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelClient(appPath, androidLib) {
+class AndroidNullDereferenceClient(appPath : String, androidLib : File) extends DroidelClient(appPath, androidLib) {
   val DEBUG = false
   val rr =
     if (Options.PIECEWISE_EXECUTION)

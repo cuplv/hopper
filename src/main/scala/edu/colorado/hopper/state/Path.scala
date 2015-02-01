@@ -2,8 +2,8 @@ package edu.colorado.hopper.state
 
 import com.ibm.wala.analysis.pointers.HeapGraph
 import com.ibm.wala.classLoader.{IClass, IMethod}
-import com.ibm.wala.ipa.callgraph.{CGNode, CallGraph}
 import com.ibm.wala.ipa.callgraph.propagation.{HeapModel, InstanceKey}
+import com.ibm.wala.ipa.callgraph.{CGNode, CallGraph}
 import com.ibm.wala.ipa.cha.IClassHierarchy
 import com.ibm.wala.ssa._
 import com.ibm.wala.types.{ClassLoaderReference, MethodReference, TypeReference}
@@ -11,8 +11,8 @@ import edu.colorado.hopper.executor.TransferFunctions
 import edu.colorado.hopper.state.Path._
 import edu.colorado.hopper.util._
 import edu.colorado.thresher.core.Options
-import edu.colorado.walautil.WalaBlock.{fromISSABasicBlock, fromWalaBlock}
-import edu.colorado.walautil.{WalaBlock, _}
+import edu.colorado.walautil.Types.WalaBlock
+import edu.colorado.walautil._
 
 import scala.collection.JavaConversions._
 

@@ -14,8 +14,8 @@ import com.twitter.util.LruMap
 import edu.colorado.hopper.executor.UnstructuredSymbolicExecutor._
 import edu.colorado.hopper.state._
 import edu.colorado.thresher.core.Options
-import edu.colorado.walautil.WalaBlock.{fromISSABasicBlock, fromWalaBlock}
-import edu.colorado.walautil.{WalaBlock, _}
+import edu.colorado.walautil._
+import edu.colorado.walautil.Types.WalaBlock
 
 import scala.collection.JavaConversions.{asScalaBuffer, asScalaIterator, asScalaSet, collectionAsScalaIterable, mapAsJavaMap}
 
@@ -209,7 +209,7 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
       val node = p.node
       val ir = node.getIR
       val cfg = ir.getControlFlowGraph()
-      val blk = p.blk.blk
+      val blk = p.blk
       val instrs = blk.asInstanceOf[SSACFG#BasicBlock].getAllInstructions()
 
       (instrs.view.zipWithIndex.reverse foldLeft List(p)) { case (paths : List[Path], (instr : SSAInstruction, index : Int)) =>
@@ -306,8 +306,9 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
                 if (DEBUG) println("handled recursive call while forking to all callers--dropping constraints")
                 sitePath.dropConstraintsProduceableInCall(invoke, caller, callee, tf)
               }
-              val callBlk : WalaBlock = callerCFG.getBlockForInstruction(index)
-              val callLine = callBlk.size - 2 // call is always the last instruction in a block. set to line *before* the call
+              val callBlk = callerCFG.getBlockForInstruction(index)
+              // call is always the last instruction in a block. set to line *before* the call
+              val callLine = callBlk.asInstanceOf[SSACFG#BasicBlock].getAllInstructions().size - 2          
               assert(callBlk.getLastInstruction == invoke,
                      s"Expected call to be last instruction in $callBlk, but got ${callBlk.getLastInstruction}. IR $callerIR")
               if (sitePath.returnFromCall(caller, callee, callBlk, callLine, invoke, tf)) {
@@ -726,8 +727,9 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
       if (CFGUtil.endsWithSwitchInstr(join)) {      
         // TODO: avoid adding constraints if all paths are the same?
         val switch = join.getLastInstruction.asInstanceOf[SSASwitchInstruction]
-        val joined = handleSwitch(joinPaths, switch, join, cfg)          
-        joined.foreach(p => p.setIndex(join.size - 2)) // set to instruction before the switch
+        val joined = handleSwitch(joinPaths, switch, join, cfg)
+        val preSwitchIndex = join.asInstanceOf[SSACFG#BasicBlock].getAllInstructions().size - 2          
+        joined.foreach(p => p.setIndex(preSwitchIndex)) // set to instruction before the switch
         //MinSet.make(joined).toList // this is quadratic in the size of joined. potentially very bad
         joined
       } else {
@@ -756,7 +758,8 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
             if (p.lastBlk == joinSuccs(0)) true 
             else { assert (p.lastBlk == joinSuccs(1), "expecting last blk to be " + joinSuccs(1) + " but it's " + p.lastBlk); false })
           val combined = mergeBranches(cond, thenPaths, elsePaths)
-          combined.foreach(p => p.setIndex(join.size - 2)) 
+          val preCondIndex = join.asInstanceOf[SSACFG#BasicBlock].getAllInstructions().size - 2          
+          combined.foreach(p => p.setIndex(preCondIndex) )
           mergeRedundantPaths(combined)
         } else mergeRedundantPaths(joinPaths) // non-if, non-switch successor
       }

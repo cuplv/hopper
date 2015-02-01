@@ -7,8 +7,8 @@ import edu.colorado.hopper.executor.{TransferFunctions, UnstructuredSymbolicExec
 import edu.colorado.hopper.piecewise.{PiecewiseSymbolicExecutor, RelevanceRelation}
 import edu.colorado.hopper.state.Path
 import edu.colorado.thresher.core.Options
-import edu.colorado.walautil.WalaBlock.{fromISSABasicBlock, fromWalaBlock}
 import edu.colorado.walautil.{CFGUtil, LoopUtil}
+import edu.colorado.walautil.Types.WalaBlock
 
 import scala.collection.JavaConversions._
 

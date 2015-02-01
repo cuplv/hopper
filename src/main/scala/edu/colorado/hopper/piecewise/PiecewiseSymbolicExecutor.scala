@@ -3,13 +3,16 @@ package edu.colorado.hopper.piecewise
 import com.ibm.wala.classLoader.IField
 import com.ibm.wala.ipa.callgraph.CGNode
 import com.ibm.wala.ssa.{IR, ISSABasicBlock}
-import edu.colorado.thresher.core.Options
 import edu.colorado.hopper.executor.{TransferFunctions, UnstructuredSymbolicExecutor}
 import edu.colorado.hopper.piecewise.PiecewiseSymbolicExecutor._
 import edu.colorado.hopper.state._
 import edu.colorado.hopper.util.PtUtil
+import edu.colorado.thresher.core.Options
 import edu.colorado.walautil.Types.MSet
-import edu.colorado.walautil.{ClassUtil, Util, WalaBlock}
+import edu.colorado.walautil.Types.WalaBlock
+import edu.colorado.walautil.ClassUtil
+import edu.colorado.walautil.Util
+
 
 object PiecewiseSymbolicExecutor {
   // if true, when we do a piecewise jump and fail, we will continue doing path-based execution

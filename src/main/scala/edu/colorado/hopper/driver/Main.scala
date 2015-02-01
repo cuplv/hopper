@@ -17,7 +17,7 @@ object Main {
     
     if (target == null) println("No analysis targets given...exiting.")
     else if (target.equals(REGRESSION)) {
-            
+      val prevDebug = Options.SCALA_DEBUG
       val clientTests = 
         if (Options.CHECK_ANDROID_LEAKS) List(AndroidLeakClientTests)
         else if (Options.CHECK_CASTS) List(DowncastCheckingClientTests)
@@ -36,6 +36,7 @@ object Main {
           println(s"Running tests for client ${client.getClass.getName()}")
           client.runRegressionTests
           Options.restoreDefaults() // reset default values for option flags, including PIECEWISE_EXECUTION
+          Options.SCALA_DEBUG = prevDebug
         }             
       })
       
@@ -65,7 +66,7 @@ object Main {
       new NullDereferenceClient(Options.APP, Util.strToOption(Options.LIB), Options.MAIN_CLASS, Options.MAIN_METHOD)
       .checkNullDerefs
     else if (Options.CHECK_ANDROID_RACES)
-      new AndroidRacesClient(Options.APP, new File(Options.ANDROID_JAR))
+      new AndroidNullDereferenceClient(Options.APP, new File(Options.ANDROID_JAR))
       .checkForRacingDerefs()
     else if (Options.CHECK_ANDROID_UI) {
       new AndroidUIClient(Options.APP, new File(Options.ANDROID_JAR))
