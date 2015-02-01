@@ -23,7 +23,7 @@ object UnstructuredSymbolicExecutor {
   protected[executor] def DEBUG = Options.SCALA_DEBUG
   protected[executor] def MIN_DEBUG = DEBUG
   private[executor] val TRACE = false
-  private[executor] val PRINT_IR = false
+  private[executor] val PRINT_IR = true
   // save invariant maps that lead to refutations
   private val SAVE_INVARIANT_MAPS = false
 
@@ -386,14 +386,14 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
     // loop header--see if the invariant says we can stop executing
     def invariantImpliesPath(p: Path): Boolean = {
       val res = loopInvMap.pathEntailsInv(p.callStack.stack.map(f => (f.node, f.blk)), p)
-      if (DEBUG && res) println("Hit fixed point at loop head  " + startBlk)
+      if (DEBUG && res) println(s"Hit fixed point at loop head $startBlk")
       res
     }
 
     val loopHeader = LoopUtil.findRelatedLoopHeader(startBlk, ir)
     loopHeader.foreach(loopHeader =>
       if (CFGUtil.endsWithConditionalInstr(startBlk)) {
-        if (DEBUG) println("at loop head BB" + loopHeader.getNumber() + " on path " + p)
+        if (DEBUG) println(s"at loop head BB${loopHeader.getNumber()} on path $p")
         // don't do the loop invariant check if we're coming from outside the loop
         if ((LoopUtil.getLoopBody(loopHeader, ir).contains(p.lastBlk) || LoopUtil.isDoWhileLoop(loopHeader, ir)) &&
             invariantImpliesPath(p))
@@ -462,13 +462,14 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
       case 1 =>
         assert (!instrPaths.head.blk.iteratePhis().hasNext(), s"block ${instrPaths.head.blk} has unexpected phis! $ir")
         val pred = preds.head
-        if (DEBUG) println("single pred BB" + pred.getNumber())
+        if (DEBUG) println(s"single pred BB${pred.getNumber()}")
         instrPaths.foreach(p => p.setBlk(pred))
         filterFailPaths(instrPaths, passPaths, failPaths, test)
       case n =>
-        if (DEBUG) { print(" > 1 pred "); preds.foreach(p => print(" BB" + p.getNumber())); println }
+        if (DEBUG) { print(" > 1 pred "); preds.foreach(p => print(s" BB${p.getNumber()}")); println }
         val p = instrPaths.head
         val blk = p.blk
+        println("blk " + blk + " startBlk " + startBlk)
         val phis = p.blk.iteratePhis().toIterable
 
         // push all paths up to the join
@@ -486,7 +487,6 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
         else {
           val domInfo = getDominators(prunedCFG)
           val loopHeader = None//LoopUtil.findRelatedLoopHeader(startBlk, ir)
-          //if (DEBUG && loopHeader.isDefined) println("At loop head BB" + startBlk.getNumber())
           val forkMap = getForkMap(blk, predList, instrPaths, phis, domInfo, ir, loopHeader)
           if (!forkMap.isEmpty) {
             if (DEBUG) checkPathMap(forkMap)
@@ -503,11 +503,14 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
       m(k).foreach(p => assert(p.blk == k, "Path " + p.id + " should have blk " + k + ", but it has " + p.blk))
   
   def getForkMap(blk : ISSABasicBlock, preds : Iterable[ISSABasicBlock], instrPaths : List[Path], 
-      phis : Iterable[SSAPhiInstruction], domInfo : Dominators[ISSABasicBlock], ir : IR, loopHeader : Option[ISSABasicBlock]) : Map[ISSABasicBlock,List[Path]] =
+      phis : Iterable[SSAPhiInstruction], domInfo : Dominators[ISSABasicBlock], ir : IR,
+      loopHeader : Option[ISSABasicBlock]) : Map[ISSABasicBlock,List[Path]] =
     // experimental: if goal is a switch, pre-constrain the paths. we could consider using this with if's as well
     if (PRE_CONSTRAIN_SWITCHES) {
       val domGraph = domInfo.getGraph()
-      if (!domGraph.containsNode(blk)) Map.empty // refuted. this happens when eliminating exceptional control flow makes a node unreachable.      
+      if (!domGraph.containsNode(blk))
+        // refuted. this happens when eliminating exceptional control flow makes a node unreachable.
+        Map.empty
       else {
         val goalBlk = domInfo.getIdom(blk)
         if (CFGUtil.endsWithSwitchInstr(goalBlk) && instrPaths.forall(p => p.switchConstraintsAdded.add(goalBlk))) {
@@ -522,12 +525,11 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
                 if (blk == goalBlk || domInfo.isDominatedBy(blk, defaultBlk))
                   switchMap.values.flatten.forall(cond => p.addConstraintFromSwitch(cond, tf, negated = true))
                 else {
-                  if (DEBUG) sys.error("Couldn't find constraining instr for " + blk + " default is " + defaultBlk + " switch blk is " + goalBlk + " ir " + ir)
+                  if (DEBUG) sys.error(s"Couldn't find constraining instr for $blk default is $defaultBlk switch blk is $goalBlk ir $ir")
                   true
                 }
               case keys =>
                 tf.constrainBasedOnSwitchCases(keys.flatMap(k => switchMap(k)), p.qry, p.node) // normal switch case
-                //p.constrainBasedOnSwitchCases(keys.flatMap(k => switchMap(k)), tf) // normal switch case
             }
           }
           
@@ -581,70 +583,69 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
     val domGraph = domInfo.getGraph()
     val filteredWorklist = worklist.filter(node => domGraph.containsNode(node))
     val goal = domInfo.getIdom(node)
-    
-    val merged = Util.makeSet[ISSABasicBlock]
-    // we assume the nodes in worklist are unique
-    // and that they are ordered from in descending order by number (or accordingly, depth in the CFG)
-    // our objective is to push each node in preds up to goal, the immediate dominator of node 
-    // while performing as many joins as possible
+
+    // we assume the nodes in worklist are unique and that they are arranged in descending order by number (or
+    // accordingly, depth in the CFG) our objective is to push each node in preds up to goal, the immediate dominator of
+    // node while performing as many joins as possible
     @annotation.tailrec
-    def getJoinsRec(worklist : List[ISSABasicBlock], pathMap : Map[ISSABasicBlock,List[Path]]) : Map[ISSABasicBlock,List[Path]] = worklist match {
+    def getJoinsRec(worklist : List[ISSABasicBlock],
+                    pathMap : Map[ISSABasicBlock,List[Path]]) : Map[ISSABasicBlock,List[Path]] = worklist match {
       case node :: worklist =>
-        assert(node != goal, " node is goal " + node)
+        assert(node != goal, s"node is goal $node")
         val join = if (domGraph.containsNode(node)) domInfo.getIdom(node) else null
 
         if (join == null) {   
           // this can happen when we are trying to go backward from a catch block. we ignore this path
           // because we assume thrown exceptions are never caught. this is, of course, unsound, but
           // for now we seek only to be sound modulo exceptions
-          if (DEBUG) println("skipping path from " + node + " to " + goal + " because we don't follow exceptional edges")
+          if (DEBUG) println(s"skipping path from $node to $goal because we don't follow exceptional edges")
           getJoinsRec(worklist, pathMap)          
         } else {
-          // one each call to getJoinsRec, we should push the path at pathMap(node) through all blocks up to (but not including) join
-          //if (DEBUG) println("node is " + node + " join is " + join)
+          // one each call to getJoinsRec, we should push the path at pathMap(node) through all blocks up to (but not
+          // including) join
           assert (join != node)
           if (DEBUG) checkPathMap(pathMap, node)
           val (paths, newWorklist) = 
-            if (join == goal) (executeUntilJoin(pathMap(node), join, initCallStackSize, cfg, pathMap.getOrElse(join, List.empty[Path])), worklist)
+            if (join == goal)
+              (executeUntilJoin(pathMap(node), join, initCallStackSize, cfg, pathMap.getOrElse(join, Nil)), worklist)
             else worklist match { // try to match with join of next node
               case nextNode :: worklist =>
                 if (join == nextNode) {  
                   // need to execute paths at node up to join, then merge them with paths already at join
                   val paths = executeUntilJoin(pathMap(node), join, initCallStackSize, cfg, pathMap(join))
-                  assert(merged.add(join), " second merge of " + join) // debug only
                   (mergeAtJoin(paths, join, cfg), join :: worklist)
                 } else if (domInfo.isDominatedBy(nextNode, join)) {
                   if (DEBUG) checkPathMap(pathMap, nextNode)
                   // TODO: problem: what if there's more than one nextNode? we'll merge too aggressively
                   // we can execute until we reach join on the paths at both node and nextNode
                   val combinedPaths = pathMap(node).foldLeft (pathMap(nextNode)) ((lst, p) => p :: lst)
-                  val paths = executeUntilJoin(combinedPaths, join, initCallStackSize, cfg, pathMap.getOrElse(join, List.empty[Path]))
-                  // if the nextNode is the *last* item in the worklist with the same join as the current node, we can merge the two
-                  // otherwise, we'll delay the join until later
+                  val paths =
+                    executeUntilJoin(combinedPaths, join, initCallStackSize, cfg, pathMap.getOrElse(join, Nil))
+                  // if the nextNode is the *last* item in the worklist with the same join as the current node, we can
+                  // merge the two otherwise, we'll delay the join until later
                   if (worklist.forall(node => !domInfo.isDominatedBy(node, join))) {
-                    assert(merged.add(join), " second merge of " + join) // debug only
                     (mergeAtJoin(paths, join, cfg), join :: worklist)     
                   } else (paths, worklist)
                 } else 
-                  (executeUntilJoin(pathMap(node), join, initCallStackSize, cfg, pathMap.getOrElse(join, List.empty[Path])), join :: nextNode :: worklist) 
+                  (executeUntilJoin(pathMap(node), join, initCallStackSize, cfg, pathMap.getOrElse(join, Nil)),
+                   join :: nextNode :: worklist)
               case Nil => 
-                (executeUntilJoin(pathMap(node), join, initCallStackSize, cfg, pathMap.getOrElse(join, List.empty[Path])), List(join))
+                (executeUntilJoin(pathMap(node), join, initCallStackSize, cfg, pathMap.getOrElse(join, Nil)),
+                 List(join))
           }   
           // remove paths now at join from paths at node
           val nodePaths = pathMap(node).filter(p => paths.forall(p2 => p.id != p2.id))
-          //getJoinsRec(newWorklist, pathMap + (join -> paths)) 
           getJoinsRec(newWorklist, pathMap + (join -> paths, node -> nodePaths)) 
         }
       case Nil => pathMap
     }     
-    val curJoinCount = {joinCount += 1; joinCount} // debug only
+    val curJoinCount = if (DEBUG) { joinCount += 1; joinCount } else 0 // debug only
     if (DEBUG) { 
-      println(curJoinCount + " executing all paths to join BB" + goal.getNumber() + " from node BB" + node.getNumber() +
-              " initCallStackSize " + initCallStackSize)
+      println(s"$curJoinCount executing all paths to join BB${goal.getNumber()} from node BB${node.getNumber()} initCallStackSize $initCallStackSize")
     }    
     
-    val nowAtGoal = getJoinsRec(filteredWorklist.filterNot(b => b == goal), pathMap).getOrElse(goal, List.empty[Path]) 
-    if (DEBUG) println(curJoinCount + "$ completed join at " + goal + " have " + nowAtGoal.size + " paths before merging")
+    val nowAtGoal = getJoinsRec(filteredWorklist.filterNot(b => b == goal), pathMap).getOrElse(goal, Nil)
+    if (DEBUG) println(s"$curJoinCount completed join at $goal have ${nowAtGoal.size} paths before merging")
     mergeAtJoin(nowAtGoal, goal, cfg)
   } 
   
