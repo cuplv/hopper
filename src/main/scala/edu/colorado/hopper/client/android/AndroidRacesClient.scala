@@ -12,6 +12,7 @@ import edu.colorado.droidel.driver.AbsurdityIdentifier
 import edu.colorado.hopper.client.NullDereferenceTransferFunctions
 import edu.colorado.hopper.executor.DefaultSymbolicExecutor
 import edu.colorado.hopper.piecewise.{RelevanceRelation, AndroidRelevanceRelation, DefaultPiecewiseSymbolicExecutor, PiecewiseTransferFunctions}
+import edu.colorado.hopper.solver.Z3Solver
 import edu.colorado.hopper.state._
 import edu.colorado.hopper.util.PtUtil
 import edu.colorado.thresher.core.Options
@@ -149,6 +150,8 @@ class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelCli
     }
     else new DefaultSymbolicExecutor(tf)
 
+  val solver = new Z3Solver
+
   /* @return true if @param i can perform a null dereference */
   def canDerefFail(i : SSAInstruction, n : CGNode, hm : HeapModel, count : Int) = {
     val ir = n.getIR()
@@ -168,7 +171,7 @@ class AndroidRacesClient(appPath : String, androidLib : File) extends DroidelCli
       val lpk = Var.makeLPK(possiblyNullUse, n, hm)
       val nullPure = Pure.makePureVar(lpk)
       val locEdge = PtEdge.make(lpk, nullPure)
-      val qry = Qry.make(List(locEdge), i, n, hm, startBeforeI = true)
+      val qry = Qry.make(List(locEdge), i, n, hm, solver, startBeforeI = true)
       qry.addPureConstraint(Pure.makeEqNullConstraint(nullPure))
       // invoke Thresher and check it
       val foundWitness =

@@ -5,7 +5,8 @@ import com.ibm.wala.classLoader.IField
 import com.ibm.wala.ipa.callgraph.propagation._
 import com.ibm.wala.ipa.callgraph.{CGNode, ContextKey}
 import com.ibm.wala.ssa.{ISSABasicBlock, SSAInstruction}
-import edu.colorado.hopper.solver.{Solver, UnknownSMTResult, Z3Solver}
+import com.microsoft.z3.AST
+import edu.colorado.hopper.solver.{ModelSolver, Solver, UnknownSMTResult, Z3Solver}
 import edu.colorado.hopper.state.Qry._
 import edu.colorado.walautil.{CFGUtil, Util, IRUtil}
 import edu.colorado.walautil.Types.MSet
@@ -32,29 +33,36 @@ object Qry {
   def constraintsToString(s : MSet[_], sep : String) : String = Util.toCSVStr(s, sep) 
   
   /** start execution at the beginning of @param n */
+  def make(startEdges : Iterable[PtEdge], i : SSAInstruction, n : CGNode,  hm : HeapModel,
+           startBeforeI : Boolean = false) : Qry =
+    make(startEdges, i, n, hm, new Z3Solver, startBeforeI)
+
   def make(startEdges : Iterable[PtEdge], n : CGNode,  hm : HeapModel) : Qry = {
     val (localConstraints, heapConstraints) = makeLocalAndHeapConstraints(startEdges, n, hm)
     val callStack = makeCallStack(n, localConstraints, n.getIR().getControlFlowGraph().entry(), -1)
     new Qry(heapConstraints, Util.makeSet[PureConstraint], callStack, new Z3Solver)
   }
   
-  /** @param startBeforeI - if false, @param i will be the first instruction processed; otherwise, @param i will not be processed */
-  def make(startEdges : Iterable[PtEdge], i : SSAInstruction, n : CGNode, hm : HeapModel, startBeforeI : Boolean = false) : Qry = {
+  /** @param startBeforeI - if false, @param i will be the first instruction processed; otherwise, @param i will not be
+    * processed */
+  def make(startEdges : Iterable[PtEdge], i : SSAInstruction, n : CGNode, hm : HeapModel, solver : ModelSolver[AST],
+           startBeforeI : Boolean) : Qry = {
     val (startBlk, startLine) = getStartLoc(i, n)
     val (localConstraints, heapConstraints) = makeLocalAndHeapConstraints(startEdges, n, hm)
-    if (DEBUG) localConstraints.foldLeft (Set.empty[StackVar]) ((s, e) => { assert(!s.contains(e.src), e.src + " appears as LHS more than once in " + localConstraints); s + e.src })
+    if (DEBUG)
+      localConstraints.foldLeft (Set.empty[StackVar]) ((s, e) =>
+        { assert(!s.contains(e.src), s"${e.src} appears as LHS more than once in $localConstraints"); s + e.src })
     val callStack = makeCallStack(n, localConstraints, startBlk, if (startBeforeI) startLine - 1 else startLine)
-    // TODO: add options to use solvers other than Z3
-    new Qry(heapConstraints, Util.makeSet[PureConstraint], callStack, new Z3Solver)
+    new Qry(heapConstraints, Util.makeSet[PureConstraint], callStack, solver)
   } 
   
-  private def makeCallStack(n : CGNode, localConstraints : MSet[LocalPtEdge], startBlk : ISSABasicBlock, startLine : Int) : CallStack = {
+  private def makeCallStack(n : CGNode, localConstraints : MSet[LocalPtEdge], startBlk : ISSABasicBlock,
+                            startLine : Int) : CallStack = {
     val frame = new CallStackFrame(n, localConstraints, startBlk, startLine)
     val callStack = new CallStack
     callStack.push(frame)
     callStack
   }
-
 
   // TODO: add support for converting other kinds of contextual constraints
   /** convert contextual constraints from @param n into LocalPtEdge's that Thresher understands */
