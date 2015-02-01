@@ -23,7 +23,7 @@ object UnstructuredSymbolicExecutor {
   protected[executor] def DEBUG = Options.SCALA_DEBUG
   protected[executor] def MIN_DEBUG = DEBUG
   private[executor] val TRACE = false
-  private[executor] val PRINT_IR = true
+  private[executor] val PRINT_IR = false
   // save invariant maps that lead to refutations
   private val SAVE_INVARIANT_MAPS = false
 
