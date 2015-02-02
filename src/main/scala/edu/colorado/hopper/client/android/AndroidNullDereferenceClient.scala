@@ -67,8 +67,10 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File) extends 
     override def dropCallConstraints(qry : Qry, callee : CGNode,
                                      modRef : java.util.Map[CGNode,com.ibm.wala.util.intset.OrdinalSet[PointerKey]],
                                      loopDrop : Boolean) : Unit =
+    if (Options.PIECEWISE_EXECUTION)
       PiecewiseTransferFunctions.dropCallConstraints(qry, callee, rr, cg,
                                                      getReachable = AndroidRelevanceRelation.getReachableInAndroidCG)
+    else super.dropCallConstraints(qry, callee, modRef, loopDrop)
 
     override def executeCond(cond : SSAConditionalBranchInstruction, qry : Qry, n : CGNode,
                              isThenBranch : Boolean) : Boolean =
