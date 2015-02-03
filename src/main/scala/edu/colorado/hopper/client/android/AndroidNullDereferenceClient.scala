@@ -87,7 +87,7 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File) extends 
     if (i.hasDef) {
       val retval = hm.getPointerKeyForLocal(caller, i.getDef)
       paths.filter(p => !p.qry.localConstraints.exists(e => e match {
-        case LocalPtEdge(LocalVar(src), pure@PureVar(_)) if retval == src && p.qry.isNull(pure) =>
+        case LocalPtEdge(LocalVar(src), pure@PureVar(t)) if retval == src && t.isReferenceType && p.qry.isNull(pure) =>
           println("Null constraint on retval of missing method, unsoundly refuting")
           true
         case e@LocalPtEdge(LocalVar(src), _) if retval == src =>
