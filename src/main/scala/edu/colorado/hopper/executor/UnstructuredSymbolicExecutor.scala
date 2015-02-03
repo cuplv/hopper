@@ -100,7 +100,14 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
   def executeBackwardUntilWitnessFound(passPaths : List[Path], test : Path => Boolean = Util.RET_TRUE, 
       failPaths : List[Path] = List.empty[Path]) : List[Path] = 
     executeBackwardWhile(passPaths, (p => if (p.foundWitness) throw WitnessFoundException else test(p)), failPaths)
-  
+
+  def handleEmptyCallees(paths : List[Path], i : SSAInvokeInstruction, caller : CGNode) : List[Path] = {
+    if (DEBUG) println("Dropping retval constraint because we have no targets")
+    // callee is a native method or cannot be resolved for some reason. drop any retval constraints we have
+    paths.foreach(p => p.dropReturnValueConstraints(i, caller, tf))
+    paths
+  }
+
   // return (list of paths that entered callee, list of paths that have chosen to skip callee)
   def enterCallee(paths : List[Path], i : SSAInvokeInstruction) : (List[Path], List[Path]) = {
     if (TRACE) logMethodAndTime("enterCallee")
@@ -112,10 +119,8 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
         if (callees.isEmpty()) {
           // check for null dispatch
           val okPaths = paths.filter(p => tf.isDispatchFeasible(i, caller, p.qry))
-          if (DEBUG) println("Dropping retval constraint because we have no targets")
-          // callee is a native method or cannot be resolved for some reason. drop any retval constraints we have
-          okPaths.foreach(p => p.dropReturnValueConstraints(i, caller, tf))
-          (List.empty[Path], okPaths)
+          val retPaths = handleEmptyCallees(okPaths, i, caller)
+          (List.empty[Path], retPaths)
         } else paths.foldLeft (List.empty[Path], List.empty[Path]) ((pair, p) =>
           callees.foldLeft (pair) ((pair, callee) => {
             val calleePath = p.deepCopy

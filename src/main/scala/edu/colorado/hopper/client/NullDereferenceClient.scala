@@ -272,7 +272,12 @@ class NullDereferenceTransferFunctions(walaRes : WalaAnalysisResults,
           "Landroid/view/ContextThemeWrapper.getResources()Landroid/content/res/Resources;",
           "Landroid/view/View.findViewById(I)Landroid/view/View;",
           "Landroid/view/Window.findViewById(I)Landroid/view/View;",
-          "Landroid/widget/TextView.getText()Ljava/lang/CharSequence;"
+          "Landroid/widget/TextView.getText()Ljava/lang/CharSequence;",
+          // TODO: get rid of these eventually. calling getActivity() in the wrong place in a Fragment is sometimes a
+          // source of bugs, but more commonly a source of false alarm. it takes a deep understanding of the lifecycle
+          // to tell the difference. pragmatically ignoring for now
+          "Landroid/support/v4/app/Fragment.getActivity()Landroid/support/v4/app/FragmentActivity;",
+          "Landroid/app/Fragment.getActivity()Landroid/app/Activity;"
       )
 
     val defaultAnnots = javaAnnots ++ androidAnnots

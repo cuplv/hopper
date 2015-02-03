@@ -79,6 +79,25 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File) extends 
       else true
   }
 
+  // in the case that we can't resolve a callee and we have a null constraint on the return value of the callee, refute
+  // the query. this is unsound, but pragmatic: we don't want to waste time triaging unavoidable alarms due to missing
+  // code
+  private def handleEmptyCalleesImpl(paths : List[Path], i : SSAInvokeInstruction, caller : CGNode,
+                                     hm : HeapModel) : List[Path] =
+    if (i.hasDef) {
+      val retval = hm.getPointerKeyForLocal(caller, i.getDef)
+      paths.filter(p => !p.qry.localConstraints.exists(e => e match {
+        case LocalPtEdge(LocalVar(src), pure@PureVar(_)) if retval == src && p.qry.isNull(pure) =>
+          println("Null constraint on retval of missing method, unsoundly refuting")
+          true
+        case e@LocalPtEdge(LocalVar(src), _) if retval == src =>
+          if (DEBUG) println("No targets, dropping retval constraints")
+          p.qry.removeLocalConstraint(e) // drop retval constraint
+          false
+        case _ => false
+      }))
+    } else paths
+
   val exec =
     if (Options.PIECEWISE_EXECUTION) new DefaultPiecewiseSymbolicExecutor(tf, rr) {
 
@@ -149,8 +168,13 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File) extends 
       override def shouldJump(p : Path) : Option[(Path, Qry => Boolean, Unit => Any)] =
         Some((p.deepCopy, ((q : Qry) => true), Util.NOP))
 
+      override def handleEmptyCallees(paths : List[Path], i : SSAInvokeInstruction, caller : CGNode) : List[Path] =
+        handleEmptyCalleesImpl(paths, i, caller, tf.hm)
+
+    } else new DefaultSymbolicExecutor(tf) {
+      override def handleEmptyCallees(paths : List[Path], i : SSAInvokeInstruction, caller : CGNode) : List[Path] =
+        handleEmptyCalleesImpl(paths, i, caller, tf.hm)
     }
-    else new DefaultSymbolicExecutor(tf)
 
   val solver = new Z3Solver
 
