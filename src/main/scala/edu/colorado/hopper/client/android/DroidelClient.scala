@@ -3,18 +3,28 @@ package edu.colorado.hopper.client.android
 import java.io.File
 
 import edu.colorado.droidel.driver.{AndroidAppTransformer, AndroidCGBuilder}
+import edu.colorado.droidel.preprocessor.ApkDecoder
 import edu.colorado.thresher.core.Options
 
-/** Base client for apps that have been preprocessed with Droidel */
-abstract class DroidelClient(appPath : String,  androidLib : File) { //extends Client(appPath, None,
-  //"generatedharness/GeneratedAndroidHarness", "androidMain", false) {
+/** Base client for apps to be preocessed with Droidel */
+abstract class DroidelClient(appPath : String,  androidLib : File) {
 
-  val appTransformer = new AndroidAppTransformer(appPath, androidLib, droidelHome = Options.DROIDEL_HOME)
-  // run Droidel on the app if it hasn't already been transformed
-  if (!appTransformer.isAppDroidelProcessed()) {
-    println("Processing app with Droidel")
-    appTransformer.transformApp()
-  } else println("App has already been Droidel-processed")
+  val appTransformer = {
+    val appFile = new File(appPath)
+    val droidelInput =
+      if (appFile.isFile())
+        // decode the app resources and decompile the dex bytecodes to Java bytecodes
+        new ApkDecoder(appPath, droidelHome = Options.DROIDEL_HOME).decodeApp.getAbsolutePath()
+      else appPath
+
+    val appTransformer = new AndroidAppTransformer(droidelInput, androidLib, droidelHome = Options.DROIDEL_HOME)
+    // run Droidel on the app if it hasn't already been transformed
+    if (!appTransformer.isAppDroidelProcessed()) {
+      println("Processing app with Droidel")
+      appTransformer.transformApp()
+    } else println("App has already been Droidel-processed")
+    appTransformer
+  }
 
   lazy val walaRes = {
     val analysisScope = appTransformer.makeAnalysisScope(useHarness = true)
