@@ -23,7 +23,7 @@ import scala.collection.JavaConversions._
 import scala.xml.XML
 
 class AndroidNullDereferenceClient(appPath : String, androidLib : File) extends DroidelClient(appPath, androidLib) {
-  val DEBUG = false
+  val DEBUG = Options.SCALA_DEBUG
   val rr =
     if (Options.PIECEWISE_EXECUTION)
       if (Options.CONTROL_FEASIBILITY) new AndroidRelevanceRelation(walaRes.cg, walaRes.hg, walaRes.hm, walaRes.cha)

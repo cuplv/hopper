@@ -200,7 +200,7 @@ class NullDereferenceTransferFunctions(walaRes : WalaAnalysisResults,
 
   override def execute(s : SSAInstruction, qry : Qry, n : CGNode) : List[Qry] = s match {
     case i: SSAGetInstruction if !i.isStatic && ClassUtil.isInnerClassThis(i.getDeclaredField) =>
-      PtUtil.getConstraintEdge(Var.makeLPK(i.getDef, n, hm), qry.localConstraints) match {
+      getConstraintEdgeForDef(i, qry.localConstraints, n) match {
         case Some(LocalPtEdge(_, p@PureVar(_))) if qry.isNull(p) =>
           // have x == null and x = y.this$0 (or similar). reading from this$0 will never return null without bytecode
           // editor magic (or order of initialization silliness)--refute
@@ -239,6 +239,17 @@ class NullDereferenceTransferFunctions(walaRes : WalaAnalysisResults,
             }
           )
       }
+    case i : SSAGetInstruction => // i is static
+      if (ClassUtil.isEnum(i.getDeclaredField.getDeclaringClass, cha))
+        getConstraintEdgeForDef(i, qry.localConstraints, n) match {
+          case Some(LocalPtEdge(_, p@PureVar(_))) if qry.isNull(p) =>
+            // we are reading a static field from an Enum class; it is a member of the declared Enum and guaranteed not
+            // to be null based on the way that the Java compiler generates code for enums. refute
+            if (Options.PRINT_REFS) println("Refuted by enum not null!")
+            Nil
+          case None => super.execute(s, qry, n)
+        }
+      else super.execute(s, qry, n)
     case i : SSAInvokeInstruction if !i.isStatic() => // x = y.m(...)
       sys.error("This case should be handled in SymbolicExcutor.executeInstr")
     case _ => super.execute(s, qry, n)
