@@ -5,6 +5,7 @@ import java.io.File
 import edu.colorado.droidel.driver.{AndroidAppTransformer, AndroidCGBuilder}
 import edu.colorado.droidel.preprocessor.ApkDecoder
 import edu.colorado.thresher.core.Options
+import edu.colorado.walautil.Timer
 
 /** Base client for apps to be preocessed with Droidel */
 abstract class DroidelClient(appPath : String,  androidLib : File) {
@@ -28,8 +29,14 @@ abstract class DroidelClient(appPath : String,  androidLib : File) {
 
   lazy val walaRes = {
     val analysisScope = appTransformer.makeAnalysisScope(useHarness = true)
-    new AndroidCGBuilder(analysisScope, appTransformer.harnessClassName, appTransformer.harnessMethodName)
-    .makeAndroidCallGraph
+    val timer = new Timer
+    timer.start()
+    println("Building call graph")
+    val res =
+      new AndroidCGBuilder(analysisScope, appTransformer.harnessClassName, appTransformer.harnessMethodName)
+      .makeAndroidCallGraph
+    timer.printTimeTaken("Building call graph")
+    res
   }
 
 }
