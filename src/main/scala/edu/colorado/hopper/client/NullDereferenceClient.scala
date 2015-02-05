@@ -247,7 +247,7 @@ class NullDereferenceTransferFunctions(walaRes : WalaAnalysisResults,
             // to be null based on the way that the Java compiler generates code for enums. refute
             if (Options.PRINT_REFS) println("Refuted by enum not null!")
             Nil
-          case None => super.execute(s, qry, n)
+          case _ => super.execute(s, qry, n)
         }
       else super.execute(s, qry, n)
     case i : SSAInvokeInstruction if !i.isStatic() => // x = y.m(...)

@@ -244,14 +244,14 @@ class Qry(val heapConstraints : MSet[HeapPtEdge], val pureConstraints : MSet[Pur
   def isDefinitelyFalse(p : PureVar) : Boolean = isDefinitelyBool(p, false)
 
   /** @return true if @param p is definitely null, false otherwise */
-  def isNull(p : PureVar) : Boolean = {
-    require(p.isReferenceType, "Expected reference type for PureVar p")
-    // p is null if the solver says UNSAT to a neq null constraint
-    try {
-      !checkTmpPureConstraint(Pure.makeNeNullConstraint(p))
-    } catch {
-      case e : UnknownSMTResult => false
-    }
+  def isNull(p : PureVar) : Boolean =
+    !p.isReferenceType || {
+      // p is null if the solver says UNSAT to a neq null constraint
+      try {
+        !checkTmpPureConstraint(Pure.makeNeNullConstraint(p))
+      } catch {
+        case e : UnknownSMTResult => false
+      }
   }
     
   def addPureConstraint(p : PureConstraint) : Boolean = {
