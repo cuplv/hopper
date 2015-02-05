@@ -58,8 +58,8 @@ public class Options {
   @boolOpt(description = "Check for Android Activity leaks", _default = false)
   public static boolean CHECK_ANDROID_LEAKS = false;
 
-  @boolOpt(description = "Check for bugs related to concurrency in Android", _default = false)
-  public static boolean CHECK_ANDROID_RACES = false;
+  @boolOpt(description = "Check for null dereferences in Android apps", _default = false)
+  public static boolean CHECK_ANDROID_DEREFS = false;
   
   @boolOpt(description = "Check user assrtions", _default = false)
   public static boolean CHECK_ASSERTS = false;

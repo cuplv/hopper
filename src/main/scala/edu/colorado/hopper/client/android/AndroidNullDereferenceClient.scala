@@ -226,7 +226,7 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File) extends 
   def isEntrypointCallback(n : CGNode) : Boolean =
     !ClassUtil.isLibrary(n) && walaRes.cg.getPredNodes(n).exists(n => ClassUtil.isLibrary(n))
 
-  def checkForRacingDerefs() = {
+  def checkNullDerefs() = {
     import walaRes._
     /*val id = new AbsurdityIdentifier("")
     val absurdities = id.getAbsurdities(walaRes, reportLibraryAbsurdities = false)

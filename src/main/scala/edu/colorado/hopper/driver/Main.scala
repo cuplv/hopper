@@ -65,9 +65,9 @@ object Main {
     else if (Options.CHECK_NULLS)
       new NullDereferenceClient(Options.APP, Util.strToOption(Options.LIB), Options.MAIN_CLASS, Options.MAIN_METHOD)
       .checkNullDerefs
-    else if (Options.CHECK_ANDROID_RACES)
+    else if (Options.CHECK_ANDROID_DEREFS)
       new AndroidNullDereferenceClient(Options.APP, new File(Options.ANDROID_JAR))
-      .checkForRacingDerefs()
+      .checkNullDerefs()
     else if (Options.CHECK_ANDROID_UI) {
       new AndroidUIClient(Options.APP, new File(Options.ANDROID_JAR))
       .doUICheck

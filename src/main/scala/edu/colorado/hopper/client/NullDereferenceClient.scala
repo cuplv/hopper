@@ -17,6 +17,8 @@ import scala.collection.JavaConversions._
 import scala.io.Source
 import scala.xml.XML
 
+/* specialized null dereference client that only checks for null derefs on fields/locals assigned to null literals at
+ * some point during program execution */
 class NullDereferenceClient(appPath : String, libPath : Option[String], mainClass : String, mainMethod : String, 
     isRegression : Boolean = false) extends Client(appPath, libPath, mainClass, mainMethod, isRegression) {
 
@@ -188,10 +190,6 @@ class NullDereferenceClient(appPath : String, libPath : Option[String], mainClas
     println(s"Checked $total null derefs, proved $proven safe.")    
     (proven, total)
   }
-}
-
-object NullDereferenceTransferFunctions {
-  private val DEBUG = false
 }
 
 class NullDereferenceTransferFunctions(walaRes : WalaAnalysisResults,
