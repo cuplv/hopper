@@ -487,7 +487,6 @@ class Qry(val heapConstraints : MSet[HeapPtEdge], val pureConstraints : MSet[Pur
             case _ => s
           })
         })
-      lpkFields.foreach(println)
       // the query contains a field that may point at the object(s) the local pointer key points at
       lpkFields.intersect(qryFields).nonEmpty
     }
