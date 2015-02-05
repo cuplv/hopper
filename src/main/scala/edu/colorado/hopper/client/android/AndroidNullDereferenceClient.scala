@@ -40,9 +40,15 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File) extends 
         val lpk = Var.makeLPK(use, n, hm)
         qry.localConstraints.exists(e => e.src.key == lpk) || {
           val queryInstanceKeys = qry.getAllObjVars.flatMap(o => o.rgn)
-          !queryInstanceKeys.intersect(PtUtil.getPt(lpk, hg)).isEmpty || qry.localMayPointIntoQuery(lpk, n, hm, hg)
+          queryInstanceKeys.intersect(PtUtil.getPt(lpk, hg)).nonEmpty || qry.localMayPointIntoQuery(lpk, n, hm, hg)
         }
       }
+    }
+
+    // TODO: always add null constraints? add if we have >= 1 field in our query?
+    def isNullConstraint(cond : SSAConditionalBranchInstruction, n : CGNode) : Boolean = {
+      val tbl = n.getIR.getSymbolTable
+      tbl.isNullConstant(cond.getUse(0)) || tbl.isNullConstant(cond.getUse(1))
     }
 
     /** @return true if we should add the conditional expression from @param cond as a constraint given that we want to

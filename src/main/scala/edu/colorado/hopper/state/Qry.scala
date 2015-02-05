@@ -477,18 +477,19 @@ class Qry(val heapConstraints : MSet[HeapPtEdge], val pureConstraints : MSet[Pur
   def localMayPointIntoQuery(local : LocalPointerKey, n : CGNode, hm : HeapModel,
                              hg : HeapGraph[InstanceKey]) : Boolean = {
     val qryFields = this.getAllFields()
-    !qryFields.isEmpty && {
+    qryFields.nonEmpty && {
       // get the fields that point at the object(s) the local pointer key points at
       val lpkFields =
-        hg.getSuccNodes(local).foldLeft(Set.empty[IField])((s, k) => {
+        hg.getSuccNodes(local).foldLeft (Set.empty[IField]) ((s, k) => {
           hg.getPredNodes(k).foldLeft(s)((s, k) => k match {
             case k: InstanceFieldKey => s + k.getField
             case k: StaticFieldKey => s + k.getField
             case _ => s
           })
         })
+      lpkFields.foreach(println)
       // the query contains a field that may point at the object(s) the local pointer key points at
-      !lpkFields.intersect(qryFields).isEmpty
+      lpkFields.intersect(qryFields).nonEmpty
     }
   }
   
