@@ -313,14 +313,14 @@ object AndroidNullDereferenceClientTests extends ClientTests {
 
     val regressionDir = "src/test/java/nulls/"
     val regressionBinDir = "target/scala-2.10/test-classes/nulls/"
-    val androidJar = new File(Options.ANDROID_JAR)
+    Options.DROIDEL_HOME = "lib/droidel"
+    val androidJar = new File(s"${Options.DROIDEL_HOME}/stubs/out/droidel_android-4.4.2_r1.jar")
     assert(androidJar.exists(), s"Android jar ${androidJar.getAbsolutePath} does not exist")
     var testNum = 0
 
     val executionTimer = new Timer
     Options.JUMPING_EXECUTION = true
     Options.CONTROL_FEASIBILITY = true
-    Options.DROIDEL_HOME = "lib/droidel"
 
     tests.foreach(test => if (Options.TEST == null || Options.TEST.isEmpty() || Options.TEST == test) {
       testNum += 1
