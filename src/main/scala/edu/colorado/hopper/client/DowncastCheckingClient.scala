@@ -258,16 +258,16 @@ object DowncastCheckingClientTests extends ClientTests {
         val mainClass = s"Lcasts/$test/Main"
         val path = regressionDir + test
         Options.INDEX_SENSITIVITY = test.contains("IndexSensitive")
-        if (!Options.PIECEWISE_EXECUTION && test.contains("Piecewise")) Options.PIECEWISE_EXECUTION = true
-        if (Options.PIECEWISE_EXECUTION) Options.PRIM_ARRAY_SENSITIVITY = true
+        if (!Options.JUMPING_EXECUTION && test.contains("Piecewise")) Options.JUMPING_EXECUTION = true
+        if (Options.JUMPING_EXECUTION) Options.PRIM_ARRAY_SENSITIVITY = true
         if (exceptionTests.contains(test)) Options.SOUND_EXCEPTIONS = true
         else Options.SOUND_EXCEPTIONS = false
         new DowncastCheckingClient(path, Util.strToOption(Options.LIB), mainClass, "main", isRegression = true).checkCasts
       } catch {
         case e : BudgetExceededException =>
-          println(s"Exceeded budget. Piecewise? ${Options.PIECEWISE_EXECUTION} $pwTimeoutOk")
+          println(s"Exceeded budget. Piecewise? ${Options.JUMPING_EXECUTION} $pwTimeoutOk")
           // for piecewise, a timeout is the expected result for some tests
-          if (Options.PIECEWISE_EXECUTION && !pwTimeoutOk.contains(test)) resultsMap(test)
+          if (Options.JUMPING_EXECUTION && !pwTimeoutOk.contains(test)) resultsMap(test)
           else {
             printTestFailureMsg(test, testNum)
             throw e

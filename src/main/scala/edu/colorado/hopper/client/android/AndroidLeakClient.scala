@@ -9,7 +9,7 @@ import com.ibm.wala.types.annotations.Annotation
 import com.ibm.wala.util.graph.Graph
 import com.ibm.wala.util.graph.traverse.DFS
 import edu.colorado.hopper.client.ClientTests
-import edu.colorado.hopper.piecewise.RelevanceRelation
+import edu.colorado.hopper.jumping.RelevanceRelation
 import edu.colorado.hopper.solver.Z3Solver
 import edu.colorado.hopper.state.{CallStack, Fld, HeapPtEdge, ObjVar, Path, PtEdge, PureConstraint, Qry}
 import edu.colorado.walautil.Types._
@@ -306,7 +306,7 @@ object AndroidLeakClientTests extends ClientTests {
           } catch {
             case e : BudgetExceededException =>
               // for piecewise, a timeout is the expected result for some tests
-              if (Options.PIECEWISE_EXECUTION && !pwTimeoutOk.contains(test)) true
+              if (Options.JUMPING_EXECUTION && !pwTimeoutOk.contains(test)) true
               else {
                 printTestFailureMsg(test, testNum)
                 throw e

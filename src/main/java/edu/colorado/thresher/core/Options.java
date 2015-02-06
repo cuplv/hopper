@@ -43,8 +43,8 @@ public class Options {
   @boolOpt(description = "Handle exceptions soundly", _default = false)
   public static boolean SOUND_EXCEPTIONS = false;
 
-  @boolOpt(description = "Use piecewise symbolic executor for jumping", _default = false)
-  public static boolean PIECEWISE_EXECUTION = false;
+  @boolOpt(description = "Use jumping symbolic executor", _default = false)
+  public static boolean JUMPING_EXECUTION = false;
 
   @boolOpt(description = "Backtrack after failed jumps", _default = false)
   public static boolean BACKTRACK_JUMPING = false;

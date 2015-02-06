@@ -11,7 +11,7 @@ import com.ibm.wala.util.graph.traverse.BFSIterator
 import edu.colorado.droidel.driver.AbsurdityIdentifier
 import edu.colorado.hopper.client.NullDereferenceTransferFunctions
 import edu.colorado.hopper.executor.DefaultSymbolicExecutor
-import edu.colorado.hopper.piecewise.{RelevanceRelation, AndroidRelevanceRelation, DefaultPiecewiseSymbolicExecutor, PiecewiseTransferFunctions}
+import edu.colorado.hopper.jumping.{ControlFeasibilityRelevanceRelation, RelevanceRelation, DefaultJumpingSymbolicExecutor, JumpingTransferFunctions}
 import edu.colorado.hopper.solver.Z3Solver
 import edu.colorado.hopper.state._
 import edu.colorado.hopper.util.PtUtil
@@ -25,8 +25,9 @@ import scala.xml.XML
 class AndroidNullDereferenceClient(appPath : String, androidLib : File) extends DroidelClient(appPath, androidLib) {
   val DEBUG = Options.SCALA_DEBUG
   val rr =
-    if (Options.PIECEWISE_EXECUTION)
-      if (Options.CONTROL_FEASIBILITY) new AndroidRelevanceRelation(walaRes.cg, walaRes.hg, walaRes.hm, walaRes.cha)
+    if (Options.JUMPING_EXECUTION)
+      if (Options.CONTROL_FEASIBILITY)
+        new ControlFeasibilityRelevanceRelation(walaRes.cg, walaRes.hg, walaRes.hm, walaRes.cha)
       else new RelevanceRelation(walaRes.cg, walaRes.hg, walaRes.hm, walaRes.cha)
     else null
 
@@ -64,18 +65,18 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File) extends 
     }
 
     override def isCallRelevant(i : SSAInvokeInstruction, caller : CGNode, callee : CGNode, qry : Qry) : Boolean =
-      if (Options.PIECEWISE_EXECUTION)
+      if (Options.JUMPING_EXECUTION)
         isRetvalRelevant(i, caller, qry) ||
-        PiecewiseTransferFunctions.doesCalleeModifyHeap(callee, qry, rr, cg,
-                                                        getReachable = AndroidRelevanceRelation.getReachableInAndroidCG)
+        JumpingTransferFunctions.doesCalleeModifyHeap(callee, qry, rr, cg,
+                                                        getReachable = ControlFeasibilityRelevanceRelation.getReachableInAndroidCG)
       else super.isCallRelevant(i, caller, callee, qry)
 
     override def dropCallConstraints(qry : Qry, callee : CGNode,
                                      modRef : java.util.Map[CGNode,com.ibm.wala.util.intset.OrdinalSet[PointerKey]],
                                      loopDrop : Boolean) : Unit =
-    if (Options.PIECEWISE_EXECUTION)
-      PiecewiseTransferFunctions.dropCallConstraints(qry, callee, rr, cg,
-                                                     getReachable = AndroidRelevanceRelation.getReachableInAndroidCG)
+    if (Options.JUMPING_EXECUTION)
+      JumpingTransferFunctions.dropCallConstraints(qry, callee, rr, cg,
+                                                     getReachable = ControlFeasibilityRelevanceRelation.getReachableInAndroidCG)
     else super.dropCallConstraints(qry, callee, modRef, loopDrop)
 
     override def executeCond(cond : SSAConditionalBranchInstruction, qry : Qry, n : CGNode,
@@ -105,7 +106,7 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File) extends 
     } else paths
 
   val exec =
-    if (Options.PIECEWISE_EXECUTION) new DefaultPiecewiseSymbolicExecutor(tf, rr) {
+    if (Options.JUMPING_EXECUTION) new DefaultJumpingSymbolicExecutor(tf, rr) {
 
       // TODO: do we want this?
       override val keepLoopConstraints = true

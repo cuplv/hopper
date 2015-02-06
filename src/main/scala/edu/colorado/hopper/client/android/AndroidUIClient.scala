@@ -6,7 +6,7 @@ import com.ibm.wala.classLoader.IClass
 import com.ibm.wala.ipa.callgraph.{CGNode, CallGraph}
 import edu.colorado.droidel.constants.DroidelConstants
 import edu.colorado.hopper.executor.TransferFunctions
-import edu.colorado.hopper.piecewise.{DefaultPiecewiseSymbolicExecutor, PiecewiseTransferFunctions, RelevanceRelation}
+import edu.colorado.hopper.jumping.{DefaultJumpingSymbolicExecutor, JumpingTransferFunctions, RelevanceRelation}
 import edu.colorado.hopper.state.{Path, Qry}
 import edu.colorado.walautil.{ClassUtil, Timer, Util, WalaAnalysisResults}
 
@@ -81,7 +81,7 @@ class AndroidUIClient(appPath : String, androidLib : File) extends DroidelClient
       timer.start
       val seenEntryNodes = Util.makeSet[CGNode]      
       val executor =
-        new DefaultPiecewiseSymbolicExecutor(makeTransferFunctions(walaRes), getOrCreateRelevanceRelation(walaRes)) {
+        new DefaultJumpingSymbolicExecutor(makeTransferFunctions(walaRes), getOrCreateRelevanceRelation(walaRes)) {
           // only go backward from entrypoints to methods called from the application scope
           // we don't want to follow library -> entrypoint edges backward because they usually correspond to imprecision in
           // the callgraph or to a callback we are already modeling manually in the harness
@@ -125,7 +125,7 @@ class AndroidUIClient(appPath : String, androidLib : File) extends DroidelClient
   def makeTransferFunctions(walaRes : WalaAnalysisResults) : TransferFunctions = {
     import walaRes._
     val rr = getOrCreateRelevanceRelation(walaRes)
-    new PiecewiseTransferFunctions(cg, hg, hm, cha, rr)
+    new JumpingTransferFunctions(cg, hg, hm, cha, rr)
   }
       
   def isAndroidRelated(clazz : IClass) : Boolean = {

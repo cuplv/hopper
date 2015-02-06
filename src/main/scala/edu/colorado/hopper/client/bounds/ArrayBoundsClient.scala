@@ -6,12 +6,11 @@ import com.ibm.wala.ipa.callgraph.CGNode
 import com.ibm.wala.ssa.{SSAArrayReferenceInstruction, SSANewInstruction}
 import com.ibm.wala.types.TypeReference
 import edu.colorado.hopper.client.{Client, ClientTests}
-import edu.colorado.hopper.piecewise.RelevanceRelation
+import edu.colorado.hopper.jumping.RelevanceRelation
 import edu.colorado.hopper.state.{Fld, IntVal, ObjVar, PtEdge, Pure, Qry, Var}
 import edu.colorado.hopper.util._
-import edu.colorado.walautil.{ClassUtil, CFGUtil, IRUtil, Timer, LoopUtil, Util}
-import edu.colorado.walautil.WalaAnalysisResults
 import edu.colorado.thresher.core.Options
+import edu.colorado.walautil.{CFGUtil, ClassUtil, IRUtil, LoopUtil, Timer, Util}
 
 import scala.collection.JavaConversions._
 import scala.io.Source
@@ -52,7 +51,8 @@ class ArrayBoundsClient(appPath : String, libPath : Option[String], mainClass : 
     val walaRes = makeCallGraphAndPointsToAnalysis
     val tf = new ArrayBoundsTransferFunctions(walaRes)
     val exec = 
-      if (Options.PIECEWISE_EXECUTION) new PiecewiseArrayBoundsSymbolicExecutor(tf, new RelevanceRelation(tf.cg, tf.hg, tf.hm, tf.cha))
+      if (Options.JUMPING_EXECUTION)
+        new JumpingArrayBoundsSymbolicExecutor(tf, new RelevanceRelation(tf.cg, tf.hg, tf.hm, tf.cha))
       else new DefaultArrayBoundsSymbolicExecutor(tf)
 
     import walaRes._
@@ -192,8 +192,8 @@ object ArrayBoundsClientTests extends ClientTests {
           val mainClass = s"Lbounds/$test/$test"
           val path = regressionDir + test
           Options.INDEX_SENSITIVITY = test.contains("IndexSensitive")
-          if (!Options.PIECEWISE_EXECUTION && test.contains("Piecewise")) Options.PIECEWISE_EXECUTION = true
-          if (Options.PIECEWISE_EXECUTION) Options.PRIM_ARRAY_SENSITIVITY = true
+          if (!Options.JUMPING_EXECUTION && test.contains("Piecewise")) Options.JUMPING_EXECUTION = true
+          if (Options.JUMPING_EXECUTION) Options.PRIM_ARRAY_SENSITIVITY = true
           new ArrayBoundsClient(path, Util.strToOption(Options.LIB), mainClass, "main", isRegression = true)
           .checkArrayBounds()
         } catch {      

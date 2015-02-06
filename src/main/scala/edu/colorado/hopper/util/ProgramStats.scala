@@ -6,7 +6,7 @@ import com.ibm.wala.ssa.{ISSABasicBlock, SSAInstruction, SSAInvokeInstruction}
 import com.ibm.wala.util.collections.CollectionFilter
 import com.ibm.wala.util.graph.Graph
 import com.ibm.wala.util.graph.traverse.{Topological, DFSAllPathsFinder, DFSPathFinder}
-import edu.colorado.hopper.piecewise.RelevanceRelation
+import edu.colorado.hopper.jumping.RelevanceRelation
 import edu.colorado.hopper.state.Path
 import edu.colorado.walautil.ClassUtil
 

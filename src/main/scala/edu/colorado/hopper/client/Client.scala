@@ -16,7 +16,7 @@ import com.ibm.wala.types.ClassLoaderReference
 import com.ibm.wala.util.config.FileOfClasses
 import edu.colorado.hopper.client.Client._
 import edu.colorado.hopper.executor.{DefaultSymbolicExecutor, SymbolicExecutor, TransferFunctions}
-import edu.colorado.hopper.piecewise.{DefaultPiecewiseSymbolicExecutor, RelevanceRelation}
+import edu.colorado.hopper.jumping.{DefaultPiecewiseSymbolicExecutor, RelevanceRelation}
 import edu.colorado.hopper.synthesis.{SynthesisSymbolicExecutor, SynthesisTransferFunctions}
 import edu.colorado.thresher.core._
 import edu.colorado.walautil.{ClassUtil, Timer, Util, WalaAnalysisResults}
@@ -214,7 +214,7 @@ abstract class Client(appPath : String, libPath : Option[String], mainClass : St
     new TransferFunctions(walaRes.cg, walaRes.hg, walaRes.hm, walaRes.cha)
 
   def makeSymbolicExecutor(walaRes : WalaAnalysisResults) : SymbolicExecutor =
-    if (Options.PIECEWISE_EXECUTION) {
+    if (Options.JUMPING_EXECUTION) {
       val tf = makeTransferFunctions(walaRes)
       new DefaultPiecewiseSymbolicExecutor(tf, new RelevanceRelation(tf.cg, tf.hg, tf.hm, tf.cha))
     } else if (Options.SYNTHESIS)

@@ -1,4 +1,4 @@
-package edu.colorado.hopper.piecewise
+package edu.colorado.hopper.jumping
 
 import com.ibm.wala.analysis.pointers.HeapGraph
 import com.ibm.wala.ipa.callgraph.propagation.{HeapModel, InstanceKey, PointerKey}
@@ -8,7 +8,7 @@ import com.ibm.wala.ssa.SSAInvokeInstruction
 import com.ibm.wala.util.graph.traverse.{BFSPathFinder, DFS}
 import edu.colorado.hopper.executor.TransferFunctions
 import edu.colorado.hopper.executor.TransferFunctions._
-import edu.colorado.hopper.piecewise.PiecewiseTransferFunctions._
+import edu.colorado.hopper.jumping.JumpingTransferFunctions._
 import edu.colorado.hopper.state.Qry
 import edu.colorado.thresher.core.Options
 import edu.colorado.walautil.{ClassUtil, GraphUtil}
@@ -16,7 +16,7 @@ import edu.colorado.walautil.{ClassUtil, GraphUtil}
 import scala.collection.JavaConversions._
 
 
-object PiecewiseTransferFunctions {
+object JumpingTransferFunctions {
   // if true, drop constraints when a callee is relevant, but is more than Options.MAX_CALLSTACK_DEPTH steps away in the
   // call graph. this dropping will allow us to soundly report that the callee is irrelevant
   private val AGGRESSIVE_CALLEE_CONSTRAINT_DROPPING = true
@@ -106,7 +106,7 @@ object PiecewiseTransferFunctions {
 }
 
 /** extension of ordinary Thresher transfer functions using the relevance relation to do some things more precisely/efficiently */
-class PiecewiseTransferFunctions(cg : CallGraph, hg : HeapGraph[InstanceKey], hm : HeapModel, cha : IClassHierarchy,
+class JumpingTransferFunctions(cg : CallGraph, hg : HeapGraph[InstanceKey], hm : HeapModel, cha : IClassHierarchy,
                                  val rr : RelevanceRelation) extends TransferFunctions(cg, hg, hm, cha) {
 
   override def isCallRelevant(i : SSAInvokeInstruction, caller : CGNode, callee : CGNode, qry : Qry) : Boolean =
@@ -115,6 +115,6 @@ class PiecewiseTransferFunctions(cg : CallGraph, hg : HeapGraph[InstanceKey], hm
   override def dropCallConstraints(qry : Qry, callee : CGNode,
                                    modRef : java.util.Map[CGNode,com.ibm.wala.util.intset.OrdinalSet[PointerKey]],
                                    loopDrop : Boolean) : Unit =
-    PiecewiseTransferFunctions.dropCallConstraints(qry, callee, rr, cg)
+    JumpingTransferFunctions.dropCallConstraints(qry, callee, rr, cg)
 
 }

@@ -4,11 +4,10 @@ import com.ibm.wala.ipa.cfg.ExceptionPrunedCFG
 import com.ibm.wala.ssa.{ISSABasicBlock, SSAPhiInstruction}
 import edu.colorado.hopper.client.bounds.ArrayBoundsSymbolicExecutor._
 import edu.colorado.hopper.executor.{TransferFunctions, UnstructuredSymbolicExecutor}
-import edu.colorado.hopper.piecewise.{PiecewiseSymbolicExecutor, RelevanceRelation}
+import edu.colorado.hopper.jumping.{JumpingSymbolicExecutor, RelevanceRelation}
 import edu.colorado.hopper.state.Path
 import edu.colorado.thresher.core.Options
 import edu.colorado.walautil.{CFGUtil, LoopUtil}
-import edu.colorado.walautil.Types.WalaBlock
 
 import scala.collection.JavaConversions._
 
@@ -17,10 +16,10 @@ object ArrayBoundsSymbolicExecutor {
   private val TRACE = false
 }
 
-class PiecewiseArrayBoundsSymbolicExecutor(override val tf : TransferFunctions,
-                                           override val rr : RelevanceRelation,
-                                           override val keepLoopConstraints : Boolean = true)
-  extends PiecewiseSymbolicExecutor with ArrayBoundsSymbolicExecutor
+class JumpingArrayBoundsSymbolicExecutor(override val tf : TransferFunctions,
+                                         override val rr : RelevanceRelation,
+                                         override val keepLoopConstraints : Boolean = true)
+  extends JumpingSymbolicExecutor with ArrayBoundsSymbolicExecutor
 
 class DefaultArrayBoundsSymbolicExecutor(override val tf : TransferFunctions,
                                          override val keepLoopConstraints : Boolean = true) extends ArrayBoundsSymbolicExecutor

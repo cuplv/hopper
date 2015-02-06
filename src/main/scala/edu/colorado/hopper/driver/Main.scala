@@ -29,18 +29,18 @@ object Main {
       
       val singleTest = Options.TEST
       def runTests(runPiecewise : Boolean = false) : Unit = clientTests.foreach(client => {
-        Options.PIECEWISE_EXECUTION = runPiecewise
+        Options.JUMPING_EXECUTION = runPiecewise
         Options.BACKTRACK_JUMPING = runPiecewise
         Options.TEST = singleTest
         if (client.isPiecewiseCompatible || !runPiecewise) {
           println(s"Running tests for client ${client.getClass.getName()}")
           client.runRegressionTests
-          Options.restoreDefaults() // reset default values for option flags, including PIECEWISE_EXECUTION
+          Options.restoreDefaults() // reset default values for option flags, including JUMPING_EXECUTION
           Options.SCALA_DEBUG = prevDebug
         }             
       })
       
-      val runPiecewise = Options.PIECEWISE_EXECUTION      
+      val runPiecewise = Options.JUMPING_EXECUTION
       // run tests without piecewise      
       println("Running regular tests")
       runTests()

@@ -1,10 +1,10 @@
-package edu.colorado.hopper.piecewise
+package edu.colorado.hopper.jumping
 
 import com.ibm.wala.classLoader.IField
 import com.ibm.wala.ipa.callgraph.CGNode
 import com.ibm.wala.ssa.{IR, ISSABasicBlock}
 import edu.colorado.hopper.executor.{TransferFunctions, UnstructuredSymbolicExecutor}
-import edu.colorado.hopper.piecewise.PiecewiseSymbolicExecutor._
+import edu.colorado.hopper.jumping.JumpingSymbolicExecutor._
 import edu.colorado.hopper.state._
 import edu.colorado.hopper.util.PtUtil
 import edu.colorado.thresher.core.Options
@@ -14,17 +14,17 @@ import edu.colorado.walautil.ClassUtil
 import edu.colorado.walautil.Util
 
 
-object PiecewiseSymbolicExecutor {
+object JumpingSymbolicExecutor {
   // if true, when we do a piecewise jump and fail, we will continue doing path-based execution
   private def DEBUG = false
 }
 
-class DefaultPiecewiseSymbolicExecutor(override val tf : TransferFunctions,
+class DefaultJumpingSymbolicExecutor(override val tf : TransferFunctions,
                                        override val rr : RelevanceRelation,
                                        override val keepLoopConstraints : Boolean = false)
-  extends PiecewiseSymbolicExecutor {}
+  extends JumpingSymbolicExecutor {}
 
-trait PiecewiseSymbolicExecutor extends UnstructuredSymbolicExecutor {
+trait JumpingSymbolicExecutor extends UnstructuredSymbolicExecutor {
   val rr : RelevanceRelation
   
   var jmpNum = 0 

@@ -7,7 +7,7 @@ import com.ibm.wala.ipa.callgraph.propagation._
 import com.ibm.wala.ssa._
 import com.ibm.wala.types.TypeReference
 import edu.colorado.hopper.executor.{DefaultSymbolicExecutor, TransferFunctions}
-import edu.colorado.hopper.piecewise.{DefaultPiecewiseSymbolicExecutor, RelevanceRelation}
+import edu.colorado.hopper.jumping.{DefaultPiecewiseSymbolicExecutor, RelevanceRelation}
 import edu.colorado.hopper.state._
 import edu.colorado.hopper.util.PtUtil
 import edu.colorado.thresher.core.Options
@@ -55,7 +55,7 @@ class NullDereferenceClient(appPath : String, libPath : Option[String], mainClas
     val walaRes = makeCallGraphAndPointsToAnalysis
     val tf = new NullDereferenceTransferFunctions(walaRes)
     val exec =
-      if (Options.PIECEWISE_EXECUTION) new DefaultPiecewiseSymbolicExecutor(tf, new RelevanceRelation(tf.cg, tf.hg, tf.hm, tf.cha))
+      if (Options.JUMPING_EXECUTION) new DefaultPiecewiseSymbolicExecutor(tf, new RelevanceRelation(tf.cg, tf.hg, tf.hm, tf.cha))
       else
         new DefaultSymbolicExecutor(tf) {
           override def executeInstr(paths : List[Path], instr : SSAInstruction, blk : ISSABasicBlock, node : CGNode,

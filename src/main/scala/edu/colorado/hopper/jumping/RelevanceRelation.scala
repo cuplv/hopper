@@ -1,4 +1,4 @@
-package edu.colorado.hopper.piecewise
+package edu.colorado.hopper.jumping
 
 import com.ibm.wala.analysis.pointers.HeapGraph
 import com.ibm.wala.ipa.callgraph.{CGNode, CallGraph}
@@ -10,7 +10,7 @@ import com.ibm.wala.util.graph.dominators.Dominators
 import com.ibm.wala.util.graph.impl.GraphInverter
 import com.ibm.wala.util.intset.{BasicNaturalRelation, OrdinalSet}
 import com.twitter.util.LruMap
-import edu.colorado.hopper.piecewise.RelevanceRelation._
+import edu.colorado.hopper.jumping.RelevanceRelation._
 import edu.colorado.hopper.solver.UnknownSMTResult
 import edu.colorado.hopper.state.{ArrayFld, ArrayPtEdge, Fld, HeapPtEdge, InstanceFld, LocalPtEdge, LocalVar, ObjPtEdge, ObjVar, Path, PtEdge, Pure, PureVar, Qry, ReturnVar, StaticFld, StaticPtEdge, Val, Var}
 import edu.colorado.walautil.Types._

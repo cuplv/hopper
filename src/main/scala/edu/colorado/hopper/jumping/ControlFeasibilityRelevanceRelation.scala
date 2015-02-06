@@ -1,4 +1,4 @@
-package edu.colorado.hopper.piecewise
+package edu.colorado.hopper.jumping
 
 import com.ibm.wala.analysis.pointers.HeapGraph
 import com.ibm.wala.classLoader.IMethod
@@ -15,7 +15,7 @@ import edu.colorado.walautil.{CFGUtil, ClassUtil, IRUtil}
 
 import scala.collection.JavaConversions._
 
-object AndroidRelevanceRelation {
+object ControlFeasibilityRelevanceRelation {
   // special reachability check to account for call graph imprecision in Android apps. the problem is that whenever a
   // method that places a message on the event queue is reachable, this starts a thread that calls dispatchMessage()
   // and then can pull *any* message off of the event queue (and thus call pretty much anything). we prevent this from
@@ -42,8 +42,9 @@ object AndroidRelevanceRelation {
 
 // relevance relation that filters away instructions that are not control-feasible based on domain-specific information
 // about Android
-class AndroidRelevanceRelation(cg : CallGraph, hg : HeapGraph[InstanceKey], hm : HeapModel, cha : IClassHierarchy,
-                               cgTransitiveClosure : java.util.Map[CGNode,OrdinalSet[CGNode]] = null)
+class ControlFeasibilityRelevanceRelation(cg : CallGraph, hg : HeapGraph[InstanceKey], hm : HeapModel,
+                                          cha : IClassHierarchy,
+                                          cgTransitiveClosure : java.util.Map[CGNode,OrdinalSet[CGNode]] = null)
   extends RelevanceRelation(cg, hg, hm, cha, cgTransitiveClosure) {
 
   val DEBUG = false
@@ -194,7 +195,7 @@ class AndroidRelevanceRelation(cg : CallGraph, hg : HeapGraph[InstanceKey], hm :
       } else (visitedRelInstrs, reachedBlocks)
 
     def isCallableFrom(snk : CGNode, src : CGNode) : Boolean =
-      AndroidRelevanceRelation.getReachableInAndroidCG(cg, src).contains(snk)
+      ControlFeasibilityRelevanceRelation.getReachableInAndroidCG(cg, src).contains(snk)
 
     case class RelevantNodeInfo(val relevantInstrs : Set[SSAInstruction], val callableFromCurNode : Boolean,
                                 val instructionsFormCut : Boolean)
