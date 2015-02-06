@@ -1,5 +1,6 @@
  language: scala
  before_install:
+   - "wget -P config http://repository.grepcode.com/java/ext/com/google/android/android/4.4.2_r1/android-4.4.2_r1.jar"
    - "mkdir -p lib"
    - "cd lib"   
    - "git clone https://github.com/cuplv/walautil.git"
@@ -7,14 +8,13 @@
    - "git clone https://github.com/cuplv/droidel.git"
    - "cd droidel/lib && ./install_deps.sh"   
    - "cd .."
-   - "wget -P stubs http://repository.grepcode.com/java/ext/com/google/android/android/4.4.2_r1/android-4.4.2_r1.jar"
-   - "cd stubs && ./compile_stubs.sh android-4.4.2_r1.jar"
+   - "cd stubs && ./compile_stubs.sh ../../config/android-4.4.2_r1.jar"
    - "cp out/droidel_android-4.4.2_r1.jar ../../"
    - "cd .. && sbt publishLocal && cd .."
    - "wget https://www.dropbox.com/s/eqf45mlixg1bnri/com.microsoft.z3.jar"
    - "wget https://www.dropbox.com/s/qcjzpltjpih3s1z/libz3.so"
    - "wget https://www.dropbox.com/s/lx23mupkw48dke9/libz3java.so"
-   - "cd ../config && wget http://repository.grepcode.com/java/ext/com/google/android/android/4.4.2_r1/android-4.4.2_r1.jar && cd .."
+   - "cd .."
    - "sbt compile"
    - "sbt test:compile"
  script: export LD_LIBRARY_PATH=lib:$LD_LIBRARY_PATH && sbt -J-Xmx2g "run -regressions -jumping_execution"
