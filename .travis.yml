@@ -13,7 +13,7 @@
    - "cd ../config && wget http://repository.grepcode.com/java/ext/com/google/android/android/4.4.2_r1/android-4.4.2_r1.jar && cd .."
    - "sbt compile"
    - "sbt test:compile"
- script: export LD_LIBRARY_PATH=lib:$LD_LIBRARY_PATH && sbt -J-Xmx2g "run -regressions -piecewise_execution"
+ script: export LD_LIBRARY_PATH=lib:$LD_LIBRARY_PATH && sbt -J-Xmx2g "run -regressions -jumping_execution"
  scala:
    - "2.10.2"
  jdk:
