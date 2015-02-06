@@ -8,7 +8,7 @@
    - "git clone https://github.com/cuplv/droidel.git"
    - "cd droidel/lib && ./install_deps.sh"   
    - "cd .."
-   - "cd stubs && cp ../../../config/android-4.4.2_r1.jar"
+   - "cd stubs && cp ../../../config/android-4.4.2_r1.jar ."
    - "./compile_stubs.sh android-4.4.2_r1.jar"
    - "cp out/droidel_android-4.4.2_r1.jar ../../"
    - "cd .. && sbt publishLocal && cd .."
