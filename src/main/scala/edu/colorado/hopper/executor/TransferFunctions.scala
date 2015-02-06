@@ -90,8 +90,7 @@ object TransferFunctions {
 class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm : HeapModel, val cha : IClassHierarchy) {
   val hm = new DelegatingExtendedHeapModel(_hm)
 
-  val modRef : java.util.Map[CGNode,OrdinalSet[PointerKey]] =
-    if (Options.JUMPING_EXECUTION) null else ModRef.make().computeMod(cg, hg.getPointerAnalysis)
+  lazy val modRef : java.util.Map[CGNode,OrdinalSet[PointerKey]] = ModRef.make().computeMod(cg, hg.getPointerAnalysis)
 
   /** look up the lhs of @param s in @param localConstraints, @return matching rhs var and edge if we find it */
   protected def getConstraintPtForDef(s : SSAInstruction, localConstraints : MSet[LocalPtEdge], n : CGNode) : Option[(ObjVar,LocalPtEdge)] =
