@@ -264,7 +264,7 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
   def isEntrypointCallback(n : CGNode) : Boolean =
     !ClassUtil.isLibrary(n) && walaRes.cg.getPredNodes(n).exists(n => ClassUtil.isLibrary(n))
 
-  def checkNullDerefs() : Int = {
+  def checkNullDerefs() : (Int,Int) = {
     import walaRes._
     /*val id = new AbsurdityIdentifier("")
     val absurdities = id.getAbsurdities(walaRes, reportLibraryAbsurdities = false)
@@ -302,7 +302,7 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
       })
 
     println(s"Found $nullDerefs potential null derefs out of $derefsChecked derefs checked")
-    nullDerefs
+    (nullDerefs, derefsChecked)
   }
 }
 
@@ -314,12 +314,13 @@ object AndroidNullDereferenceClientTests extends ClientTests {
     val regressionDir = "src/test/java/nulls/"
     val regressionBinDir = "target/scala-2.10/test-classes/nulls/"
     val androidJar = new File(Options.ANDROID_JAR)
-    assert(androidJar.exists(), s"Android Jar ${androidJar.getAbsolutePath} does not exist")
+    assert(androidJar.exists(), s"Android jar ${androidJar.getAbsolutePath} does not exist")
     var testNum = 0
 
     val executionTimer = new Timer
     Options.JUMPING_EXECUTION = true
     Options.CONTROL_FEASIBILITY = true
+    Options.DROIDEL_HOME = "lib/droidel"
 
     tests.foreach(test => if (Options.TEST == null || Options.TEST.isEmpty() || Options.TEST == test) {
       testNum += 1
@@ -328,7 +329,7 @@ object AndroidNullDereferenceClientTests extends ClientTests {
       val binPath = s"$regressionBinDir$test"
       val classesPath = s"$classesPathPrefix/classes/nulls/"
       println("Running test " + testNum + ": " + test)
-      val mayFailCount = {
+      val (mayFailCount, derefsChecked) = {
         try {
           Process(Seq("mkdir", "-p", classesPath)).!!
           Process(Seq("cp", "-r", binPath, classesPath)).!!
@@ -343,6 +344,7 @@ object AndroidNullDereferenceClientTests extends ClientTests {
       }
 
       executionTimer.stop
+      assert(derefsChecked > 0, "Expected to check >0 derefs")
       val mayFail = mayFailCount > 0
       // tests that we aren't meant to refute have NoRefute in name
       val expectedResult = test.contains("NoRefute")
