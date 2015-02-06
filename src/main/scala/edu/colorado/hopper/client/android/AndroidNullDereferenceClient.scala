@@ -18,16 +18,47 @@ import edu.colorado.hopper.util.PtUtil
 import edu.colorado.thresher.core.Options
 import edu.colorado.walautil.Types.MSet
 import edu.colorado.walautil.{ClassUtil, IRUtil, Util}
+import AndroidNullDereferenceClient._
 
 import scala.collection.JavaConversions._
 import scala.xml.XML
+
+object AndroidNullDereferenceClient {
+  // special reachability check to account for call graph imprecision in Android apps. the problem is that whenever a
+  // method that places a message on the event queue is reachable, this starts a thread that calls dispatchMessage()
+  // and then can pull *any* message off of the event queue (and thus call pretty much anything). we prevent this from
+  // happening by cutting off paths that pass through Handler.dispatchMessage()
+  def getReachableInAndroidCG(cg : CallGraph, n : CGNode) : Set[CGNode] = {
+    @annotation.tailrec
+    def getReachableRec(iter : BFSIterator[CGNode], reachable : Set[CGNode] = Set.empty[CGNode]) : Set[CGNode] =
+      if (iter.hasNext) getReachableRec(iter, reachable + iter.next())
+      else reachable
+    val HANDLER_CLASS = "Landroid/os/Handler"
+    val DISPATCH_MESSAGE = "dispatchMessage"
+    def frontierFilter(n : CGNode) : Boolean = {
+      val m = n.getMethod
+      m.getDeclaringClass.getName.toString == HANDLER_CLASS && m.getName.toString == DISPATCH_MESSAGE
+    }
+    val iter =
+      new BFSIterator[CGNode](cg, n) {
+        override def getConnected(n : CGNode) : java.util.Iterator[_ <: CGNode] =
+          cg.getSuccNodes(n).filter(n => frontierFilter(n))
+      }
+    getReachableRec(iter)
+  }
+}
 
 class AndroidNullDereferenceClient(appPath : String, androidLib : File) extends DroidelClient(appPath, androidLib) {
   val DEBUG = Options.SCALA_DEBUG
   val rr =
     if (Options.JUMPING_EXECUTION)
       if (Options.CONTROL_FEASIBILITY)
-        new ControlFeasibilityRelevanceRelation(walaRes.cg, walaRes.hg, walaRes.hm, walaRes.cha)
+        new ControlFeasibilityRelevanceRelation(walaRes.cg, walaRes.hg, walaRes.hm, walaRes.cha) {
+
+          override def isCallableFrom(snk : CGNode, src : CGNode, cg : CallGraph) : Boolean =
+            getReachableInAndroidCG(cg, src).contains(snk)
+
+        }
       else new RelevanceRelation(walaRes.cg, walaRes.hg, walaRes.hm, walaRes.cha)
     else null
 
@@ -68,7 +99,7 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File) extends 
       if (Options.JUMPING_EXECUTION)
         isRetvalRelevant(i, caller, qry) ||
         JumpingTransferFunctions.doesCalleeModifyHeap(callee, qry, rr, cg,
-                                                        getReachable = ControlFeasibilityRelevanceRelation.getReachableInAndroidCG)
+                                                        getReachable = getReachableInAndroidCG)
       else super.isCallRelevant(i, caller, callee, qry)
 
     override def dropCallConstraints(qry : Qry, callee : CGNode,
@@ -76,7 +107,7 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File) extends 
                                      loopDrop : Boolean) : Unit =
     if (Options.JUMPING_EXECUTION)
       JumpingTransferFunctions.dropCallConstraints(qry, callee, rr, cg,
-                                                     getReachable = ControlFeasibilityRelevanceRelation.getReachableInAndroidCG)
+                                                     getReachable = getReachableInAndroidCG)
     else super.dropCallConstraints(qry, callee, modRef, loopDrop)
 
     override def executeCond(cond : SSAConditionalBranchInstruction, qry : Qry, n : CGNode,

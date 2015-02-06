@@ -1,14 +1,13 @@
 package edu.colorado.hopper.jumping
 
 import com.ibm.wala.analysis.pointers.HeapGraph
-import com.ibm.wala.classLoader.IMethod
 import com.ibm.wala.ipa.callgraph.propagation.{HeapModel, InstanceKey, LocalPointerKey, PointerKey}
 import com.ibm.wala.ipa.callgraph.{CGNode, CallGraph}
 import com.ibm.wala.ipa.cfg.PrunedCFG
 import com.ibm.wala.ipa.cha.IClassHierarchy
 import com.ibm.wala.ssa._
 import com.ibm.wala.util.graph.dominators.Dominators
-import com.ibm.wala.util.graph.traverse.BFSIterator
+import com.ibm.wala.util.graph.traverse.{BFSIterator, BFSPathFinder}
 import com.ibm.wala.util.intset.OrdinalSet
 import edu.colorado.hopper.state._
 import edu.colorado.walautil.{CFGUtil, ClassUtil, IRUtil}
@@ -16,28 +15,7 @@ import edu.colorado.walautil.{CFGUtil, ClassUtil, IRUtil}
 import scala.collection.JavaConversions._
 
 object ControlFeasibilityRelevanceRelation {
-  // special reachability check to account for call graph imprecision in Android apps. the problem is that whenever a
-  // method that places a message on the event queue is reachable, this starts a thread that calls dispatchMessage()
-  // and then can pull *any* message off of the event queue (and thus call pretty much anything). we prevent this from
-  // happening by cutting off paths that pass through Handler.dispatchMessage()
-  def getReachableInAndroidCG(cg : CallGraph, n : CGNode) : Set[CGNode] = {
-    @annotation.tailrec
-    def getReachableRec(iter : BFSIterator[CGNode], reachable : Set[CGNode] = Set.empty[CGNode]) : Set[CGNode] =
-      if (iter.hasNext) getReachableRec(iter, reachable + iter.next())
-      else reachable
-    val HANDLER_CLASS = "Landroid/os/Handler"
-    val DISPATCH_MESSAGE = "dispatchMessage"
-    def frontierFilter(n : CGNode) : Boolean = {
-      val m = n.getMethod
-      m.getDeclaringClass.getName.toString == HANDLER_CLASS && m.getName.toString == DISPATCH_MESSAGE
-    }
-    val iter =
-      new BFSIterator[CGNode](cg, n) {
-        override def getConnected(n : CGNode) : java.util.Iterator[_ <: CGNode] =
-          cg.getSuccNodes(n).filter(n => frontierFilter(n))
-      }
-    getReachableRec(iter)
-  }
+
 }
 
 // relevance relation that filters away instructions that are not control-feasible based on domain-specific information
@@ -48,20 +26,6 @@ class ControlFeasibilityRelevanceRelation(cg : CallGraph, hg : HeapGraph[Instanc
   extends RelevanceRelation(cg, hg, hm, cha, cgTransitiveClosure) {
 
   val DEBUG = false
-
-  override def getConstraintProducerMap(q : Qry, ignoreLocalConstraints : Boolean = false) : Map[PtEdge,List[(CGNode,SSAInstruction)]] = {
-    val constraintProducerMap = super.getConstraintProducerMap(q, ignoreLocalConstraints)
-    // TODO: filter!
-
-    /*constraintProducerMap.map(pair => pair._1 match {
-      case ObjPtEdge(_, InstanceFld(f), _) =>
-        val fldClass = f.getReference.getDeclaringClass
-        val methods = pair._2.filter(pair => pair._1.getMethod.getDeclaringClass.getReference == fldClass && // the "this" pointer is used
-      case _ => pair
-    })*/
-
-    constraintProducerMap
-  }
 
   /** return Some(paths) if we should jump, None if we should not jump */
   override def getPiecewisePaths(p : Path, jmpNum : Int) : Option[List[Path]] = {
@@ -75,7 +39,6 @@ class ControlFeasibilityRelevanceRelation(cg : CallGraph, hg : HeapGraph[Instanc
         producers.foreach(println)
       }
 
-      val curNode = p.node
       p.clearCallStack
 
       def setupCondPath(node: CGNode, condBlk: ISSABasicBlock, succBlk: ISSABasicBlock, condIndex: Int,
@@ -132,60 +95,38 @@ class ControlFeasibilityRelevanceRelation(cg : CallGraph, hg : HeapGraph[Instanc
     }
   }
 
-
   // given current label l_cur and two relevant labels l_1 and l_2, we have two ways to rule out l_1/l_2
   // (1) l_1 and/or l_2 is not backward reachable from l_cur
   // (2) if every concrete traces visits l_1 -> l_2 -> l_cur, we can rule out l_1
 
   /** check condition (1); @return true if @param toFilter is not backward-reachable from @param curNode */
   def isNotBackwardReachableFrom(toFilter : CGNode, curNode : CGNode) : Boolean = {
-    // TODO: implement more precise check here?
+    // TODO: implement more precise check here
     false
   }
 
-  def isActivityLifecycleMethod(m : IMethod) : Boolean = false
-
-  // get the caller of @param n that is ultimately called by the Android library in order to invoke n
-  // TODO: generalize to case with multiple app predecessors; too hard for now
-  def getLastAppPred(n : CGNode) : Option[CGNode] = {
-    cg.getPredNodes(n).filter(n => !ClassUtil.isLibrary(n)) match {
-      case preds if preds.isEmpty => Some(n)
-      case preds if preds.size == 1 && !preds.contains(n) => getLastAppPred(n)
-      case _ => None
-    }
-  }
-
-  // TODO: implement important Android lifecycle ordering facts here
-  // check that method(relNode) <: method(curNode), then check that method(toFilterNode) <: method(relNode)
-  def methodOrderingOk(toFilterNode : CGNode, relNode : CGNode, curNode : CGNode) : Boolean = {
-    //println(s"Checking: toFilterNode: ${ClassUtil.pretty(toFilterNode)}, relNode: ${ClassUtil.pretty(relNode)}, curNode: ${ClassUtil.pretty(curNode)}")
-    false
-  }
+  def isCallableFrom(snk : CGNode, src : CGNode, cg : CallGraph) : Boolean =
+    new BFSPathFinder[CGNode](cg, src, snk).find() != null
 
   // TODO: there's some unstated precondition on the kind of relevant instructions for being able to to do
   // control-feasibility filtering at all...something like "constraints must be fields of the
   // *same* object instance whose methods we are trying to filter, and writes to fields of that object must be through
   // the "this" pointer, or something like that". alternatively, the class whose methods are under consideration is one
   // that is somehow known or proven to have only one instance in existence at a time.
-
   override def getNodeRelevantInstrsMap(q : Qry, ignoreLocalConstraints : Boolean) : Map[CGNode,Set[SSAInstruction]] = {
     val nodeModifierMap = super.getNodeModifierMap(q, ignoreLocalConstraints)
-    // TODO: here, the assume is the conditional block, but to add constraints we need to know which successor of the conditional block
-    // we came from--figure out how to save this information
+    // TODO: here, the assume is the conditional block, but to add constraints we need to know which successor of the
+    // conditional block we came from--figure out how to save this information
     // simple approach if the false branch does not dominate a relevant instruction, pick it; ditto for the true branch
     val nodeModMapWithAssumes = getDominatingAssumesForRelevantInstructions(nodeModifierMap)
 
     // TODO: augment with set of reached blocks so we can check if the entry block was reached
     @annotation.tailrec
-    def filterRelevantInstrsRec(iter : BFSIterator[ISSABasicBlock],
-                                allRelInstrs : Set[SSAInstruction],
+    def filterRelevantInstrsRec(iter : BFSIterator[ISSABasicBlock], allRelInstrs : Set[SSAInstruction],
                                 visitedRelInstrs : Set[SSAInstruction] = Set.empty[SSAInstruction],
                                 reachedBlocks : Set[ISSABasicBlock] = Set.empty[ISSABasicBlock]) : (Set[SSAInstruction], Set[ISSABasicBlock]) =
       if (iter.hasNext) {
         val blk = iter.next()
-
-        // assuming that each block contains only one relevant instruction and that it is the last one--this is safe
-        // given the way WALA translates
         val newVisitedRelInstrs =
           blk.find(instr => allRelInstrs.contains(instr)) match {
             case Some(instr) => visitedRelInstrs + instr
@@ -193,9 +134,6 @@ class ControlFeasibilityRelevanceRelation(cg : CallGraph, hg : HeapGraph[Instanc
           }
         filterRelevantInstrsRec(iter, allRelInstrs, newVisitedRelInstrs, reachedBlocks + blk)
       } else (visitedRelInstrs, reachedBlocks)
-
-    def isCallableFrom(snk : CGNode, src : CGNode) : Boolean =
-      ControlFeasibilityRelevanceRelation.getReachableInAndroidCG(cg, src).contains(snk)
 
     case class RelevantNodeInfo(val relevantInstrs : Set[SSAInstruction], val callableFromCurNode : Boolean,
                                 val instructionsFormCut : Boolean)
@@ -210,7 +148,7 @@ class ControlFeasibilityRelevanceRelation(cg : CallGraph, hg : HeapGraph[Instanc
         // possibility that we entered curNode "from the middle" instead of from the exit block
         // TODO: we can be more precise than this by still doing intraproc filtering, but starting from all call sites
         //  in node that may (transitively) call curNode rather than from the exit block of node
-        val isCallableFromCurNode = isCallableFrom(curNode, node)
+        val isCallableFromCurNode = isCallableFrom(curNode, node, cg)
         if (isCallableFromCurNode)
           node ->
             RelevantNodeInfo(relInstrs, callableFromCurNode = isCallableFromCurNode, instructionsFormCut = false)
@@ -327,7 +265,6 @@ class ControlFeasibilityRelevanceRelation(cg : CallGraph, hg : HeapGraph[Instanc
       node -> newRelInstructions
     })
   }
-
 
   /** @return conditionals that compare objects pointed to by @param q to null */
   def getRelevantAssumes(q : Qry) : Set[(CGNode,SSAConditionalBranchInstruction)] = {
