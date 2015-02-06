@@ -57,7 +57,7 @@ object Main {
       new DowncastCheckingClient(Options.APP, Util.strToOption(Options.LIB), Options.MAIN_CLASS, Options.MAIN_METHOD)
       .checkCasts()
     } else if (Options.CHECK_ANDROID_LEAKS)
-      new AndroidLeakClient(Options.APP, Util.strToOption(Options.LIB), "Landroid/app/Activity", Options.MAIN_METHOD)
+      new AndroidLeakClient(Options.APP, new File(Options.ANDROID_JAR), Util.strToOption(Options.LIB), "Landroid/app/Activity", Options.MAIN_METHOD)
       .checkAnnotations
     else if (Options.CHECK_ARRAY_BOUNDS) 
       new ArrayBoundsClient(Options.APP, Util.strToOption(Options.LIB), Options.MAIN_CLASS, Options.MAIN_METHOD)

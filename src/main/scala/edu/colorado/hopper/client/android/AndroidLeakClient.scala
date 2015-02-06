@@ -1,5 +1,7 @@
 package edu.colorado.hopper.client.android
 
+import java.io.File
+
 import com.ibm.wala.classLoader.{IClass, IField}
 import com.ibm.wala.demandpa.alg.BudgetExceededException
 import com.ibm.wala.ipa.callgraph.AnalysisScope
@@ -19,8 +21,9 @@ import edu.colorado.thresher.core.{HeapGraphWrapper, Options}
 
 import scala.collection.JavaConversions.{asJavaCollection, asScalaBuffer, asScalaSet, bufferAsJavaList, collectionAsScalaIterable, iterableAsScalaIterable, mutableSetAsJavaSet, seqAsJavaList}
 
-class AndroidLeakClient(appPath : String, libPath : Option[String], mainClass : String, mainMethod : String,
-  isRegression : Boolean = false) extends AndroidClient(appPath, libPath, mainClass, mainMethod, isRegression) {
+class AndroidLeakClient(appPath : String, androidJar : File, libPath : Option[String], mainClass : String,
+                        mainMethod : String, isRegression : Boolean = false)
+  extends AndroidClient(appPath, androidJar, libPath, mainClass, mainMethod, isRegression) {
   
   // TODO: richer return type!
   def checkAnnotations() : Boolean = {
@@ -285,6 +288,7 @@ object AndroidLeakClientTests extends ClientTests {
         "ContainsKeyRefute", "ContainsKeyNoRefute")
 
       val regressionDir = "target/scala-2.10/test-classes/leaks/"
+      val androidJar = new File("config/android-4.4.2_r1.jar")
       var testNum = 0
       var successes = 0
       var failures = 0
@@ -301,7 +305,7 @@ object AndroidLeakClientTests extends ClientTests {
             val path = regressionDir + test
             Options.INDEX_SENSITIVITY = test.contains("IndexSensitive")
             executionTimer.start
-            new AndroidLeakClient(path, Util.strToOption(Options.LIB), mainClass, "main", isRegression = true).checkAnnotations
+            new AndroidLeakClient(path, androidJar, Util.strToOption(Options.LIB), mainClass, "main", isRegression = true).checkAnnotations
           } catch {
             case e : BudgetExceededException =>
               // for piecewise, a timeout is the expected result for some tests

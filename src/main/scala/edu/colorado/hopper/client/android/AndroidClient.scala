@@ -9,8 +9,9 @@ import com.ibm.wala.ipa.cha.IClassHierarchy
 import edu.colorado.hopper.client.Client
 import edu.colorado.thresher.core.{FakeMapContextSelector, Options}
 
-abstract class AndroidClient(appPath : String, libPath : Option[String], mainClass : String, mainMethod : String, 
-    isRegression : Boolean = false) extends Client(appPath, libPath, mainClass, mainMethod, isRegression) {
+abstract class AndroidClient(appPath : String, androidJar : File, libPath : Option[String], mainClass : String,
+                             mainMethod : String, isRegression : Boolean = false)
+  extends Client(appPath, libPath, mainClass, mainMethod, isRegression) {
   
   // TODO: this is a hack. need complete list of methods. can also check is method is override
   def isAndroidFrameworkCallback(m : IMethod, cha : IClassHierarchy) : Boolean = (m.isPublic() || m.isProtected()) && {
@@ -27,10 +28,10 @@ abstract class AndroidClient(appPath : String, libPath : Option[String], mainCla
   
   // load Android libraries/our stubs addition to the normal analysis scope loading 
   override def makeAnalysisScope(addJavaLibs : Boolean = true) : AnalysisScope = {
-    // add Java libraries unless we are running the regression tests (since we use a Jar that has its own Java library implementation)
+    // add Java libraries unless we are running the regression tests (since we use a Jar that has its own Java library
+    // implementation)
     val analysisScope = super.makeAnalysisScope(isRegression || addJavaLibs)
-    // add Android libraries 
-    val androidJar = new File(Options.ANDROID_JAR)
+    // add Android libraries
     assert(androidJar.exists(), s"Couldn't find Android JAR file $androidJar")
     analysisScope.addToScope(analysisScope.getPrimordialLoader(), new JarFile(androidJar))
     analysisScope
