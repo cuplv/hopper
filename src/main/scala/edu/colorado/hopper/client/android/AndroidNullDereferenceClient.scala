@@ -4,12 +4,15 @@ import java.io.File
 
 import com.ibm.wala.analysis.pointers.HeapGraph
 import com.ibm.wala.classLoader.{IField, IClass}
+import com.ibm.wala.demandpa.alg.BudgetExceededException
 import com.ibm.wala.ipa.callgraph.{CallGraph, CGNode}
 import com.ibm.wala.ipa.callgraph.propagation._
+import com.ibm.wala.ipa.modref.ModRef
 import com.ibm.wala.ssa._
 import com.ibm.wala.util.graph.traverse.BFSIterator
+import edu.colorado.droidel.constants.DroidelConstants
 import edu.colorado.droidel.driver.AbsurdityIdentifier
-import edu.colorado.hopper.client.NullDereferenceTransferFunctions
+import edu.colorado.hopper.client.{ClientTests, NullDereferenceTransferFunctions}
 import edu.colorado.hopper.executor.DefaultSymbolicExecutor
 import edu.colorado.hopper.jumping.{ControlFeasibilityRelevanceRelation, RelevanceRelation, DefaultJumpingSymbolicExecutor, JumpingTransferFunctions}
 import edu.colorado.hopper.solver.Z3Solver
@@ -17,10 +20,12 @@ import edu.colorado.hopper.state._
 import edu.colorado.hopper.util.PtUtil
 import edu.colorado.thresher.core.Options
 import edu.colorado.walautil.Types.MSet
-import edu.colorado.walautil.{ClassUtil, IRUtil, Util}
+import edu.colorado.walautil._
 import AndroidNullDereferenceClient._
 
 import scala.collection.JavaConversions._
+import scala.sys.process._
+
 import scala.xml.XML
 
 object AndroidNullDereferenceClient {
@@ -48,7 +53,9 @@ object AndroidNullDereferenceClient {
   }
 }
 
-class AndroidNullDereferenceClient(appPath : String, androidLib : File) extends DroidelClient(appPath, androidLib) {
+class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhantom : Boolean = false)
+    extends DroidelClient(appPath, androidLib, useJPhantom) {
+
   val DEBUG = Options.SCALA_DEBUG
   val rr =
     if (Options.JUMPING_EXECUTION)
@@ -62,7 +69,6 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File) extends 
       else new RelevanceRelation(walaRes.cg, walaRes.hg, walaRes.hm, walaRes.cha)
     else null
 
-  // TODO: mixin null deref transfer functions and pw transfer functions, or otherwise allow code reuse
   val tf = new NullDereferenceTransferFunctions(walaRes, new File(s"$appPath/nit_annots.xml")) {
 
     def useMayBeRelevantToQuery(use : Int, qry : Qry, n : CGNode, hm : HeapModel,
@@ -258,23 +264,11 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File) extends 
   def isEntrypointCallback(n : CGNode) : Boolean =
     !ClassUtil.isLibrary(n) && walaRes.cg.getPredNodes(n).exists(n => ClassUtil.isLibrary(n))
 
-  def checkNullDerefs() = {
+  def checkNullDerefs() : Int = {
     import walaRes._
     /*val id = new AbsurdityIdentifier("")
     val absurdities = id.getAbsurdities(walaRes, reportLibraryAbsurdities = false)
     println(s"Have ${absurdities.size} absurdities")*/
-
-    val callbackClasses =
-      appTransformer.getCallbackClasses().foldLeft (Set.empty[IClass]) ((s, t) => cha.lookupClass(t) match {
-        case null => s
-        case clazz => s + clazz
-      })
-
-    // TODO: check callees of callbacks as well
-    def isCallback(n : CGNode) = {
-      val declClass = n.getMethod.getDeclaringClass
-      callbackClasses.exists(c => cha.isSubclassOf(declClass, c) || cha.implementsInterface(declClass, c))
-    }
 
     def shouldCheck(n : CGNode) : Boolean = {
       // TODO: tmp, just for testing
@@ -308,5 +302,63 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File) extends 
       })
 
     println(s"Found $nullDerefs potential null derefs out of $derefsChecked derefs checked")
+    nullDerefs
+  }
+}
+
+object AndroidNullDereferenceClientTests extends ClientTests {
+
+  override def runRegressionTests() : Unit = {
+    val tests = List("InitRefute")
+
+    val regressionDir = "src/test/java/nulls/"
+    val regressionBinDir = "target/scala-2.10/test-classes/nulls/"
+    val androidJar = new File(Options.ANDROID_JAR)
+    assert(androidJar.exists(), s"Android Jar ${androidJar.getAbsolutePath} does not exist")
+    var testNum = 0
+
+    val executionTimer = new Timer
+    Options.JUMPING_EXECUTION = true
+    Options.CONTROL_FEASIBILITY = true
+
+    tests.foreach(test => if (Options.TEST == null || Options.TEST.isEmpty() || Options.TEST == test) {
+      testNum += 1
+      val path = regressionDir + test
+      val classesPathPrefix = s"$path/bin"
+      val binPath = s"$regressionBinDir$test"
+      val classesPath = s"$classesPathPrefix/classes/nulls/"
+      println("Running test " + testNum + ": " + test)
+      val mayFailCount = {
+        try {
+          Process(Seq("mkdir", "-p", classesPath)).!!
+          Process(Seq("cp", "-r", binPath, classesPath)).!!
+          executionTimer.start
+          new AndroidNullDereferenceClient(appPath = path, androidLib = androidJar, useJPhantom = false)
+          .checkNullDerefs()
+        } catch {
+          case e : Throwable =>
+            printTestFailureMsg(test, testNum)
+            throw e
+        }
+      }
+
+      executionTimer.stop
+      val mayFail = mayFailCount > 0
+      // tests that we aren't meant to refute have NoRefute in name
+      val expectedResult = test.contains("NoRefute")
+      if (mayFail == expectedResult)
+        println(s"Test $test (#$testNum) passed!")
+      else {
+        printTestFailureMsg(test, testNum)
+        if (Options.EXIT_ON_FAIL) sys.error("Test failure")
+      }
+
+      println(s"Test took ${executionTimer.time.toInt} seconds.")
+      println(s"Execution time ${executionTimer.time}")
+      Process(Seq("rm", "-r", classesPathPrefix)).!!
+      edu.colorado.thresher.core.WALACFGUtil.clearCaches()
+      LoopUtil.clearCaches
+      executionTimer.clear
+    })
   }
 }

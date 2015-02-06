@@ -10,6 +10,7 @@ import com.ibm.wala.ipa.modref.{DelegatingExtendedHeapModel, ModRef}
 import com.ibm.wala.ssa._
 import com.ibm.wala.types.TypeReference
 import com.ibm.wala.util.graph.traverse.DFS
+import com.ibm.wala.util.intset.OrdinalSet
 import edu.colorado.hopper.executor.TransferFunctions._
 import edu.colorado.hopper.solver.UnknownSMTResult
 import edu.colorado.hopper.state._
@@ -88,8 +89,10 @@ object TransferFunctions {
 /** implements the |- {R} c {Q} judgement from Section 3.2 of Thresher: Precise Refutations for Heap Reachability (PLDI 2013) */
 class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm : HeapModel, val cha : IClassHierarchy) {
   val hm = new DelegatingExtendedHeapModel(_hm)
-  val modRef = ModRef.make().computeMod(cg, hg.getPointerAnalysis)
-  
+
+  val modRef : java.util.Map[CGNode,OrdinalSet[PointerKey]] =
+    if (Options.JUMPING_EXECUTION) null else ModRef.make().computeMod(cg, hg.getPointerAnalysis)
+
   /** look up the lhs of @param s in @param localConstraints, @return matching rhs var and edge if we find it */
   protected def getConstraintPtForDef(s : SSAInstruction, localConstraints : MSet[LocalPtEdge], n : CGNode) : Option[(ObjVar,LocalPtEdge)] =
     getConstraintPt(Var.makeLPK(s.getDef(), n, hm), localConstraints)  
@@ -127,11 +130,6 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
       qry.addLocalConstraint(PtEdge.make(l, freshVar)) // add l -> freshVar constraint
       freshVar
     }
-  }
-  
-  private def getSnkAsObjVar(e : PtEdge) : ObjVar = e.snk match {
-    case obj@ObjVar(_) => obj
-    case _ => sys.error("Expecting ObjVar as snk of " + e)
   }
   
   private def getSnkAsPureVar(e : PtEdge) : PureVar = e.snk match {

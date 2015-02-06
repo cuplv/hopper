@@ -102,10 +102,6 @@ public class Options {
   @boolOpt(description = "Should we use ptBy information and recursive simplification to further narrow from constraints?", _default = false)
   public static boolean AGGRESSIVE_FROM_NARROWING = false;
 
-  // how large should we allow the path constraints to grow?
-  @intOpt(description = "If the path constraints are larger than this, we (soundly) refuse to collect new constraints", _default = 2)
-  public static int MAX_PATH_CONSTRAINT_SIZE = 2;
-
   @intOpt(description = "Time out and report a witness if we spend more time than this on a query", _default = 10)
   public static int TIMEOUT = 10;  
   
@@ -121,9 +117,6 @@ public class Options {
   @stringOpt(description = "Java library file to use (e.g., rt.jar or classes.jar)", _default = "")
   public static String JAVA_LIB = "";
 
-  @stringOpt(description = "Usage: -android_jar <path to jar file for version of android libraries>", _default = "config/android-4.4.2_r1.jar")
-  public static String ANDROID_JAR = "config/android-4.4.2_r1.jar";
-
   @stringOpt(description = "Class containing entrypoint method for analysis", _default = "Main")
   public static String MAIN_CLASS = "Main";
   
@@ -132,6 +125,9 @@ public class Options {
 
   @stringOpt(description = "Path to home directory of droidel", _default = "../droidel")
   public static String DROIDEL_HOME = "../droidel";
+
+  @stringOpt(description = "Usage: -android_jar <path to jar file for version of android libraries>", _default = "config/android-4.4.2_r1.jar")
+  public static String ANDROID_JAR = DROIDEL_HOME + "/stubs/out/droidel_android-4.4.2_r1.jar";
   
   @stringOpt(description = "List of classes to excluse from analysis", _default = "config/exclusions.txt")
   public static String EXCLUSIONS = "config/exclusions.txt";

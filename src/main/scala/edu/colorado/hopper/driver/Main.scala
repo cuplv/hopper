@@ -23,9 +23,12 @@ object Main {
         else if (Options.CHECK_CASTS) List(DowncastCheckingClientTests)
         else if (Options.CHECK_ASSERTS) List(AssertionCheckingClientTests)
         else if (Options.CHECK_ARRAY_BOUNDS) List(ArrayBoundsClientTests)
+        else if (Options.CHECK_ANDROID_DEREFS) List(AndroidNullDereferenceClientTests)
         //else List(AndroidLeakClientTests, DowncastCheckingClientTests, AssertionCheckingClientTests, ArrayBoundsClientTests)
         // TODO: bring back AssertionCheckingClientTests once we fix Nick's synthesizer
-        else List(AndroidLeakClientTests, DowncastCheckingClientTests, ArrayBoundsClientTests)
+        else
+          List(AndroidLeakClientTests, DowncastCheckingClientTests, ArrayBoundsClientTests,
+               AndroidNullDereferenceClientTests)
       
       val singleTest = Options.TEST
       def runTests(runPiecewise : Boolean = false) : Unit = clientTests.foreach(client => {

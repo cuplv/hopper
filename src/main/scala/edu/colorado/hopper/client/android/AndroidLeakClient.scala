@@ -256,7 +256,6 @@ class AndroidLeakClient(appPath : String, libPath : Option[String], mainClass : 
 object AndroidLeakClientTests extends ClientTests {
     
   override def runRegressionTests() : Unit = {
-    Options.MAX_PATH_CONSTRAINT_SIZE = 10
     Options.PRIM_ARRAY_SENSITIVITY = true
   
     val tests = List("IntraproceduralStrongUpdate", "SimpleNoRefute", "FunctionCallRefute",
@@ -289,7 +288,7 @@ object AndroidLeakClientTests extends ClientTests {
       var testNum = 0
       var successes = 0
       var failures = 0
-      
+
       val executionTimer = new Timer
       val pwTimeoutOk = List("SimpleHashMapNoRefute")
       
@@ -302,7 +301,7 @@ object AndroidLeakClientTests extends ClientTests {
             val path = regressionDir + test
             Options.INDEX_SENSITIVITY = test.contains("IndexSensitive")
             executionTimer.start
-            new AndroidLeakClient(path, Util.strToOption(Options.LIB), mainClass, "main", isRegression = true).checkAnnotations          
+            new AndroidLeakClient(path, Util.strToOption(Options.LIB), mainClass, "main", isRegression = true).checkAnnotations
           } catch {
             case e : BudgetExceededException =>
               // for piecewise, a timeout is the expected result for some tests
@@ -311,7 +310,7 @@ object AndroidLeakClientTests extends ClientTests {
                 printTestFailureMsg(test, testNum)
                 throw e
               }
-            case e : Throwable => 
+            case e : Throwable =>
               printTestFailureMsg(test, testNum)
               throw e
           }
@@ -321,7 +320,6 @@ object AndroidLeakClientTests extends ClientTests {
         // tests that we aren't meant to refute have NoRefute in name
         val expectedResult = test.contains("NoRefute")
         if (mayFail == expectedResult) {
-        //if (mayFail == expectedResult || (!test.contains("NoRefute") && mayFail)) { //hack for testing piecewise
           println("Test " + test + " (# " + testNum + ") passed!")
           successes += 1
         } else {
@@ -329,7 +327,7 @@ object AndroidLeakClientTests extends ClientTests {
           failures += 1
           if (Options.EXIT_ON_FAIL) sys.error("Test failure")
         }
-        
+
         println("Test took " + (executionTimer.time).toInt + " seconds.")
         println("Execution time " + executionTimer.time)
         edu.colorado.thresher.core.WALACFGUtil.clearCaches()
