@@ -3,14 +3,14 @@ package edu.colorado.hopper.client.android
 import java.io.File
 
 import com.ibm.wala.analysis.pointers.HeapGraph
-import com.ibm.wala.classLoader.{IField, IClass}
+import com.ibm.wala.classLoader.{IMethod, IField, IClass}
 import com.ibm.wala.demandpa.alg.BudgetExceededException
 import com.ibm.wala.ipa.callgraph.{CallGraph, CGNode}
 import com.ibm.wala.ipa.callgraph.propagation._
 import com.ibm.wala.ipa.modref.ModRef
 import com.ibm.wala.ssa._
 import com.ibm.wala.util.graph.traverse.BFSIterator
-import edu.colorado.droidel.constants.DroidelConstants
+import edu.colorado.droidel.constants.{AndroidConstants, AndroidLifecycle, DroidelConstants}
 import edu.colorado.droidel.driver.AbsurdityIdentifier
 import edu.colorado.hopper.client.{ClientTests, NullDereferenceTransferFunctions}
 import edu.colorado.hopper.executor.DefaultSymbolicExecutor
@@ -29,15 +29,12 @@ import scala.sys.process._
 import scala.xml.XML
 
 object AndroidNullDereferenceClient {
+
   // special reachability check to account for call graph imprecision in Android apps. the problem is that whenever a
   // method that places a message on the event queue is reachable, this starts a thread that calls dispatchMessage()
   // and then can pull *any* message off of the event queue (and thus call pretty much anything). we prevent this from
   // happening by cutting off paths that pass through Handler.dispatchMessage()
   def getReachableInAndroidCG(cg : CallGraph, n : CGNode) : Set[CGNode] = {
-    @annotation.tailrec
-    def getReachableRec(iter : BFSIterator[CGNode], reachable : Set[CGNode] = Set.empty[CGNode]) : Set[CGNode] =
-      if (iter.hasNext) getReachableRec(iter, reachable + iter.next())
-      else reachable
     val HANDLER_CLASS = "Landroid/os/Handler"
     val DISPATCH_MESSAGE = "dispatchMessage"
     def frontierFilter(n : CGNode) : Boolean = {
@@ -49,7 +46,7 @@ object AndroidNullDereferenceClient {
         override def getConnected(n : CGNode) : java.util.Iterator[_ <: CGNode] =
           cg.getSuccNodes(n).filter(n => frontierFilter(n))
       }
-    getReachableRec(iter)
+    GraphUtil.bfsIterFold(iter, Set.empty[CGNode], ((s : Set[CGNode], n : CGNode) => s + n))
   }
 }
 
@@ -62,10 +59,38 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
       if (Options.CONTROL_FEASIBILITY)
         new ControlFeasibilityRelevanceRelation(walaRes.cg, walaRes.hg, walaRes.hm, walaRes.cha) {
 
+          def isAndroidLifecycleType(c : IClass) : Boolean =
+            AndroidLifecycle.getOrCreateFrameworkCreatedClasses(cha).exists(androidClass =>
+              cha.isAssignableFrom(c, androidClass)
+            )
+
           override def isCallableFrom(snk : CGNode, src : CGNode, cg : CallGraph) : Boolean =
             getReachableInAndroidCG(cg, src).contains(snk)
 
+          def isFrameworkTypeOnCreate(m : IMethod) : Boolean = m.getName.toString == "onCreate" && {
+            val declClass = m.getDeclaringClass
+            AndroidLifecycle.getOrCreateFrameworkCreatedClasses(cha).exists(frameworkClass =>
+              cha.isAssignableFrom(frameworkClass, declClass) && {
+                val typeStr = ClassUtil.deWalaifyClassName(frameworkClass)
+                val selectorStr = m.getReference.getSelector.toString
+                AndroidLifecycle.frameworkCbMap.exists(entry => entry._1 == typeStr &&
+                                                                entry._2.exists(cb => cb == selectorStr))
+              }
+            )
+          }
+
+          def androidSpecificMustHappenBefore(n1 : CGNode, n2 : CGNode) : Boolean = (n1.getMethod, n2.getMethod) match {
+            case (m1, m2) if isAndroidLifecycleType(m2.getDeclaringClass) &&
+                             // TODO: relax this equality restriction; we can use subclassing here, but it's complicated (involves checking method overriding)
+                             m1.getDeclaringClass == m2.getDeclaringClass =>
+              m1.isInit && isFrameworkTypeOnCreate(m2) // <init> always happens before onCreate
+            case _ => false
+          }
+
+          override def mustHappenBefore(n1 : CGNode, n2 : CGNode) : Boolean =
+            androidSpecificMustHappenBefore(n1, n2) || super.mustHappenBefore(n1, n2)
         }
+
       else new RelevanceRelation(walaRes.cg, walaRes.hg, walaRes.hm, walaRes.cha)
     else null
 
@@ -309,11 +334,11 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
 object AndroidNullDereferenceClientTests extends ClientTests {
 
   override def runRegressionTests() : Unit = {
-    val tests = List("InitRefute")
+    val tests = List("InitRefute", "InitNoRefute")
 
     val regressionDir = "src/test/java/nulls/"
     val regressionBinDir = "target/scala-2.10/test-classes/nulls/"
-    Options.DROIDEL_HOME = "lib/droidel"
+    if (!(new File(Options.DROIDEL_HOME).exists())) Options.DROIDEL_HOME = "lib/droidel"
     val androidJar = new File(s"${Options.DROIDEL_HOME}/stubs/out/droidel_android-4.4.2_r1.jar")
     assert(androidJar.exists(), s"Android jar ${androidJar.getAbsolutePath} does not exist")
     var testNum = 0

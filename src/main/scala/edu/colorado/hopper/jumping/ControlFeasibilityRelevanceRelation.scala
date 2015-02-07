@@ -7,10 +7,11 @@ import com.ibm.wala.ipa.cfg.PrunedCFG
 import com.ibm.wala.ipa.cha.IClassHierarchy
 import com.ibm.wala.ssa._
 import com.ibm.wala.util.graph.dominators.Dominators
-import com.ibm.wala.util.graph.traverse.{BFSIterator, BFSPathFinder}
+import com.ibm.wala.util.graph.traverse.{BFSIterator, BFSPathFinder, DFS}
 import com.ibm.wala.util.intset.OrdinalSet
 import edu.colorado.hopper.state._
 import edu.colorado.walautil.{CFGUtil, ClassUtil, IRUtil}
+import edu.colorado.walautil.GraphUtil
 
 import scala.collection.JavaConversions._
 
@@ -53,7 +54,7 @@ class ControlFeasibilityRelevanceRelation(cg : CallGraph, hg : HeapGraph[Instanc
         val (node, relInstrs) = entry
         val (condInstrs, otherInstrs) = relInstrs.partition(i => i.isInstanceOf[SSAConditionalBranchInstruction])
         if (condInstrs.isEmpty)
-          // current node same as relevant node. not (necessarily) sound to do filtering
+          // no relevant cond instructions, no need to do filtering
           Path.fork(p, node, relInstrs, jmpNum, cg, hg, hm, cha, paths)
         else { // "normal" case
           // conditionals need to be handled with care because we don't know what part of a conditional is relevant: the
@@ -108,114 +109,113 @@ class ControlFeasibilityRelevanceRelation(cg : CallGraph, hg : HeapGraph[Instanc
   def isCallableFrom(snk : CGNode, src : CGNode, cg : CallGraph) : Boolean =
     new BFSPathFinder[CGNode](cg, src, snk).find() != null
 
-  // TODO: there's some unstated precondition on the kind of relevant instructions for being able to to do
-  // control-feasibility filtering at all...something like "constraints must be fields of the
-  // *same* object instance whose methods we are trying to filter, and writes to fields of that object must be through
-  // the "this" pointer, or something like that". alternatively, the class whose methods are under consideration is one
-  // that is somehow known or proven to have only one instance in existence at a time.
-  override def getNodeRelevantInstrsMap(q : Qry, ignoreLocalConstraints : Boolean) : Map[CGNode,Set[SSAInstruction]] = {
-    val nodeModifierMap = super.getNodeModifierMap(q, ignoreLocalConstraints)
-    // TODO: here, the assume is the conditional block, but to add constraints we need to know which successor of the
-    // conditional block we came from--figure out how to save this information
-    // simple approach if the false branch does not dominate a relevant instruction, pick it; ditto for the true branch
-    val nodeModMapWithAssumes = getDominatingAssumesForRelevantInstructions(nodeModifierMap)
 
-    // TODO: augment with set of reached blocks so we can check if the entry block was reached
-    @annotation.tailrec
-    def filterRelevantInstrsRec(iter : BFSIterator[ISSABasicBlock], allRelInstrs : Set[SSAInstruction],
-                                visitedRelInstrs : Set[SSAInstruction] = Set.empty[SSAInstruction],
-                                reachedBlocks : Set[ISSABasicBlock] = Set.empty[ISSABasicBlock]) : (Set[SSAInstruction], Set[ISSABasicBlock]) =
-      if (iter.hasNext) {
-        val blk = iter.next()
+  case class RelevantNodeInfo(val relevantInstrs: Set[SSAInstruction], val callableFromCurNode: Boolean,
+                              val instructionsFormCut: Boolean)
+
+  // try to filter the relevant instructions in each node based on their *intra*procedural ordering in the CFG. we do
+  // this by trying to form a (S,T) cut of the CFG where the exit block of the CFG is in T, all relevant instructions
+  // are in S, and all of blocks u in cut-crossing edges (u, v) contain a relevant instructions. if we are able to
+  // find such a cut, we only need to consider the instructions in u-blocks as relevant, since these instructions are
+  // the ones we will hit first when exploring the CFG backward from the exit block
+  def filterNodeModMapIntraProcedural(nodeModMap : Map[CGNode,Set[SSAInstruction]],
+                                      curNode : CGNode) : Map[CGNode,RelevantNodeInfo] = {
+
+
+    def filterRelevantInstrs(iter: BFSIterator[ISSABasicBlock],
+                             allRelInstrs: Set[SSAInstruction]): (Set[SSAInstruction], Set[ISSABasicBlock]) = {
+      // given a set of relevant instructions and a backward iterator over the CFG for some method return the (set of
+      // visted rel instructions, set of visited blocks)
+      def f(acc: (Set[SSAInstruction], Set[ISSABasicBlock]),
+            blk: ISSABasicBlock): (Set[SSAInstruction], Set[ISSABasicBlock]) = {
+        val (visitedRelInstrs, reachedBlocks) = acc
         val newVisitedRelInstrs =
           blk.find(instr => allRelInstrs.contains(instr)) match {
             case Some(instr) => visitedRelInstrs + instr
             case None => visitedRelInstrs
           }
-        filterRelevantInstrsRec(iter, allRelInstrs, newVisitedRelInstrs, reachedBlocks + blk)
-      } else (visitedRelInstrs, reachedBlocks)
+        (newVisitedRelInstrs, reachedBlocks + blk)
+      }
+      GraphUtil.bfsIterFold(iter, (Set.empty[SSAInstruction], Set.empty[ISSABasicBlock]), f)
+    }
 
-    case class RelevantNodeInfo(val relevantInstrs : Set[SSAInstruction], val callableFromCurNode : Boolean,
-                                val instructionsFormCut : Boolean)
-
-    val curNode = q.node
-    // filter the relevant instructions in each node based on their ordering in the CFG (keep instructions forming a cut
-    // of the CFG consisting of relevant instructions only) if it is sound to do so based on the call grah
-    val intraprocFilteredNodeModMap =
-      nodeModMapWithAssumes.map(entry => {
-        val (node, relInstrs) = entry
-        // not sound to do intraproc filtering if curNode can be (transitively) called from node; have to consider the
-        // possibility that we entered curNode "from the middle" instead of from the exit block
-        // TODO: we can be more precise than this by still doing intraproc filtering, but starting from all call sites
-        //  in node that may (transitively) call curNode rather than from the exit block of node
-        val isCallableFromCurNode = isCallableFrom(curNode, node, cg)
-        if (isCallableFromCurNode)
-          node ->
-            RelevantNodeInfo(relInstrs, callableFromCurNode = isCallableFromCurNode, instructionsFormCut = false)
+    nodeModMap.map(entry => {
+      val (node, relInstrs) = entry
+      // not sound to do intraproc filtering if curNode can be (transitively) called from node; have to consider the
+      // possibility that we entered curNode "from the middle" instead of from the exit block.
+      // TODO: we can be more precise than this by still doing intraproc filtering, but starting from all call sites
+      //  in node that may (transitively) call curNode rather than from the exit block of node
+      val isCallableFromCurNode = isCallableFrom(curNode, node, cg)
+      if (isCallableFromCurNode)
+        node -> RelevantNodeInfo(relInstrs, callableFromCurNode = isCallableFromCurNode, instructionsFormCut = false)
+      else {
+        // seperate generated instructions from regular instructions, since generated instructions have no ordering
+        // (or even representation) in the CFG
+        val (generatedInstrs, otherInstrs) = relInstrs.partition(i => IRUtil.isGeneratedInstruction(i))
+        if (otherInstrs.isEmpty) // we have only generated instructions, can't do any intraproc filtering
+          node -> RelevantNodeInfo(relInstrs, callableFromCurNode = isCallableFromCurNode, instructionsFormCut = true)
         else {
-          val (generatedInstrs, otherInstrs) = relInstrs.partition(i => IRUtil.isGeneratedInstruction(i))
-          if (otherInstrs.isEmpty)
-            node -> RelevantNodeInfo(relInstrs, callableFromCurNode = isCallableFromCurNode, instructionsFormCut = true)
-          else {
-            if (DEBUG) {
-              println("Before filtering")
-              relInstrs.foreach(i => { ClassUtil.pp_instr(i, node.getIR); println })
-            }
-            val cfg = node.getIR.getControlFlowGraph
-            // perform backward BFS that terminates search along a path when it hits a relevant instruction
-            val iter =
-              new BFSIterator[ISSABasicBlock](cfg, cfg.exit()) {
-                override def getConnected(blk: ISSABasicBlock) =
-                  if (blk.exists(instr => relInstrs.contains(instr))) java.util.Collections.emptyIterator()
-                  // TODO: this isn't sound w.r.t exceptions--make sure none of the relevant instructions are
-                  // contained in a try block
-                  else cfg.getNormalPredecessors(blk).iterator()
-              }
-            val (filteredInstrs, reachedBlocks) = filterRelevantInstrsRec(iter, otherInstrs)
-            // if the filtering search did not reach the entry block, we found a cut in the CFG consisting only of
-            // relevant blocks
-            val relevantInstructionsFormCut = !reachedBlocks.contains(cfg.entry())
-            val finalRelevantInstrs =
-              if (relevantInstructionsFormCut) filteredInstrs else filteredInstrs ++ generatedInstrs
-            // this can happen in the case that a method always throws an exception at the end
-            //assert(!finalRelevantInstrs.isEmpty,
-              //     s"Filtered instructions empty--something went very wrong. IR ${node.getIR}")
-            if (DEBUG) {
-              println(s"Found relevant cut? $relevantInstructionsFormCut")
-              println("After filtering")
-              finalRelevantInstrs.foreach(i => { ClassUtil.pp_instr(i, node.getIR); println })
-            }
-            node ->
-              RelevantNodeInfo(finalRelevantInstrs, callableFromCurNode = isCallableFromCurNode,
-                               instructionsFormCut = relevantInstructionsFormCut)
+          // have some non-generated instructions, let's try to filter
+          if (DEBUG) {
+            println("Before filtering")
+            relInstrs.foreach(i => {
+              ClassUtil.pp_instr(i, node.getIR); println
+            })
           }
+          val cfg = node.getIR.getControlFlowGraph
+          // perform backward BFS that terminates search along a path when it hits a relevant instruction
+          val iter =
+            new BFSIterator[ISSABasicBlock](cfg, cfg.exit()) {
+              override def getConnected(blk: ISSABasicBlock) =
+                if (blk.exists(instr => relInstrs.contains(instr))) java.util.Collections.emptyIterator()
+                // TODO: this isn't sound w.r.t exceptions--make sure none of the relevant instructions are contained
+                // in a try block
+                else cfg.getNormalPredecessors(blk).iterator()
+            }
+          val (filteredInstrs, reachedBlocks) = filterRelevantInstrs(iter, otherInstrs)
+          // if the filtering search did not reach the entry block, we found a cut in the CFG consisting only of
+          // relevant blocks ad described in the comment above
+          val relevantInstructionsFormCut = !reachedBlocks.contains(cfg.entry())
+          val finalRelevantInstrs =
+            if (relevantInstructionsFormCut) filteredInstrs else filteredInstrs ++ generatedInstrs
+          // this assertion can fail in the case that a method always throws an exception at the end
+          //assert(!finalRelevantInstrs.isEmpty)
+          if (DEBUG) {
+            println(s"Found relevant cut? $relevantInstructionsFormCut")
+            println("After filtering")
+            finalRelevantInstrs.foreach(i => {
+              ClassUtil.pp_instr(i, node.getIR); println
+            })
+          }
+          node ->
+            RelevantNodeInfo(finalRelevantInstrs, callableFromCurNode = isCallableFromCurNode,
+              instructionsFormCut = relevantInstructionsFormCut)
         }
-      })
+      }
+    })
+  }
 
-    // we can filter if toFilter is a constructor o.<init>() and one of otherRelNodes is a method o.m()
-    def canFilterDueToConstructor(toFilter : CGNode, nodeRelevanceMap : Map[CGNode,RelevantNodeInfo]) : Boolean = {
-      val toFilterMethod = toFilter.getMethod
-      toFilterMethod.isInit &&
-        nodeRelevanceMap.keys.exists(n =>
-          n != toFilter && {
-            val m = n.getMethod
-            !m.isInit && !m.isClinit
-            m.getDeclaringClass == toFilterMethod.getDeclaringClass
-          } && nodeRelevanceMap(n).instructionsFormCut
-        )
-    }
+  /* @return true if in all concrete executions that call n2, n1 is called before n2. we write this as n1 < n2 */
+  // pre: nodeRelevantInfoMap(n1).instructionsFormCut && !isCallableFrom(n2, n1, cg)
+  def mustHappenBefore(n1 : CGNode, n2 : CGNode) : Boolean = (n1.getMethod, n2.getMethod) match {
+    case (m1, m2) if m1.isClinit && cha.isAssignableFrom(m1.getDeclaringClass, m2.getDeclaringClass) =>
+      // we can filter if m1 is a class initializer C.<clinit> and m2 is a method o.m2() where o : T and T <: C. this is
+      // true because the class initializer for C must run before any methods on objects of type T <: C
+      true
+      // TODO: get rid of the "has one constructor" restriction--we can be smarter while still being sound
+      // TODO: in addition, we can generalize this to "constructors and methods only called from constructors" with some care
+    case (m1, m2) if m1.isInit && m1.getDeclaringClass.getDeclaredMethods.filter(m => m.isInit).size == 1 &&
+                     cha.isAssignableFrom(m1.getDeclaringClass, m2.getDeclaringClass) =>
+      // we can filter if m1 is the *only* constructor for some class C and m2 is a non-constructor method o.m2() where
+      // where o : T and T <: C. this is true because since m1 is the only constructor for objects of type C, any method
+      // on objects T <: C must be called after the constructor
+      true
+    case _ => false
+  }
 
-    // similarly, we can filter if toFilter is a class initializer o.<clinit> and one of otherRelNodes is a method o.m()
-    def canFilterDueToClassInit(toFilter : CGNode, nodeRelevanceMap : Map[CGNode,RelevantNodeInfo]) : Boolean = {
-      val toFilterMethod = toFilter.getMethod
-      toFilterMethod.isClinit &&
-        nodeRelevanceMap.keys.exists(n =>
-          n != toFilter && n.getMethod.getDeclaringClass == toFilterMethod.getDeclaringClass &&
-          nodeRelevanceMap(n).instructionsFormCut
-        )
-    }
-
-    intraprocFilteredNodeModMap.foldLeft (Map.empty[CGNode,Set[SSAInstruction]]) ((m, entry) => {
+  def filterNodeRelevantInfoMapInterprocedural(nodeRelevantInfoMap : Map[CGNode,RelevantNodeInfo],
+                                               curNode : CGNode) : Map[CGNode,Set[SSAInstruction]] = {
+    nodeRelevantInfoMap.foldLeft (Map.empty[CGNode,Set[SSAInstruction]]) ((m, entry) => {
       val (toFilter, relInfo) = entry
       // can refute if there's no way to get from curNode to toFilter
       if (isNotBackwardReachableFrom(toFilter, curNode)) m
@@ -223,11 +223,13 @@ class ControlFeasibilityRelevanceRelation(cg : CallGraph, hg : HeapGraph[Instanc
         if (DEBUG) println(s"${ClassUtil.pretty(curNode)} callable from ${ClassUtil.pretty(toFilter)}, can't filter")
         m + (toFilter -> relInfo.relevantInstrs)
       } else
-        // try to filter
-        if (canFilterDueToConstructor(toFilter, intraprocFilteredNodeModMap) ||
-            canFilterDueToClassInit(toFilter, intraprocFilteredNodeModMap)) {
+        if (nodeRelevantInfoMap.exists(pair => {
+          val (n, nodeInfo) = pair
+          // try to prove that toFilter < middleNode < curNode; that is, in all concrete executions where curNode is
+          // called, middleNode must be called after toFilter and before curNode
+          n != toFilter && nodeInfo.instructionsFormCut && mustHappenBefore(toFilter, n) && mustHappenBefore(n, curNode)
+        })) {
           if (DEBUG) println(s"Filtered node $toFilter!")
-          // TODO: add canFilterDueToMethodOrdering
           m
         } else {
           if (DEBUG) println(s"Can't filter node $toFilter due to lack of ordering constraints. ${relInfo.relevantInstrs.size} rel instrs")
@@ -236,6 +238,22 @@ class ControlFeasibilityRelevanceRelation(cg : CallGraph, hg : HeapGraph[Instanc
     })
   }
 
+  // TODO: there's some unstated precondition on the kind of relevant instructions for being able to to do
+  // control-feasibility filtering at all...something like "constraints must be fields of the
+  // *same* object instance whose methods we are trying to filter, and writes to fields of that object must be through
+  // the "this" pointer, or something like that". alternatively, the class whose methods are under consideration is one
+  // that is somehow known or proven to have only one instance in existence at a time.
+  override def getNodeRelevantInstrsMap(q : Qry, ignoreLocalConstraints : Boolean) : Map[CGNode,Set[SSAInstruction]] = {
+    val nodeModifierMap = super.getNodeModifierMap(q, ignoreLocalConstraints)
+
+    val nodeModMapWithAssumes = getDominatingAssumesForRelevantInstructions(nodeModifierMap)
+    val curNode = q.node
+    val intraprocFilteredNodeModMap = filterNodeModMapIntraProcedural(nodeModMapWithAssumes, curNode)
+    filterNodeRelevantInfoMapInterprocedural(intraprocFilteredNodeModMap, curNode)
+  }
+
+  // from the relevant instructions, find the conditional instructions that may enclose the relevant instructions.
+  // later, we want to count the opposite (non-dominating) branch of these conditionals as relevant
   def getDominatingAssumesForRelevantInstructions(nodeInstrMap : Map[CGNode,Set[SSAInstruction]]) : Map[CGNode,Set[SSAInstruction]] = {
     def getDominatingCondBlks(blk : ISSABasicBlock,
                               cfg : PrunedCFG[SSAInstruction,ISSABasicBlock]) : Iterable[ISSABasicBlock] = {
