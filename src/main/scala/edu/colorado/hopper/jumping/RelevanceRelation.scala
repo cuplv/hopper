@@ -390,13 +390,13 @@ class RelevanceRelation(val cg : CallGraph, val hg : HeapGraph[InstanceKey], val
    * @return map of (modifier CG Node -> modifier commands for that CGNode)
    */
   def getNodeModifierMap(q : Qry, ignoreLocalConstraints : Boolean = false) : Map[CGNode,Set[SSAInstruction]] =
-    getProducerOrModifierMap(q, getNodeProducerOrModifierMapInternal, ignoreLocalConstraints, getMods = false)
+    getProducerOrModifierMap(q, getNodeProducerOrModifierMapInternal, ignoreLocalConstraints, getMods = true)
   
   /**
    * @return map of (constraint -> (modifier node, modifier commands))
    */
   def getConstraintModifierMap(q : Qry, ignoreLocalConstraints : Boolean = false) : Map[PtEdge,List[(CGNode,SSAInstruction)]] = 
-    getProducerOrModifierMap(q, getConstraintProducerOrModifierMapInternal, ignoreLocalConstraints, getMods = false)  
+    getProducerOrModifierMap(q, getConstraintProducerOrModifierMapInternal, ignoreLocalConstraints, getMods = true)
   
   /**
    * @return map of (producer CG Node -> producer commands for that CGNode)
