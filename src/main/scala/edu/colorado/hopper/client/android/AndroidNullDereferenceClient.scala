@@ -50,7 +50,7 @@ object AndroidNullDereferenceClient {
   }
 }
 
-class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhantom : Boolean = false)
+class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhantom : Boolean = true)
     extends DroidelClient(appPath, androidLib, useJPhantom) {
 
   val DEBUG = Options.SCALA_DEBUG
