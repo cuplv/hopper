@@ -3,7 +3,7 @@ package edu.colorado.hopper.jumping
 import com.ibm.wala.classLoader.IField
 import com.ibm.wala.ipa.callgraph.CGNode
 import com.ibm.wala.ssa.{IR, ISSABasicBlock}
-import edu.colorado.hopper.executor.UnstructuredSymbolicExecutor
+import edu.colorado.hopper.executor.{TransferFunctions, UnstructuredSymbolicExecutor}
 import edu.colorado.hopper.jumping.JumpingSymbolicExecutor._
 import edu.colorado.hopper.state._
 import edu.colorado.hopper.util.PtUtil
@@ -17,7 +17,7 @@ object JumpingSymbolicExecutor {
   private def DEBUG = false
 }
 
-class DefaultJumpingSymbolicExecutor(override val tf : JumpingTransferFunctions,
+class DefaultJumpingSymbolicExecutor(override val tf : TransferFunctions,
                                      override val rr : RelevanceRelation,
                                      override val keepLoopConstraints : Boolean = false)
   extends JumpingSymbolicExecutor {}

@@ -73,9 +73,6 @@ public class Options {
   @boolOpt(description = "Check null derefs", _default = false)
   public static boolean CHECK_NULLS = false;
 
-  @boolOpt(description = "Verification for Android UI components (currently under development)", _default = false)
-  public static boolean CHECK_ANDROID_UI = false;
-  
   // should we use Manu's demand cast checker to easily prove the safety of casts requiring context-sensitivity?
   @boolOpt(description = "Filter cast checking results using demand cast checker", _default = false)
   public static boolean USE_DEMAND_CAST_CHECKER = false;

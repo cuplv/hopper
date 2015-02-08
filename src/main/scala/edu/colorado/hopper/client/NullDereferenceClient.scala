@@ -7,7 +7,7 @@ import com.ibm.wala.ipa.callgraph.propagation._
 import com.ibm.wala.ssa._
 import com.ibm.wala.types.TypeReference
 import edu.colorado.hopper.executor.{DefaultSymbolicExecutor, TransferFunctions}
-import edu.colorado.hopper.jumping.{DefaultJumpingSymbolicExecutor, RelevanceRelation}
+import edu.colorado.hopper.jumping.{JumpingTransferFunctions, DefaultJumpingSymbolicExecutor, RelevanceRelation}
 import edu.colorado.hopper.state._
 import edu.colorado.hopper.util.PtUtil
 import edu.colorado.thresher.core.Options
@@ -17,6 +17,7 @@ import scala.collection.JavaConversions._
 import scala.io.Source
 import scala.xml.XML
 
+// TODO: refactor this to combine with/share code with Android nulls client
 /* specialized null dereference client that only checks for null derefs on fields/locals assigned to null literals at
  * some point during program execution */
 class NullDereferenceClient(appPath : String, libPath : Option[String], mainClass : String, mainMethod : String, 
@@ -53,12 +54,13 @@ class NullDereferenceClient(appPath : String, libPath : Option[String], mainClas
     println("proveSet size is " + proveSet.size)
     
     val walaRes = makeCallGraphAndPointsToAnalysis
-    val tf = new NullDereferenceTransferFunctions(walaRes)
     val exec =
-      if (Options.JUMPING_EXECUTION)
-        new DefaultJumpingSymbolicExecutor(tf, new RelevanceRelation(tf.cg, tf.hg, tf.hm, tf.cha))
-      else
-        new DefaultSymbolicExecutor(tf) {
+      if (Options.JUMPING_EXECUTION) {
+        val rr = new RelevanceRelation(walaRes.cg, walaRes.hg, walaRes.hm, walaRes.cha)
+        val tf = new JumpingTransferFunctions(walaRes.cg, walaRes.hg, walaRes.hm, walaRes.cha, rr)
+        new DefaultJumpingSymbolicExecutor(tf, rr)
+      } else
+        new DefaultSymbolicExecutor(new NullDereferenceTransferFunctions(walaRes)) {
           override def executeInstr(paths : List[Path], instr : SSAInstruction, blk : ISSABasicBlock, node : CGNode,
                                     cfg : SSACFG, isLoopBlk : Boolean, callStackSize : Int) : List[Path] = instr match {
             case i : SSAInvokeInstruction if !i.isStatic =>

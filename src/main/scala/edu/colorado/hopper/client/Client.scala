@@ -217,7 +217,7 @@ abstract class Client(appPath : String, libPath : Option[String], mainClass : St
     if (Options.JUMPING_EXECUTION) {
       val rr = new RelevanceRelation(walaRes.cg, walaRes.hg, walaRes.hm, walaRes.cha)
       val tf = new JumpingTransferFunctions(walaRes.cg, walaRes.hg, walaRes.hm, walaRes.cha, rr)
-      new DefaultJumpingSymbolicExecutor(tf, new RelevanceRelation(tf.cg, tf.hg, tf.hm, tf.cha))
+      new DefaultJumpingSymbolicExecutor(tf, rr)
     } else if (Options.SYNTHESIS)
       new SynthesisSymbolicExecutor(new SynthesisTransferFunctions(walaRes.cg, walaRes.hg, walaRes.hm, walaRes.cha))
     else new DefaultSymbolicExecutor(makeTransferFunctions(walaRes))

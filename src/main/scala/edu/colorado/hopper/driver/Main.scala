@@ -71,9 +71,6 @@ object Main {
     else if (Options.CHECK_ANDROID_DEREFS)
       new AndroidNullDereferenceClient(Options.APP, new File(Options.ANDROID_JAR))
       .checkNullDerefs()
-    else if (Options.CHECK_ANDROID_UI) {
-      new AndroidUIClient(Options.APP, new File(Options.ANDROID_JAR))
-      .doUICheck
-    } else println("No clients given. Exiting.")
+    else println("No clients given. Exiting.")
   }         
 }
