@@ -16,7 +16,8 @@ import scala.collection.JavaConversions._
 import scala.io.Source
 
 class ArrayBoundsClient(appPath : String, libPath : Option[String], mainClass : String, mainMethod : String, 
-    isRegression : Boolean = false) extends Client(appPath, libPath, mainClass, mainMethod, isRegression) {
+                        isRegression : Boolean = false)
+  extends Client(appPath, libPath, mainClass, mainMethod, isRegression) {
 
   // if true, report accesses as safe if they are guarded by an appropriate catch block
   val suppressCaughtExceptions = false
@@ -44,7 +45,6 @@ class ArrayBoundsClient(appPath : String, libPath : Option[String], mainClass : 
   def checkArrayBounds() : (Int, Int) = {
     // for dacapo only
     val proveSetFile = s"out_${Options.APP.substring(Options.APP.lastIndexOf('/') + 1)}.txt"
-    println(proveSetFile)
     val proveSet = parseProveList(proveSetFile)
     println("proveSet size is " + proveSet.size)
     
@@ -179,6 +179,8 @@ object ArrayBoundsClientTests extends ClientTests {
            "SystemExitNoOverflow", "SystemExitOverflow")
         //"ReverseOverflow", "ReverseNoOverflow" these don't work because they're underflow checks, not overflow checks
 
+    val pwFailOk = List("SystemExitNoOverflow")
+
     val regressionDir = "target/scala-2.10/test-classes/bounds/"
     var testNum = 0
   
@@ -204,11 +206,11 @@ object ArrayBoundsClientTests extends ClientTests {
       executionTimer.stop
           
       // TODO: do something more fine-grained here, since there can be more than one array access per test
-      if (test.contains("NoOverflow")) {
+      if (test.contains("NoOverflow") || (failCount > 0 && pwFailOk.contains(test)))
         assert(failCount == 0, s"Test $test failed.")
-      } else {
+      else
         assert(failCount != 0, s"Test $test failed.")
-      }   
+
       println("Test " + test + " (#" + testNum + ") passed!")
       testNum += 1
         

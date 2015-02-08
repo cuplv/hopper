@@ -127,13 +127,6 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
             if (PRINT_IR) println(callee.getIR())
             val (enterPaths, skipPaths) = pair
 
-            // this checks if the calls System.exit() directly.
-            // TODO: for maximal precision, we might want to check if System.exit() can be called transitively. don't want
-            // to try this without evaluating it, though
-            def mayDirectlyCallExitMethod() : Boolean =
-              (cg.getSuccNodes(callee).foldLeft (Set.empty[MethodReference]) ((s, n) =>
-                s + n.getMethod().getReference())).contains(Path.SYSTEM_EXIT)
-
             val qry = calleePath.qry
             if (tf.isDispatchFeasible(i, caller, qry) && tf.isRetvalFeasible(i, caller, callee, qry) &&
                 callee.getMethod().getReference() != Path.SYSTEM_EXIT) {
@@ -152,7 +145,7 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
                   )
                 tf.dropConstraintsFromInstructions(List(i), caller, qry, Some(callee))
                 (enterPaths, if (skipPaths.contains(calleePath)) skipPaths else calleePath :: skipPaths)
-              } else if (calleePath.isCallRelevant(i, caller, callee, tf) || mayDirectlyCallExitMethod)
+              } else if (calleePath.isCallRelevant(i, caller, callee, tf))
                 // calling enterCallee pushes callee onto call stack
                 (if (tf.enterCallee(i, calleePath.qry, calleePath.node, callee)) calleePath :: enterPaths else enterPaths,
                   skipPaths)
@@ -335,11 +328,10 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
           else List(p)
         case None => sys.error("Expecting call instruction, but found nothing: " + p.callStack)
       }
-      //if (p.qry.returnFromCall(p.blk.getLastInstruction.asInstanceOf[SSAInvokeInstruction], callee, oldPath, true) == null) Nil
   } ensuring (_.forall(newP => !(newP.callStackSize == 0)))
   
   def returnToCaller(paths : List[Path], passPaths : List[Path], failPaths : List[Path], 
-      test : Path => Boolean = Util.RET_TRUE) : (List[Path], List[Path]) = 
+                     test : Path => Boolean = Util.RET_TRUE) : (List[Path], List[Path]) =
     paths.foldLeft (passPaths, failPaths) ((pathPair, path) => {
       val (passPaths, failPaths) = pathPair
       val callee = path.node

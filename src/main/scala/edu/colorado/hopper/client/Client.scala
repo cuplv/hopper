@@ -6,21 +6,21 @@ import java.util.jar.JarFile
 import com.ibm.wala.analysis.pointers.HeapGraph
 import com.ibm.wala.classLoader.{BinaryDirectoryTreeModule, IClass, IMethod}
 import com.ibm.wala.ipa.callgraph.AnalysisOptions.ReflectionOptions
-import com.ibm.wala.ipa.callgraph.impl.{ArgumentTypeEntrypoint, DefaultEntrypoint}
-import com.ibm.wala.ipa.callgraph.propagation.{InstanceKey, PointerAnalysis}
-import com.ibm.wala.ipa.callgraph.propagation.cfa.ZeroXInstanceKeys
 import com.ibm.wala.ipa.callgraph._
+import com.ibm.wala.ipa.callgraph.impl.{ArgumentTypeEntrypoint, DefaultEntrypoint}
+import com.ibm.wala.ipa.callgraph.propagation.cfa.ZeroXInstanceKeys
+import com.ibm.wala.ipa.callgraph.propagation.{InstanceKey, PointerAnalysis}
 import com.ibm.wala.ipa.cha.{ClassHierarchy, IClassHierarchy}
 import com.ibm.wala.ssa.{InstanceOfPiPolicy, SSAOptions}
 import com.ibm.wala.types.ClassLoaderReference
 import com.ibm.wala.util.config.FileOfClasses
 import edu.colorado.hopper.client.Client._
 import edu.colorado.hopper.executor.{DefaultSymbolicExecutor, SymbolicExecutor, TransferFunctions}
-import edu.colorado.hopper.jumping.{DefaultJumpingSymbolicExecutor, RelevanceRelation}
+import edu.colorado.hopper.jumping.{JumpingTransferFunctions, DefaultJumpingSymbolicExecutor, RelevanceRelation}
 import edu.colorado.hopper.synthesis.{SynthesisSymbolicExecutor, SynthesisTransferFunctions}
 import edu.colorado.thresher.core._
-import edu.colorado.walautil.{ClassUtil, Timer, Util, WalaAnalysisResults}
 import edu.colorado.walautil.cg.ImprovedZeroXContainerCFABuilder
+import edu.colorado.walautil.{ClassUtil, Timer, Util, WalaAnalysisResults}
 
 import scala.collection.JavaConversions.{asJavaCollection, collectionAsScalaIterable, iterableAsScalaIterable}
 
@@ -215,7 +215,8 @@ abstract class Client(appPath : String, libPath : Option[String], mainClass : St
 
   def makeSymbolicExecutor(walaRes : WalaAnalysisResults) : SymbolicExecutor =
     if (Options.JUMPING_EXECUTION) {
-      val tf = makeTransferFunctions(walaRes)
+      val rr = new RelevanceRelation(walaRes.cg, walaRes.hg, walaRes.hm, walaRes.cha)
+      val tf = new JumpingTransferFunctions(walaRes.cg, walaRes.hg, walaRes.hm, walaRes.cha, rr)
       new DefaultJumpingSymbolicExecutor(tf, new RelevanceRelation(tf.cg, tf.hg, tf.hm, tf.cha))
     } else if (Options.SYNTHESIS)
       new SynthesisSymbolicExecutor(new SynthesisTransferFunctions(walaRes.cg, walaRes.hg, walaRes.hm, walaRes.cha))

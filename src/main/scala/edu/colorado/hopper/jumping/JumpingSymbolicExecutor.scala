@@ -3,15 +3,13 @@ package edu.colorado.hopper.jumping
 import com.ibm.wala.classLoader.IField
 import com.ibm.wala.ipa.callgraph.CGNode
 import com.ibm.wala.ssa.{IR, ISSABasicBlock}
-import edu.colorado.hopper.executor.{TransferFunctions, UnstructuredSymbolicExecutor}
+import edu.colorado.hopper.executor.UnstructuredSymbolicExecutor
 import edu.colorado.hopper.jumping.JumpingSymbolicExecutor._
 import edu.colorado.hopper.state._
 import edu.colorado.hopper.util.PtUtil
 import edu.colorado.thresher.core.Options
-import edu.colorado.walautil.Types.MSet
-import edu.colorado.walautil.Types.WalaBlock
-import edu.colorado.walautil.ClassUtil
-import edu.colorado.walautil.Util
+import edu.colorado.walautil.Types.{MSet, WalaBlock}
+import edu.colorado.walautil.{ClassUtil, Util}
 
 
 object JumpingSymbolicExecutor {
@@ -19,9 +17,9 @@ object JumpingSymbolicExecutor {
   private def DEBUG = false
 }
 
-class DefaultJumpingSymbolicExecutor(override val tf : TransferFunctions,
-                                       override val rr : RelevanceRelation,
-                                       override val keepLoopConstraints : Boolean = false)
+class DefaultJumpingSymbolicExecutor(override val tf : JumpingTransferFunctions,
+                                     override val rr : RelevanceRelation,
+                                     override val keepLoopConstraints : Boolean = false)
   extends JumpingSymbolicExecutor {}
 
 trait JumpingSymbolicExecutor extends UnstructuredSymbolicExecutor {

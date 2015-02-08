@@ -90,7 +90,9 @@ object TransferFunctions {
 class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm : HeapModel, val cha : IClassHierarchy) {
   val hm = new DelegatingExtendedHeapModel(_hm)
 
-  lazy val modRef : java.util.Map[CGNode,OrdinalSet[PointerKey]] = ModRef.make().computeMod(cg, hg.getPointerAnalysis)
+  //lazy val modRef : java.util.Map[CGNode,OrdinalSet[PointerKey]] = ModRef.make().computeMod(cg, hg.getPointerAnalysis)
+  val modRef : java.util.Map[CGNode,OrdinalSet[PointerKey]] =
+    if (Options.JUMPING_EXECUTION) null else ModRef.make().computeMod(cg, hg.getPointerAnalysis)
 
   /** look up the lhs of @param s in @param localConstraints, @return matching rhs var and edge if we find it */
   protected def getConstraintPtForDef(s : SSAInstruction, localConstraints : MSet[LocalPtEdge], n : CGNode) : Option[(ObjVar,LocalPtEdge)] =
@@ -1844,7 +1846,7 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
     }
 
   def isCallRelevant(i : SSAInvokeInstruction, caller : CGNode, callee : CGNode, qry : Qry) : Boolean =
-    isRetvalRelevant(i, caller, qry) ||
+    isRetvalRelevant(i, caller, qry) || mayDirectlyCallExitMethod(callee) ||
     dropCallConstraintsOrCheckCallRelevant(callee, qry.heapConstraints, dropConstraints = false, loopDrop = false, qry)
   
   def dropCallConstraints(qry : Qry, callee : CGNode,
@@ -1993,6 +1995,12 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
     }
 
   }
+
+  // this checks if the calls System.exit() directly.
+  // TODO: for maximal precision, we might want to check if System.exit() can be called transitively. don't want
+  // to try this without evaluating it, though
+  def mayDirectlyCallExitMethod(callee : CGNode) : Boolean =
+    cg.getSuccNodes(callee).exists(n => n.getMethod.getReference == Path.SYSTEM_EXIT)
   
   def dropLoopWriteableConstraints(qry : Qry, loopHead : ISSABasicBlock, n : CGNode) : Unit = {
     if (DEBUG) println("Doing loop drop for " + qry.id + " head " + loopHead)
@@ -2000,8 +2008,6 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
     dropConstraintsFromInstructions(loopInstrs, n, qry, callee = None,
       // do *not* flip loopDrop to true -- it causes problems
       loopDrop = false)
-
-
   }
               
 }

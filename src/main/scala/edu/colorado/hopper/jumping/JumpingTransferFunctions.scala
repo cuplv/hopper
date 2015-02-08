@@ -26,6 +26,7 @@ object JumpingTransferFunctions {
 
   def doesCalleeModifyHeap(callee : CGNode, qry : Qry, rr : RelevanceRelation, cg : CallGraph,
                            getReachable : (CallGraph, CGNode) => Set[CGNode] = defaultGetReachable) : Boolean = {
+
     // set of nodes reachable from call at i
     val calleeReachable = getReachable(cg, callee)
 
@@ -38,7 +39,6 @@ object JumpingTransferFunctions {
       // purposely getting producers rather than modifiers; we need to drop all constraints with producers in the callee in order to be sound,
       // but it is sound (and more precise) not to drop constraints that can cause a refutation in the callee
       val constraintModMap = rr.getConstraintModifierMap(qry, ignoreLocalConstraints = true)
-      //val constraintProdMap = rr.getConstraintProducerMap(qry, ignoreLocalConstraints = true)
       val kReachable = GraphUtil.kBFS(cg, callee, k)
 
       // TODO: could do something slightly more consistent here like only dropping when no nodes are k-reachable,
@@ -51,6 +51,7 @@ object JumpingTransferFunctions {
         calleeReachable.contains(node) && { // node is reachable from callee
           val isKReachable = kReachable.contains(node)
           if (!isKReachable && qry.heapConstraints.contains(entry._1) &&
+              //rr.getProducers(entry._1, qry).exists(pair => pair._1 == node))
               rr.getProducers(entry._1, qry).exists(pair => pair._1 == node))
             // if node not k-reachable from callee AND node contains a producer statement for the current constraint, the node is relevant
             qry.removeConstraint(entry._1) // node not k-reachable. drop constraints
@@ -107,10 +108,10 @@ object JumpingTransferFunctions {
 
 /** extension of ordinary Thresher transfer functions using the relevance relation to do some things more precisely/efficiently */
 class JumpingTransferFunctions(cg : CallGraph, hg : HeapGraph[InstanceKey], hm : HeapModel, cha : IClassHierarchy,
-                                 val rr : RelevanceRelation) extends TransferFunctions(cg, hg, hm, cha) {
+                               val rr : RelevanceRelation) extends TransferFunctions(cg, hg, hm, cha) {
 
   override def isCallRelevant(i : SSAInvokeInstruction, caller : CGNode, callee : CGNode, qry : Qry) : Boolean =
-    isRetvalRelevant(i, caller, qry) || doesCalleeModifyHeap(callee, qry, rr, cg)
+    isRetvalRelevant(i, caller, qry) || mayDirectlyCallExitMethod(callee) || doesCalleeModifyHeap(callee, qry, rr, cg)
 
   override def dropCallConstraints(qry : Qry, callee : CGNode,
                                    modRef : java.util.Map[CGNode,com.ibm.wala.util.intset.OrdinalSet[PointerKey]],

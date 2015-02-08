@@ -79,11 +79,18 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
             )
           }
 
+          // TODO: can be smarter here--reason about overides and calls to super
+          def methodsOnSameClass(m1 : IMethod, m2 : IMethod) =
+            m1.getDeclaringClass == m2.getDeclaringClass || m2.getDeclaringClass.getAllMethods.contains(m1)
+
           def androidSpecificMustHappenBefore(n1 : CGNode, n2 : CGNode) : Boolean = (n1.getMethod, n2.getMethod) match {
-            case (m1, m2) if isAndroidLifecycleType(m2.getDeclaringClass) &&
-                             // TODO: relax this equality restriction; we can use subclassing here, but it's complicated (involves checking method overriding)
-                             m1.getDeclaringClass == m2.getDeclaringClass =>
-              m1.isInit && isFrameworkTypeOnCreate(m2) // <init> always happens before onCreate
+            case (m1, m2) if m1.isInit && methodsOnSameClass(m1, m2) && isFrameworkTypeOnCreate(m2) =>
+              true // <init> always happens before onCreate
+            case (m1, m2) if !m1.isInit && methodsOnSameClass(m1, m2) && isFrameworkTypeOnCreate(m1) &&
+                             !m1.getDeclaringClass.getDeclaredMethods.exists(m =>
+                               m.isInit && cg.getNodes(m.getReference).exists(n => isCallableFrom(n2, n, cg))) =>
+              true // C.onCreate() gets called before any method C.m() that is not called from a constructor
+            // TODO: if m2 is a callback registered on class C, C.onCreate() happens before m2
             case _ => false
           }
 
