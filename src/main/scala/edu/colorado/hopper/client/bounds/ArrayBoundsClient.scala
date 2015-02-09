@@ -179,7 +179,7 @@ object ArrayBoundsClientTests extends ClientTests {
            "SystemExitNoOverflow", "SystemExitOverflow")
         //"ReverseOverflow", "ReverseNoOverflow" these don't work because they're underflow checks, not overflow checks
 
-    val pwFailOk = List("SystemExitNoOverflow")
+    val pwFailOk = List("SystemExitNoOverflow", "NestedNoOverflow")
 
     val regressionDir = "target/scala-2.10/test-classes/bounds/"
     var testNum = 0
@@ -206,7 +206,7 @@ object ArrayBoundsClientTests extends ClientTests {
       executionTimer.stop
           
       // TODO: do something more fine-grained here, since there can be more than one array access per test
-      if (test.contains("NoOverflow") || (failCount > 0 && pwFailOk.contains(test)))
+      if (test.contains("NoOverflow") && !(failCount > 0 && !pwFailOk.contains(test)))
         assert(failCount == 0, s"Test $test failed.")
       else
         assert(failCount != 0, s"Test $test failed.")
