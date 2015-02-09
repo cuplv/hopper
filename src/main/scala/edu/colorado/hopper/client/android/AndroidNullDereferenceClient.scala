@@ -79,10 +79,40 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
             )
           }
 
+          val callbackClasses =
+            appTransformer.getCallbackClasses().foldLeft (Set.empty[IClass]) ((s, t) => cha.lookupClass(t) match {
+              case null => s
+              case c =>
+                val subs = cha.computeSubClasses(t).foldLeft (s + c) ((s, sub) => s + sub)
+                cha.getImplementors(t).foldLeft (subs) ((s, impl) => s + impl)
+            })
+
+          def extendsOrImplementsCallbackClass(c : IClass) : Boolean = callbackClasses.contains(c)
+
+          // TODO: this is a hack. would be better to make a complete list. at the very least, make sure we have one
+          // register method for each callback type. on the other hand, we only lose precision (not soundness) by having
+          // a partial list here
+          val callbackRegisterMethods : Set[IMethod] =
+            cg.foldLeft (Set.empty[IMethod]) ((s, n) => {
+              val m = n.getMethod
+              val paramTypes = ClassUtil.getParameterTypes(m)
+              if (paramTypes.size == 2) {
+                cha.lookupClass(paramTypes.toList(1)) match {
+                  case null => s
+                  case secondArg =>
+                    if (appTransformer.isCallbackClass(secondArg)) s + m
+                    else s
+                }
+              } else s
+            })
+
+          def isCallbackRegisterMethod(m : IMethod) : Boolean = callbackRegisterMethods.contains(m)
+
           // TODO: can be smarter here--reason about overides and calls to super
           def methodsOnSameClass(m1 : IMethod, m2 : IMethod) =
             m1.getDeclaringClass == m2.getDeclaringClass || m2.getDeclaringClass.getAllMethods.contains(m1)
 
+          // TODO: add "happens-after" reasoning too -- for example, onDestroy typically happens after all other methods
           def androidSpecificMustHappenBefore(n1 : CGNode, n2 : CGNode) : Boolean = (n1.getMethod, n2.getMethod) match {
             case (m1, m2) if m1.isInit && methodsOnSameClass(m1, m2) && isFrameworkTypeOnCreate(m2) =>
               true // <init> always happens before onCreate
@@ -90,7 +120,33 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
                              !m1.getDeclaringClass.getDeclaredMethods.exists(m =>
                                m.isInit && cg.getNodes(m.getReference).exists(n => isCallableFrom(n2, n, cg))) =>
               true // C.onCreate() gets called before any method C.m() that is not called from a constructor
-            // TODO: if m2 is a callback registered on class C, C.onCreate() happens before m2
+            // TODO: if m2 is a callback registered in method C.m(), C.onCreate() and C.m() happen before m2
+            case (m1, m2) if extendsOrImplementsCallbackClass(m2.getDeclaringClass) =>
+              // find methods M_reg where m2 may registered. happens-before constraints that hold on (m1, m_reg) for
+              // *all* m_reg in M-reg also hold for (m1, m2)
+              val thisLPK = hm.getPointerKeyForLocal(n2, IRUtil.thisVar)
+              // find callback registration methods whose parameters may be bound to this callback object
+              val nodesThatMayRegisterCb =
+                hg.getSuccNodes(thisLPK).foldLeft (Set.empty[CGNode]) ((s, k) =>
+                  hg.getPredNodes(k).foldLeft (s) ((s, k) => k match {
+                    case l : LocalPointerKey =>
+                      val n = l.getNode
+                      if (isCallbackRegisterMethod(n.getMethod)) s + n
+                      else s
+                    case _ => s
+                  })
+                )
+              // find application-scope methods that call the cb register method
+              val cbRegisterCallers =
+                nodesThatMayRegisterCb.foldLeft (Set.empty[CGNode]) ((s, n) =>
+                  cg.getPredNodes(n).foldLeft (s) ((s, n) => if (!ClassUtil.isLibrary(n)) s + n else s)
+                )
+              // if n1 must happen before all methods that register the callback, then the n1 must happen before the
+              // callback is invoked
+              !cbRegisterCallers.isEmpty &&
+              cbRegisterCallers.forall(caller => caller == n1 || (caller != n2 && !isCallableFrom(caller, n1, cg) &&
+                                                                  mustHappenBefore(n1, caller)))
+            // TODO: Application.onCreate() gets called before any other lifecycle methods
             case _ => false
           }
 
@@ -104,7 +160,7 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
   val tf = new NullDereferenceTransferFunctions(walaRes, new File(s"$appPath/nit_annots.xml")) {
 
     def useMayBeRelevantToQuery(use : Int, qry : Qry, n : CGNode, hm : HeapModel,
-                                 hg : HeapGraph[InstanceKey]) : Boolean = {
+                                hg : HeapGraph[InstanceKey]) : Boolean = {
       val tbl = n.getIR.getSymbolTable
       !tbl.isConstant(use) && {
         val lpk = Var.makeLPK(use, n, hm)
@@ -190,7 +246,7 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
               unfilteredPiecewisePaths.filter(p => !piecewiseInvMap.pathEntailsInv((p.node, p.blk, p.index), p))
             if (DEBUG) {
               println("got " + piecewisePaths.size + " piecewise paths:")
-              piecewisePaths.foreach(p => print(p.id + "X :" + ClassUtil.pretty(p.node) + ",\n" + p)); println
+              piecewisePaths.foreach(p => print(s"\n{$p.id} X : ${ClassUtil.pretty(p.node)}\n$p")); println
             }
             piecewisePaths
           case None => super.returnFromCall(p)
@@ -222,6 +278,7 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
               // have access path originating from non-this param and not at an entrypoint callback, don't jump
               if (accessPathRootedInNonThisParam && !isEntrypointCallback(p.node)) super.returnFromCall(p)
               else { // have access path originating from this or at entrypoint callback, jump
+                // TODO: remove inner class this constraints?
                 if (DEBUG) println(s"have complete access path or at function boundary of entrypoint cb ${p.node}")
                 // weaken query by removing all constraints but access path, then jump
                 qry.heapConstraints.foreach(e => if (!keepEdges.contains(e)) qry.removeHeapConstraint(e))
@@ -306,7 +363,6 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
       // TODO: tmp, just for testing
       val checkClass = if (Options.MAIN_CLASS == "Main") true else n.getMethod.getDeclaringClass.getName.toString.contains(Options.MAIN_CLASS)
       val checkMethod = if (Options.MAIN_METHOD == "main") true else n.getMethod.getName.toString == Options.MAIN_METHOD
-      //println("Node is " + ClassUtil.pretty(n) + " checkClass " + checkClass + " checkMethod " + checkMethod)
       checkClass && checkMethod && !ClassUtil.isLibrary(n)
     }
 
@@ -341,7 +397,7 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
 object AndroidNullDereferenceClientTests extends ClientTests {
 
   override def runRegressionTests() : Unit = {
-    val tests = List("InitRefute", "InitNoRefute")
+    val tests = List("InitRefute", "InitNoRefute", "OnCreateRefute", "OnCreateNoRefute", "CbRefute", "CbNoRefute")
 
     val regressionDir = "src/test/java/nulls/"
     val regressionBinDir = "target/scala-2.10/test-classes/nulls/"
@@ -376,7 +432,7 @@ object AndroidNullDereferenceClientTests extends ClientTests {
       }
 
       executionTimer.stop
-      assert(derefsChecked > 0, "Expected to check >0 derefs")
+      assert(derefsChecked > 0, "Expected to check >0 derefs!")
       val mayFail = mayFailCount > 0
       // tests that we aren't meant to refute have NoRefute in name
       val expectedResult = test.contains("NoRefute")

@@ -7,11 +7,10 @@ import com.ibm.wala.ipa.cfg.PrunedCFG
 import com.ibm.wala.ipa.cha.IClassHierarchy
 import com.ibm.wala.ssa._
 import com.ibm.wala.util.graph.dominators.Dominators
-import com.ibm.wala.util.graph.traverse.{BFSIterator, BFSPathFinder, DFS}
+import com.ibm.wala.util.graph.traverse.{BFSIterator, BFSPathFinder}
 import com.ibm.wala.util.intset.OrdinalSet
 import edu.colorado.hopper.state._
-import edu.colorado.walautil.{CFGUtil, ClassUtil, IRUtil}
-import edu.colorado.walautil.GraphUtil
+import edu.colorado.walautil.{CFGUtil, ClassUtil, GraphUtil, IRUtil}
 
 import scala.collection.JavaConversions._
 
@@ -26,7 +25,7 @@ class ControlFeasibilityRelevanceRelation(cg : CallGraph, hg : HeapGraph[Instanc
                                           cgTransitiveClosure : java.util.Map[CGNode,OrdinalSet[CGNode]] = null)
   extends RelevanceRelation(cg, hg, hm, cha, cgTransitiveClosure) {
 
-  val DEBUG = false
+  val DEBUG = true
 
   /** return Some(paths) if we should jump, None if we should not jump */
   override def getPiecewisePaths(p : Path, jmpNum : Int) : Option[List[Path]] = {
@@ -214,7 +213,7 @@ class ControlFeasibilityRelevanceRelation(cg : CallGraph, hg : HeapGraph[Instanc
   }
 
   def filterNodeRelevantInfoMapInterprocedural(nodeRelevantInfoMap : Map[CGNode,RelevantNodeInfo],
-                                               curNode : CGNode) : Map[CGNode,Set[SSAInstruction]] = {
+                                               curNode : CGNode) : Map[CGNode,Set[SSAInstruction]] =
     nodeRelevantInfoMap.foldLeft (Map.empty[CGNode,Set[SSAInstruction]]) ((m, entry) => {
       val (toFilter, relInfo) = entry
       // can refute if there's no way to get from curNode to toFilter
@@ -236,7 +235,6 @@ class ControlFeasibilityRelevanceRelation(cg : CallGraph, hg : HeapGraph[Instanc
           m + (toFilter -> relInfo.relevantInstrs)
         }
     })
-  }
 
   // TODO: there's some unstated precondition on the kind of relevant instructions for being able to to do
   // control-feasibility filtering at all...something like "constraints must be fields of the
