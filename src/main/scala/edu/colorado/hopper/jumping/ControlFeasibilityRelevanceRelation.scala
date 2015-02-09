@@ -10,6 +10,7 @@ import com.ibm.wala.util.graph.dominators.Dominators
 import com.ibm.wala.util.graph.traverse.{BFSIterator, BFSPathFinder}
 import com.ibm.wala.util.intset.OrdinalSet
 import edu.colorado.hopper.state._
+import edu.colorado.thresher.core.Options
 import edu.colorado.walautil.{CFGUtil, ClassUtil, GraphUtil, IRUtil}
 
 import scala.collection.JavaConversions._
@@ -25,7 +26,7 @@ class ControlFeasibilityRelevanceRelation(cg : CallGraph, hg : HeapGraph[Instanc
                                           cgTransitiveClosure : java.util.Map[CGNode,OrdinalSet[CGNode]] = null)
   extends RelevanceRelation(cg, hg, hm, cha, cgTransitiveClosure) {
 
-  val DEBUG = true
+  val DEBUG = Options.SCALA_DEBUG
 
   /** return Some(paths) if we should jump, None if we should not jump */
   override def getPiecewisePaths(p : Path, jmpNum : Int) : Option[List[Path]] = {

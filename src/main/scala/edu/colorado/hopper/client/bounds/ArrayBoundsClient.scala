@@ -6,7 +6,7 @@ import com.ibm.wala.ipa.callgraph.CGNode
 import com.ibm.wala.ssa.{SSAArrayReferenceInstruction, SSANewInstruction}
 import com.ibm.wala.types.TypeReference
 import edu.colorado.hopper.client.{Client, ClientTests}
-import edu.colorado.hopper.jumping.RelevanceRelation
+import edu.colorado.hopper.jumping.{JumpingTransferFunctions, RelevanceRelation}
 import edu.colorado.hopper.state.{Fld, IntVal, ObjVar, PtEdge, Pure, Qry, Var}
 import edu.colorado.hopper.util._
 import edu.colorado.thresher.core.Options
@@ -49,11 +49,12 @@ class ArrayBoundsClient(appPath : String, libPath : Option[String], mainClass : 
     println("proveSet size is " + proveSet.size)
     
     val walaRes = makeCallGraphAndPointsToAnalysis
-    val tf = new ArrayBoundsTransferFunctions(walaRes)
     val exec = 
-      if (Options.JUMPING_EXECUTION)
-        new JumpingArrayBoundsSymbolicExecutor(tf, new RelevanceRelation(tf.cg, tf.hg, tf.hm, tf.cha))
-      else new DefaultArrayBoundsSymbolicExecutor(tf)
+      if (Options.JUMPING_EXECUTION) {
+        val rr = new RelevanceRelation(walaRes.cg, walaRes.hg, walaRes.hm, walaRes.cha)
+        val tf = new JumpingTransferFunctions(walaRes.cg, walaRes.hg, walaRes.hm, walaRes.cha, rr)
+        new JumpingArrayBoundsSymbolicExecutor(tf, rr)
+      } else new DefaultArrayBoundsSymbolicExecutor(new ArrayBoundsTransferFunctions(walaRes))
 
     import walaRes._
 
@@ -144,8 +145,7 @@ class ArrayBoundsClient(appPath : String, libPath : Option[String], mainClass : 
                 } catch {
                   case e : Throwable =>
                     println(s"Error on access # $total $e \n${e.getStackTraceString}")
-                    if (Options.SCALA_DEBUG) throw e
-                    else true // soundly assume we got a witness
+                    throw e
                 }
               } 
             }

@@ -5,6 +5,7 @@ import java.io.File
 import com.ibm.wala.analysis.pointers.HeapGraph
 import com.ibm.wala.classLoader.{IMethod, IField, IClass}
 import com.ibm.wala.demandpa.alg.BudgetExceededException
+import com.ibm.wala.ipa.callgraph.impl.FakeRootClass
 import com.ibm.wala.ipa.callgraph.{CallGraph, CGNode}
 import com.ibm.wala.ipa.callgraph.propagation._
 import com.ibm.wala.ipa.modref.ModRef
@@ -110,7 +111,8 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
 
           // TODO: can be smarter here--reason about overides and calls to super
           def methodsOnSameClass(m1 : IMethod, m2 : IMethod) =
-            m1.getDeclaringClass == m2.getDeclaringClass || m2.getDeclaringClass.getAllMethods.contains(m1)
+            !m1.isSynthetic && !m2.isSynthetic &&
+            (m1.getDeclaringClass == m2.getDeclaringClass || m2.getDeclaringClass.getAllMethods.contains(m1))
 
           // TODO: add "happens-after" reasoning too -- for example, onDestroy typically happens after all other methods
           def androidSpecificMustHappenBefore(n1 : CGNode, n2 : CGNode) : Boolean = (n1.getMethod, n2.getMethod) match {
@@ -245,8 +247,8 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
             val piecewisePaths =
               unfilteredPiecewisePaths.filter(p => !piecewiseInvMap.pathEntailsInv((p.node, p.blk, p.index), p))
             if (DEBUG) {
-              println("got " + piecewisePaths.size + " piecewise paths:")
-              piecewisePaths.foreach(p => print(s"\n{$p.id} X : ${ClassUtil.pretty(p.node)}\n$p")); println
+              println(s"got ${piecewisePaths.size} piecewise paths:")
+              piecewisePaths.foreach(p => print(s"\n${p.id}X : ${ClassUtil.pretty(p.node)}\n$p")); println
             }
             piecewisePaths
           case None => super.returnFromCall(p)
@@ -414,6 +416,7 @@ object AndroidNullDereferenceClientTests extends ClientTests {
       testNum += 1
       val path = regressionDir + test
       val classesPathPrefix = s"$path/bin"
+      if (new File(classesPathPrefix).exists()) Process(Seq("rm", "-r", classesPathPrefix)).!!
       val binPath = s"$regressionBinDir$test"
       val classesPath = s"$classesPathPrefix/classes/nulls/"
       println("Running test " + testNum + ": " + test)
