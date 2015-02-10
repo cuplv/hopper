@@ -159,7 +159,7 @@ class ControlFeasibilityRelevanceRelation(cg : CallGraph, hg : HeapGraph[Instanc
           if (DEBUG) {
             println("Before filtering")
             relInstrs.foreach(i => {
-              ClassUtil.pp_instr(i, node.getIR); println
+              print(s"${ClassUtil.pretty(node)}:"); ClassUtil.pp_instr(i, node.getIR); println
             })
           }
           val cfg = node.getIR.getControlFlowGraph
@@ -229,7 +229,7 @@ class ControlFeasibilityRelevanceRelation(cg : CallGraph, hg : HeapGraph[Instanc
           // called, middleNode must be called after toFilter and before curNode
           n != toFilter && nodeInfo.instructionsFormCut && mustHappenBefore(toFilter, n) && mustHappenBefore(n, curNode)
         })) {
-          if (DEBUG) println(s"Filtered node $toFilter!")
+          if (DEBUG) println(s"Filtered node ${ClassUtil.pretty(toFilter)}!")
           m
         } else {
           if (DEBUG) println(s"Can't filter node $toFilter due to lack of ordering constraints. ${relInfo.relevantInstrs.size} rel instrs")
@@ -244,7 +244,6 @@ class ControlFeasibilityRelevanceRelation(cg : CallGraph, hg : HeapGraph[Instanc
   // that is somehow known or proven to have only one instance in existence at a time.
   override def getNodeRelevantInstrsMap(q : Qry, ignoreLocalConstraints : Boolean) : Map[CGNode,Set[SSAInstruction]] = {
     val nodeModifierMap = super.getNodeModifierMap(q, ignoreLocalConstraints)
-
     val nodeModMapWithAssumes = getDominatingAssumesForRelevantInstructions(nodeModifierMap)
     val curNode = q.node
     val intraprocFilteredNodeModMap = filterNodeModMapIntraProcedural(nodeModMapWithAssumes, curNode)

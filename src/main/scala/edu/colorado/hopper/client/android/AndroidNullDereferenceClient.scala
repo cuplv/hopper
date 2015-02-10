@@ -60,6 +60,31 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
       if (Options.CONTROL_FEASIBILITY)
         new ControlFeasibilityRelevanceRelation(walaRes.cg, walaRes.hg, walaRes.hm, walaRes.cha) {
 
+          val callbackClasses =
+            appTransformer.getCallbackClasses().foldLeft (Set.empty[IClass]) ((s, t) => cha.lookupClass(t) match {
+              case null => s
+              case c =>
+                val subs = cha.computeSubClasses(t).foldLeft (s + c) ((s, sub) => s + sub)
+                cha.getImplementors(t).foldLeft (subs) ((s, impl) => s + impl)
+            })
+
+          // TODO: this is a hack. would be better to make a complete list. at the very least, make sure we have one
+          // register method for each callback type. on the other hand, we only lose precision (not soundness) by having
+          // a partial list here
+          val callbackRegisterMethods : Set[IMethod] =
+            cg.foldLeft (Set.empty[IMethod]) ((s, n) => {
+              val m = n.getMethod
+              val paramTypes = ClassUtil.getParameterTypes(m)
+              if (paramTypes.size == 2) {
+                cha.lookupClass(paramTypes.toList(1)) match {
+                  case null => s
+                  case secondArg =>
+                    if (appTransformer.isCallbackClass(secondArg)) s + m
+                    else s
+                }
+              } else s
+            })
+
           def isAndroidLifecycleType(c : IClass) : Boolean =
             AndroidLifecycle.getOrCreateFrameworkCreatedClasses(cha).exists(androidClass =>
               cha.isAssignableFrom(c, androidClass)
@@ -80,64 +105,121 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
             )
           }
 
-          val callbackClasses =
-            appTransformer.getCallbackClasses().foldLeft (Set.empty[IClass]) ((s, t) => cha.lookupClass(t) match {
-              case null => s
-              case c =>
-                val subs = cha.computeSubClasses(t).foldLeft (s + c) ((s, sub) => s + sub)
-                cha.getImplementors(t).foldLeft (subs) ((s, impl) => s + impl)
-            })
+          /** @return true if callee is called on all paths from the entry block of @param caller */
+          def mustBeCalledFrom(callee : CGNode, caller : CGNode) : Boolean = {
+            val ir = caller.getIR
+            println(ir)
+            val cfg = ir.getControlFlowGraph
+            val siteBlks =
+              cg.getPossibleSites(caller, callee).foldLeft(Set.empty[ISSABasicBlock])((siteBlks, site) =>
+                ir.getBasicBlocksForCall(site).foldLeft (siteBlks) ((siteBlks, blk) => siteBlks + blk))
+            val exitBlks = cfg.getNormalPredecessors(cfg.exit()).toSet
+            !siteBlks.intersect(exitBlks).isEmpty || {
+              // check that these siteBlks as a set postdominate the entry block
+              val iter =
+                new BFSIterator[ISSABasicBlock](cfg, cfg.entry()) {
+                  override def getConnected(b: ISSABasicBlock): java.util.Iterator[_ <: ISSABasicBlock] =
+                    cfg.getNormalSuccessors(b).iterator().filter(b => !siteBlks.contains(b))
+                }
+              // siteBlks postdominate the entry block if BFS-ing forward from the entry block and stopping when we hit
+              // a siteBlk does not allow us to reach the exit block
+              GraphUtil.bfsIterFold(iter, true, ((notReachedExit: Boolean, blk: ISSABasicBlock) =>
+                                                  notReachedExit && !exitBlks.contains(blk)))
+            }
+          }
+
+          // TODO: want this for "is only called from constructor" and "is only called from onCreate". but we have to be
+          // careful: we have to look at the IR to make sure this is called unconditionally as well as looking at the call graph
+          /* @return true if when we walking backward from @param callee, we hit a node satisfying @param pred on all
+           * paths wtihout hitting a node satisfying @param stopPred first */
+          // we have to be careful with this: need to look at the IR via isOnlyCalledFrom to be sure that callee is
+          // called unconditionally
+          def isOnlyCalledFrom(callee : CGNode, pred : (CGNode => Boolean), stopPred : (CGNode => Boolean)) : Boolean = {
+
+            @annotation.tailrec
+            def isOnlyCalledFromRec(worklist : List[(CGNode,CGNode)], seen : Set[(CGNode, CGNode)]) : Boolean =
+                worklist match {
+                case Nil => true
+                case (callee, caller) :: worklist =>
+                  if (stopPred(caller)) false
+                  else if (mustBeCalledFrom(callee, caller))
+                    if (pred(caller)) isOnlyCalledFromRec(worklist, seen)
+                    else {
+                      val (newWorklist, newSeen) =
+                        cg.getPredNodes(caller).foldLeft(worklist, seen)((pair, n) => {
+                          val (worklist, seen) = pair
+                          val calleeCallerPair = (caller, n)
+                          if (!seen.contains(calleeCallerPair)) (calleeCallerPair :: worklist, seen + calleeCallerPair)
+                          else pair
+                        })
+                      isOnlyCalledFromRec(newWorklist, newSeen)
+                    }
+                  else false
+            }
+
+            val predecessors = cg.getPredNodes(callee).toList.map(caller => (callee, caller))
+            isOnlyCalledFromRec(predecessors, predecessors.toSet)
+          }
+
+          private def stopAtLibraryBoundary(n : CGNode) = ClassUtil.isLibrary(n)
+
+          def isOnlyCalledFromConstructor(callee : CGNode) : Boolean = {
+            val calleeMethod = callee.getMethod
+            def isConstructor(n : CGNode) = {
+              val m = n.getMethod
+              m.isInit && methodsOnSameClass(m, calleeMethod)
+            }
+            isOnlyCalledFrom(callee, isConstructor, stopAtLibraryBoundary)
+          }
+
+          def isOnlyCalledFromOnCreate(callee : CGNode) : Boolean = {
+            val calleeMethod = callee.getMethod
+            def isOnCreate(n : CGNode) = {
+              val m = n.getMethod
+              isFrameworkTypeOnCreate(m) && methodsOnSameClass(m, calleeMethod)
+            }
+            isOnlyCalledFrom(callee, isOnCreate, stopAtLibraryBoundary)
+          }
 
           def extendsOrImplementsCallbackClass(c : IClass) : Boolean = callbackClasses.contains(c)
 
-          // TODO: this is a hack. would be better to make a complete list. at the very least, make sure we have one
-          // register method for each callback type. on the other hand, we only lose precision (not soundness) by having
-          // a partial list here
-          val callbackRegisterMethods : Set[IMethod] =
-            cg.foldLeft (Set.empty[IMethod]) ((s, n) => {
-              val m = n.getMethod
-              val paramTypes = ClassUtil.getParameterTypes(m)
-              if (paramTypes.size == 2) {
-                cha.lookupClass(paramTypes.toList(1)) match {
-                  case null => s
-                  case secondArg =>
-                    if (appTransformer.isCallbackClass(secondArg)) s + m
-                    else s
-                }
-              } else s
-            })
-
           def isCallbackRegisterMethod(m : IMethod) : Boolean = callbackRegisterMethods.contains(m)
+
+          def getNodesThatMayRegisterCb(cb : PointerKey) : Set[CGNode] =
+            hg.getSuccNodes(cb).foldLeft(Set.empty[CGNode])((s, k) =>
+              hg.getPredNodes(k).foldLeft(s)((s, k) => k match {
+                case l: LocalPointerKey =>
+                  val n = l.getNode
+                  if (isCallbackRegisterMethod(n.getMethod)) s + n
+                  else s
+                case _ => s
+              })
+            )
 
           // TODO: can be smarter here--reason about overides and calls to super
           def methodsOnSameClass(m1 : IMethod, m2 : IMethod) =
             !m1.isSynthetic && !m2.isSynthetic &&
             (m1.getDeclaringClass == m2.getDeclaringClass || m2.getDeclaringClass.getAllMethods.contains(m1))
 
-          // TODO: add "happens-after" reasoning too -- for example, onDestroy typically happens after all other methods
+          // TODO: restructure this to avoid redundant computation
           def androidSpecificMustHappenBefore(n1 : CGNode, n2 : CGNode) : Boolean = (n1.getMethod, n2.getMethod) match {
             case (m1, m2) if m1.isInit && methodsOnSameClass(m1, m2) && isFrameworkTypeOnCreate(m2) =>
               true // <init> always happens before onCreate
-            case (m1, m2) if !m1.isInit && methodsOnSameClass(m1, m2) && isFrameworkTypeOnCreate(m1) &&
+            case (m1, m2) if methodsOnSameClass(m1, m2) && isOnlyCalledFromConstructor(n1) &&
+                             (isFrameworkTypeOnCreate(m2) || isOnlyCalledFromOnCreate(n2)) =>
+              true // similar to previous case, but for methods always called only from <init>
+            case (m1, m2) if !m2.isInit && methodsOnSameClass(m1, m2) && isFrameworkTypeOnCreate(m1) &&
                              !m1.getDeclaringClass.getDeclaredMethods.exists(m =>
                                m.isInit && cg.getNodes(m.getReference).exists(n => isCallableFrom(n2, n, cg))) =>
               true // C.onCreate() gets called before any method C.m() that is not called from a constructor
-            // TODO: if m2 is a callback registered in method C.m(), C.onCreate() and C.m() happen before m2
+            case (m1, m2) if !m2.isInit && methodsOnSameClass(m1, m2) && isOnlyCalledFromOnCreate(n1) =>
+              true // similar to previous case, but for methods called only from onCreate()
             case (m1, m2) if extendsOrImplementsCallbackClass(m2.getDeclaringClass) =>
-              // find methods M_reg where m2 may registered. happens-before constraints that hold on (m1, m_reg) for
-              // *all* m_reg in M-reg also hold for (m1, m2)
-              val thisLPK = hm.getPointerKeyForLocal(n2, IRUtil.thisVar)
+              // find methods M_reg where m2 may be registered. happens-before constraints that hold on (m1, m_reg) for
+              // *all* m_reg in M-reg also hold for (m1, m2).
               // find callback registration methods whose parameters may be bound to this callback object
-              val nodesThatMayRegisterCb =
-                hg.getSuccNodes(thisLPK).foldLeft (Set.empty[CGNode]) ((s, k) =>
-                  hg.getPredNodes(k).foldLeft (s) ((s, k) => k match {
-                    case l : LocalPointerKey =>
-                      val n = l.getNode
-                      if (isCallbackRegisterMethod(n.getMethod)) s + n
-                      else s
-                    case _ => s
-                  })
-                )
+              val cbObj = hm.getPointerKeyForLocal(n2, IRUtil.thisVar)
+              val nodesThatMayRegisterCb = getNodesThatMayRegisterCb(cbObj)
               // find application-scope methods that call the cb register method
               val cbRegisterCallers =
                 nodesThatMayRegisterCb.foldLeft (Set.empty[CGNode]) ((s, n) =>
@@ -154,6 +236,7 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
 
           override def mustHappenBefore(n1 : CGNode, n2 : CGNode) : Boolean =
             androidSpecificMustHappenBefore(n1, n2) || super.mustHappenBefore(n1, n2)
+
         }
 
       else new RelevanceRelation(walaRes.cg, walaRes.hg, walaRes.hm, walaRes.cha)
@@ -399,7 +482,9 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
 object AndroidNullDereferenceClientTests extends ClientTests {
 
   override def runRegressionTests() : Unit = {
-    val tests = List("InitRefute", "InitNoRefute", "OnCreateRefute", "OnCreateNoRefute", "CbRefute", "CbNoRefute")
+    val tests =
+      List("InitRefute", "InitNoRefute", "OnCreateRefute", "OnCreateNoRefute", "CbRefute", "CbNoRefute",
+           "OnCreateCalleeRefute", "OnCreateCalleeNoRefute")
 
     val regressionDir = "src/test/java/nulls/"
     val regressionBinDir = "target/scala-2.10/test-classes/nulls/"
@@ -435,6 +520,7 @@ object AndroidNullDereferenceClientTests extends ClientTests {
       }
 
       executionTimer.stop
+      Process(Seq("rm", "-r", classesPathPrefix)).!!
       assert(derefsChecked > 0, "Expected to check >0 derefs!")
       val mayFail = mayFailCount > 0
       // tests that we aren't meant to refute have NoRefute in name
@@ -448,7 +534,6 @@ object AndroidNullDereferenceClientTests extends ClientTests {
 
       println(s"Test took ${executionTimer.time.toInt} seconds.")
       println(s"Execution time ${executionTimer.time}")
-      Process(Seq("rm", "-r", classesPathPrefix)).!!
       edu.colorado.thresher.core.WALACFGUtil.clearCaches()
       LoopUtil.clearCaches
       executionTimer.clear
