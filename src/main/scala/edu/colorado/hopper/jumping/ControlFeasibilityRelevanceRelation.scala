@@ -1,6 +1,7 @@
 package edu.colorado.hopper.jumping
 
 import com.ibm.wala.analysis.pointers.HeapGraph
+import com.ibm.wala.classLoader.IMethod
 import com.ibm.wala.ipa.callgraph.propagation.{HeapModel, InstanceKey, LocalPointerKey, PointerKey}
 import com.ibm.wala.ipa.callgraph.{CGNode, CallGraph}
 import com.ibm.wala.ipa.cfg.PrunedCFG
@@ -195,6 +196,27 @@ class ControlFeasibilityRelevanceRelation(cg : CallGraph, hg : HeapGraph[Instanc
     })
   }
 
+  def calledFromAllConstructors(constructor : IMethod) : Boolean = {
+    require(constructor.isInit)
+    val allConstructors =
+      constructor.getDeclaringClass.getDeclaredMethods.filter(m => m.isInit && m != constructor).toSet
+    // can look at just CG here (no IR) since we can only call a constructor from another constructor in straightline
+    // code
+    def isCalledFromAllConstructors() : Boolean = {
+      val constructorNodes = cg.getNodes(constructor.getReference)
+      val iter =
+        new BFSIterator[CGNode](cg, constructorNodes.iterator()) {
+          override def getConnected(n : CGNode) : java.util.Iterator[_ <: CGNode] =
+            cg.getPredNodes(n).filter(n => n.getMethod.isInit)
+        }
+      val visitedConstructors =
+        GraphUtil.bfsIterFold(iter, Set.empty[IMethod], ((s : Set[IMethod], n : CGNode) => s + n.getMethod))
+      allConstructors.subsetOf(visitedConstructors)
+    }
+    // if allConstructors.isEmpty, constructor is the only constructor and is trivially called by all constructors
+    allConstructors.isEmpty || isCalledFromAllConstructors()
+  }
+
   /* @return true if in all concrete executions that call n2, n1 is called before n2. we write this as n1 < n2 */
   // pre: nodeRelevantInfoMap(n1).instructionsFormCut && !isCallableFrom(n2, n1, cg)
   def mustHappenBefore(n1 : CGNode, n2 : CGNode) : Boolean = (n1.getMethod, n2.getMethod) match {
@@ -202,13 +224,10 @@ class ControlFeasibilityRelevanceRelation(cg : CallGraph, hg : HeapGraph[Instanc
       // we can filter if m1 is a class initializer C.<clinit> and m2 is a method o.m2() where o : T and T <: C. this is
       // true because the class initializer for C must run before any methods on objects of type T <: C
       true
-      // TODO: get rid of the "has one constructor" restriction--we can be smarter while still being sound
-      // TODO: in addition, we can generalize this to "constructors and methods only called from constructors" with some care
-    case (m1, m2) if m1.isInit && m1.getDeclaringClass.getDeclaredMethods.filter(m => m.isInit).size == 1 &&
-                     cha.isAssignableFrom(m1.getDeclaringClass, m2.getDeclaringClass) =>
-      // we can filter if m1 is the *only* constructor for some class C and m2 is a non-constructor method o.m2() where
-      // where o : T and T <: C. this is true because since m1 is the only constructor for objects of type C, any method
-      // on objects T <: C must be called after the constructor
+      // TODO: we can generalize this to "constructors and methods only called from constructors" with some care
+    case (m1, m2) if m1.isInit && (!m2.isInit || m2.getDeclaringClass != m1.getDeclaringClass) &&
+                     calledFromAllConstructors(m1) =>
+      // we can filter if m1 is a constructor that is called by all other constructors of the same class
       true
     case _ => false
   }

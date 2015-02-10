@@ -200,13 +200,23 @@ class NullDereferenceTransferFunctions(walaRes : WalaAnalysisResults,
   extends TransferFunctions(walaRes.cg, walaRes.hg, walaRes.hm, walaRes.cha) {
 
   override def execute(s : SSAInstruction, qry : Qry, n : CGNode) : List[Qry] = s match {
-    case i: SSAGetInstruction if !i.isStatic && ClassUtil.isInnerClassThis(i.getDeclaredField) =>
+    case i: SSAGetInstruction if !i.isStatic =>
       getConstraintEdgeForDef(i, qry.localConstraints, n) match {
         case Some(LocalPtEdge(_, p@PureVar(_))) if qry.isNull(p) =>
-          // have x == null and x = y.this$0 (or similar). reading from this$0 will never return null without bytecode
-          // editor magic (or order of initialization silliness)--refute
-          if (Options.PRINT_REFS) println("Refuted by read from inner class this!")
-          Nil
+          val fld = i.getDeclaredField
+          if (ClassUtil.isInnerClassThis(fld)) {
+            // have x == null and x = y.this$0 (or similar). reading from this$0 will never return null without bytecode
+            // editor magic (or order of initialization silliness)--refute
+            if (Options.PRINT_REFS) println("Refuted by read from inner class this!")
+            Nil
+          } else {
+            val c = fld.getDeclaringClass
+            val fldIdentifier = s"${ClassUtil.pretty(c)}.${fld.getName.toString}"
+            if (nonNullFields.contains(fldIdentifier)) {
+              if (Options.PRINT_REFS) println("Refuted by nit annotation on field!")
+              Nil
+            } else super.execute(s, qry, n)
+          }
         case _ => super.execute(s, qry, n)
       }
     case i: SSAFieldAccessInstruction if !i.isStatic() => // x = y.f or y.f = x
@@ -256,10 +266,10 @@ class NullDereferenceTransferFunctions(walaRes : WalaAnalysisResults,
     case _ => super.execute(s, qry, n)
   }
 
-  private val nonNullRetMethods = parseNitNonNullAnnotations()
+  private val (nonNullRetMethods, nonNullFields) = parseNitNonNullAnnotations()
 
   /** parse annotations produced by Nit and @return the set of methods whose return values are always non-null */
-  def parseNitNonNullAnnotations() : Set[String] = {
+  def parseNitNonNullAnnotations() : (Set[String],Set[String]) = {
     // set of Java library methods that are known to return non-null values, but use native code or reflection that
     // confuse Nit / the analysis
     val javaAnnots =
@@ -294,27 +304,38 @@ class NullDereferenceTransferFunctions(walaRes : WalaAnalysisResults,
           "Landroid/app/Fragment.getActivity()Landroid/app/Activity;"
       )
 
-    val defaultAnnots = javaAnnots ++ androidAnnots
+    val defaultMethodAnnots = javaAnnots ++ androidAnnots
     if (nitAnnotsXmlFile.exists()) {
       println(s"Parsing Nit annotations from ${nitAnnotsXmlFile.getAbsolutePath}")
-      (XML.loadFile(nitAnnotsXmlFile) \\ "class").foldLeft (defaultAnnots) ((s, c) =>
-        (c \\ "method").foldLeft (s) ((s, m) => {
+      (XML.loadFile(nitAnnotsXmlFile) \\ "class").foldLeft (defaultMethodAnnots, Set.empty[String]) ((pair, c) => {
+        val (methodAnnots, fieldAnnots) = pair
+        val className = ClassUtil.walaifyClassName(c.attribute("name").head.text)
+        val newMethodAnnots = (c \\ "method").foldLeft(methodAnnots)((s, m) => {
           val ret = m \\ "return"
           if (ret.isEmpty || (ret \\ "NonNull").isEmpty) s
           else {
-            val className = c.attribute("name").head.text
             // Nit separates method names from method signatures using colons; parse it out
             val parsedArr = m.attribute("descriptor").head.text.split(":")
             val (methodName, methodSig) = (parsedArr(0), parsedArr(1))
-            val walaifedName = s"${ClassUtil.walaifyClassName(className)}.$methodName${methodSig.replace('.', '/')}"
+            val walaifedName = s"$className.$methodName${methodSig.replace('.', '/')}"
             // using strings rather than MethodReference's to avoid classloader issues
             s + walaifedName
           }
         })
-      )
+        val newFieldAnnots = (c \\ "field").foldLeft (fieldAnnots) ((s, f) => {
+          if (f.isEmpty || (f \\ "NonNull").isEmpty) s
+          else {
+            val parsedArr = f.attribute("descriptor").head.text.split(":")
+            val (fldName, fldType) = (parsedArr(0), parsedArr(1))
+            val walaifedName = s"$className.$fldName"
+            s + walaifedName
+          }
+        })
+        (newMethodAnnots, newFieldAnnots)
+      })
     } else {
       println("No Nit annotations found")
-      defaultAnnots
+      (defaultMethodAnnots, Set.empty[String])
     }
   }
 

@@ -128,7 +128,6 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
             }
           }
 
-          // TODO: want this for "is only called from constructor" and "is only called from onCreate". but we have to be
           // careful: we have to look at the IR to make sure this is called unconditionally as well as looking at the call graph
           /* @return true if when we walking backward from @param callee, we hit a node satisfying @param pred on all
            * paths wtihout hitting a node satisfying @param stopPred first */
@@ -235,8 +234,11 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
           }
 
           override def mustHappenBefore(n1 : CGNode, n2 : CGNode) : Boolean =
-            androidSpecificMustHappenBefore(n1, n2) || super.mustHappenBefore(n1, n2)
-
+          //androidSpecificMustHappenBefore(n1, n2) || super.mustHappenBefore(n1, n2)
+          androidSpecificMustHappenBefore(n1, n2) || {
+            println("calling mustHappenBefore on " + ClassUtil.pretty(n1) + " and " + ClassUtil.pretty(n2))
+            super.mustHappenBefore(n1, n2)
+          }
         }
 
       else new RelevanceRelation(walaRes.cg, walaRes.hg, walaRes.hm, walaRes.cha)
