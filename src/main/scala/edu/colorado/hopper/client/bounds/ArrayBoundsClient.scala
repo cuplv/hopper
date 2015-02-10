@@ -206,8 +206,8 @@ object ArrayBoundsClientTests extends ClientTests {
       executionTimer.stop
           
       // TODO: do something more fine-grained here, since there can be more than one array access per test
-      if (test.contains("NoOverflow") && !(failCount > 0 && !pwFailOk.contains(test)))
-        assert(failCount == 0, s"Test $test failed.")
+      if (test.contains("NoOverflow"))
+        if (!pwFailOk.contains(test)) assert(failCount == 0, s"Test $test failed.")
       else
         assert(failCount != 0, s"Test $test failed.")
 
