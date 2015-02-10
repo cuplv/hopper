@@ -19,7 +19,7 @@ import edu.colorado.hopper.util.PtUtil
 import edu.colorado.hopper.util.PtUtil._
 import edu.colorado.thresher.core.Options
 import edu.colorado.walautil.Types._
-import edu.colorado.walautil.{ClassUtil, Util}
+import edu.colorado.walautil.{Timer, ClassUtil, Util}
 
 import scala.collection.JavaConversions._
 
@@ -90,9 +90,15 @@ object TransferFunctions {
 class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm : HeapModel, val cha : IClassHierarchy) {
   val hm = new DelegatingExtendedHeapModel(_hm)
 
-  //lazy val modRef : java.util.Map[CGNode,OrdinalSet[PointerKey]] = ModRef.make().computeMod(cg, hg.getPointerAnalysis)
   val modRef : java.util.Map[CGNode,OrdinalSet[PointerKey]] =
-    if (Options.JUMPING_EXECUTION) null else ModRef.make().computeMod(cg, hg.getPointerAnalysis)
+    if (Options.JUMPING_EXECUTION) null else {
+      val timer = new Timer()
+      timer.start()
+      println("Computing mod/ref")
+      val res = ModRef.make().computeMod(cg, hg.getPointerAnalysis)
+      timer.printTimeTaken("Computing mod/ref")
+      res
+    }
 
   /** look up the lhs of @param s in @param localConstraints, @return matching rhs var and edge if we find it */
   protected def getConstraintPtForDef(s : SSAInstruction, localConstraints : MSet[LocalPtEdge], n : CGNode) : Option[(ObjVar,LocalPtEdge)] =
