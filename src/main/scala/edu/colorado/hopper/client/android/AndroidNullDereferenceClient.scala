@@ -105,29 +105,6 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
             )
           }
 
-          /** @return true if callee is called on all paths from the entry block of @param caller */
-          def mustBeCalledFrom(callee : CGNode, caller : CGNode) : Boolean = {
-            val ir = caller.getIR
-            println(ir)
-            val cfg = ir.getControlFlowGraph
-            val siteBlks =
-              cg.getPossibleSites(caller, callee).foldLeft(Set.empty[ISSABasicBlock])((siteBlks, site) =>
-                ir.getBasicBlocksForCall(site).foldLeft (siteBlks) ((siteBlks, blk) => siteBlks + blk))
-            val exitBlks = cfg.getNormalPredecessors(cfg.exit()).toSet
-            !siteBlks.intersect(exitBlks).isEmpty || {
-              // check that these siteBlks as a set postdominate the entry block
-              val iter =
-                new BFSIterator[ISSABasicBlock](cfg, cfg.entry()) {
-                  override def getConnected(b: ISSABasicBlock): java.util.Iterator[_ <: ISSABasicBlock] =
-                    cfg.getNormalSuccessors(b).iterator().filter(b => !siteBlks.contains(b))
-                }
-              // siteBlks postdominate the entry block if BFS-ing forward from the entry block and stopping when we hit
-              // a siteBlk does not allow us to reach the exit block
-              GraphUtil.bfsIterFold(iter, true, ((notReachedExit: Boolean, blk: ISSABasicBlock) =>
-                                                  notReachedExit && !exitBlks.contains(blk)))
-            }
-          }
-
           // careful: we have to look at the IR to make sure this is called unconditionally as well as looking at the call graph
           /* @return true if when we walking backward from @param callee, we hit a node satisfying @param pred on all
            * paths wtihout hitting a node satisfying @param stopPred first */

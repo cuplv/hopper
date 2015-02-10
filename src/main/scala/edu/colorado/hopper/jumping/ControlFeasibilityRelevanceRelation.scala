@@ -147,9 +147,10 @@ class ControlFeasibilityRelevanceRelation(cg : CallGraph, hg : HeapGraph[Instanc
       // TODO: we can be more precise than this by still doing intraproc filtering, but starting from all call sites
       //  in node that may (transitively) call curNode rather than from the exit block of node
       val isCallableFromCurNode = isCallableFrom(curNode, node, cg)
-      if (isCallableFromCurNode)
+      if (isCallableFromCurNode) {
+        if (DEBUG) println(s"${ClassUtil.pretty(curNode)} callable from ${ClassUtil.pretty(node)}, not filtering")
         node -> RelevantNodeInfo(relInstrs, callableFromCurNode = isCallableFromCurNode, instructionsFormCut = false)
-      else {
+      } else {
         // seperate generated instructions from regular instructions, since generated instructions have no ordering
         // (or even representation) in the CFG
         val (generatedInstrs, otherInstrs) = relInstrs.partition(i => IRUtil.isGeneratedInstruction(i))
@@ -196,25 +197,48 @@ class ControlFeasibilityRelevanceRelation(cg : CallGraph, hg : HeapGraph[Instanc
     })
   }
 
-  def calledFromAllConstructors(constructor : IMethod) : Boolean = {
-    require(constructor.isInit)
-    val allConstructors =
-      constructor.getDeclaringClass.getDeclaredMethods.filter(m => m.isInit && m != constructor).toSet
-    // can look at just CG here (no IR) since we can only call a constructor from another constructor in straightline
-    // code
-    def isCalledFromAllConstructors() : Boolean = {
-      val constructorNodes = cg.getNodes(constructor.getReference)
+  /** @return true if callee is called on all paths from the entry block of @param caller */
+  def mustBeCalledFrom(callee : CGNode, caller : CGNode) : Boolean = {
+    val ir = caller.getIR
+    val cfg = ir.getControlFlowGraph
+    val siteBlks =
+      cg.getPossibleSites(caller, callee).foldLeft(Set.empty[ISSABasicBlock])((siteBlks, site) =>
+        ir.getBasicBlocksForCall(site).foldLeft (siteBlks) ((siteBlks, blk) => siteBlks + blk))
+    val exitBlks = cfg.getNormalPredecessors(cfg.exit()).toSet
+    !siteBlks.intersect(exitBlks).isEmpty || {
+      // check that these siteBlks as a set postdominate the entry block
       val iter =
-        new BFSIterator[CGNode](cg, constructorNodes.iterator()) {
+        new BFSIterator[ISSABasicBlock](cfg, cfg.entry()) {
+          override def getConnected(b: ISSABasicBlock): java.util.Iterator[_ <: ISSABasicBlock] =
+            cfg.getNormalSuccessors(b).iterator().filter(b => !siteBlks.contains(b))
+        }
+      // siteBlks postdominate the entry block if BFS-ing forward from the entry block and stopping when we hit
+      // a siteBlk does not allow us to reach the exit block
+      GraphUtil.bfsIterFold(iter, true, ((notReachedExit: Boolean, blk: ISSABasicBlock) =>
+        notReachedExit && !exitBlks.contains(blk)))
+    }
+  }
+
+  def calledFromAllConstructors(n : CGNode) : Boolean = {
+    val m = n.getMethod
+    val declClass = m.getDeclaringClass
+    val allConstructors = declClass.getDeclaredMethods.filter(m => m.isInit).toSet
+    def isCalledFromAllConstructors() : Boolean = {
+      val iter =
+        new BFSIterator[CGNode](cg, n) {
           override def getConnected(n : CGNode) : java.util.Iterator[_ <: CGNode] =
-            cg.getPredNodes(n).filter(n => n.getMethod.isInit)
+            cg.getPredNodes(n).filter(n => {
+              val m = n.getMethod
+              m.isInit || m.getDeclaringClass == declClass
+            })
         }
       val visitedConstructors =
         GraphUtil.bfsIterFold(iter, Set.empty[IMethod], ((s : Set[IMethod], n : CGNode) => s + n.getMethod))
       allConstructors.subsetOf(visitedConstructors)
     }
-    // if allConstructors.isEmpty, constructor is the only constructor and is trivially called by all constructors
-    allConstructors.isEmpty || isCalledFromAllConstructors()
+    // if allConstructors is unit size and m is a constructor, it is the only constructor and thus trivially called by
+    // all constructors
+    (m.isInit && allConstructors.size == 1) || isCalledFromAllConstructors()
   }
 
   /* @return true if in all concrete executions that call n2, n1 is called before n2. we write this as n1 < n2 */
@@ -224,9 +248,8 @@ class ControlFeasibilityRelevanceRelation(cg : CallGraph, hg : HeapGraph[Instanc
       // we can filter if m1 is a class initializer C.<clinit> and m2 is a method o.m2() where o : T and T <: C. this is
       // true because the class initializer for C must run before any methods on objects of type T <: C
       true
-      // TODO: we can generalize this to "constructors and methods only called from constructors" with some care
     case (m1, m2) if m1.isInit && (!m2.isInit || m2.getDeclaringClass != m1.getDeclaringClass) &&
-                     calledFromAllConstructors(m1) =>
+                     calledFromAllConstructors(n1) =>
       // we can filter if m1 is a constructor that is called by all other constructors of the same class
       true
     case _ => false
