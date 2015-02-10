@@ -334,9 +334,8 @@ class Path(val qry : Qry, var lastBlk : WalaBlock = null,
   def addConstraintFromSwitch(i : SSAConditionalBranchInstruction, tf : TransferFunctions, negated : Boolean = false) : Boolean =
     tf.executeCond(i, qry, node, !negated)
 
-  def dropLoopProduceableConstraints(loopHeader : ISSABasicBlock, tf : TransferFunctions) : Unit = 
+  def dropLoopProduceableConstraints(loopHeader : ISSABasicBlock, tf : TransferFunctions) : Unit =
     tf.dropLoopWriteableConstraints(qry, loopHeader, node)
-    //qry.removeLoopProduceableConstraints(loopHeader.asInstanceOf[SSACFG#BasicBlock], node)
     
   def maybeWiden(inv : MinSet[Path]) : Boolean = {
     this.qry match {

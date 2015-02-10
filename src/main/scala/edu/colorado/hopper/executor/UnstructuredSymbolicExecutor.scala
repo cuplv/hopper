@@ -8,14 +8,14 @@ import com.ibm.wala.ipa.cfg.ExceptionPrunedCFG
 import com.ibm.wala.ipa.cha.IClassHierarchy
 import com.ibm.wala.shrikeBT.IConditionalBranchInstruction.Operator.EQ
 import com.ibm.wala.ssa._
-import com.ibm.wala.types.{MethodReference, TypeReference}
+import com.ibm.wala.types.TypeReference
 import com.ibm.wala.util.graph.dominators.Dominators
 import com.twitter.util.LruMap
 import edu.colorado.hopper.executor.UnstructuredSymbolicExecutor._
 import edu.colorado.hopper.state._
 import edu.colorado.thresher.core.Options
-import edu.colorado.walautil._
 import edu.colorado.walautil.Types.WalaBlock
+import edu.colorado.walautil._
 
 import scala.collection.JavaConversions.{asScalaBuffer, asScalaIterator, asScalaSet, collectionAsScalaIterable, mapAsJavaMap}
 
@@ -430,15 +430,18 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
       else cfg.getNormalPredecessors(startBlk).toList
     if (DEBUG) println("done with " + startBlk + ", getting preds")
       
-      // dropping constraints here ensures that we never carry on the loop condition. this is desirable for many clients
-      // that do not require precise reasoning about loop conditions, since we will never waste effort trying to refute
-      // based on constraints involving the loop condition. on the other hand, this is NOT desirable for clients that do
-      // require precise reasoning about the loop condition. this is why clients such as array bounds implement a
-      // variation on this symbolic executor that chooses to do something different here
-      loopHeader.foreach(loopHeader => {
-        if (DEBUG) println("Found related loop head BB" + loopHeader.getNumber() + "; dropping constraints")
-        instrPaths.foreach(p => p.dropLoopProduceableConstraints(loopHeader, tf))
+    // dropping constraints here ensures that we never carry on the loop condition. this is desirable for many clients
+    // that do not require precise reasoning about loop conditions, since we will never waste effort trying to refute
+    // based on constraints involving the loop condition. on the other hand, this is NOT desirable for clients that do
+    // require precise reasoning about the loop condition. this is why clients such as array bounds implement a
+    // variation on this symbolic executor that chooses to do something different here
+    loopHeader.foreach(loopHeader => {
+      if (DEBUG) println("Found related loop head BB" + loopHeader.getNumber() + "; dropping constraints")
+      instrPaths.foreach(p => {
+        p.dropLoopProduceableConstraints(loopHeader, tf)
+        checkTimeout()
       })
+    })
 
     preds.size match {
       case 0 =>
