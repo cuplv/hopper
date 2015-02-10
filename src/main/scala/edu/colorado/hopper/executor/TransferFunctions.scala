@@ -236,10 +236,11 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
     qry.addPureConstraint(disjunctiveCaseConstraint)
   }
   
-  // we choose to refute based on empty PT
+  // we choose *not* to refute based on empty PT even though it is sound/precise to do so because issues in modeling
+  // (e.g., in Android) can lead to a lot of false refutations if we do this
   def refuteBasedOnEmptyPT(lpk : LocalPointerKey, qry : Qry, n : CGNode) : Boolean = {
     if (EMPTY_PT_WARNING) println(s"(1) Warning: returning null for v${lpk.getValueNumber} based on empty PT set")
-    true
+    false
   }
   
   def executeCond(cond : SSAConditionalBranchInstruction, qry : Qry, n : CGNode, isThenBranch : Boolean) : Boolean = {
@@ -368,7 +369,13 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
                 if (rgn.isEmpty) { // lpk doesn't point to anything -- so it must be null  
                   val shouldRefute = refuteBasedOnEmptyPT(lpk, qry, n)
                   if (Options.PRINT_REFS && shouldRefute) println("Refuted by == null constraint!")
-                  shouldRefute                  
+                  if (shouldRefute) false
+                  else {
+                    val freshPure = Pure.makePureObjVar
+                    qry.addLocalConstraint(PtEdge.make(lpk, freshPure))
+                    qry.addPureConstraint(Pure.makeNeNullConstraint(freshPure))
+                    true
+                  }
                 } else {
                   qry.addLocalConstraint(PtEdge.make(lpk, ObjVar(rgn)))
                   true

@@ -4,14 +4,16 @@ import com.ibm.wala.analysis.pointers.HeapGraph
 import com.ibm.wala.classLoader.IField
 import com.ibm.wala.ipa.callgraph.propagation._
 import com.ibm.wala.ipa.callgraph.{CGNode, ContextKey}
-import com.ibm.wala.ssa.{ISSABasicBlock, SSAInstruction}
+import com.ibm.wala.ipa.cha.IClassHierarchy
+import com.ibm.wala.ssa.{ISSABasicBlock, SSAGetInstruction, SSAInstruction}
 import com.microsoft.z3.AST
 import edu.colorado.hopper.solver.{ModelSolver, Solver, UnknownSMTResult, Z3Solver}
 import edu.colorado.hopper.state.Qry._
-import edu.colorado.walautil.{CFGUtil, Util, IRUtil}
-import edu.colorado.walautil.Types.MSet
 import edu.colorado.hopper.util.PtUtil
 import edu.colorado.thresher.core.Options
+import edu.colorado.walautil.Types.MSet
+import edu.colorado.walautil.{CFGUtil, IRUtil, Util}
+
 import scala.collection.JavaConversions._
 
 object Qry {
@@ -475,9 +477,17 @@ class Qry(val heapConstraints : MSet[HeapPtEdge], val pureConstraints : MSet[Pur
 
   /** @return true if @param local may point at a value also pointed to by they query */
   def localMayPointIntoQuery(local : LocalPointerKey, n : CGNode, hm : HeapModel,
-                             hg : HeapGraph[InstanceKey]) : Boolean = {
+                             hg : HeapGraph[InstanceKey], cha : IClassHierarchy) : Boolean = {
     val qryFields = this.getAllFields()
-    qryFields.nonEmpty && {
+    def localReadsFromQueryFld() : Boolean = {
+      val localNum = local.getValueNumber
+      n.getIR.iterateAllInstructions().exists(i => i match {
+        case i : SSAGetInstruction => i.getDef() == localNum && qryFields.contains(cha.resolveField(i.getDeclaredField))
+        case _ => false
+      })
+    }
+
+    def lpkFieldsAndQueryFieldsOverlap() : Boolean = {
       // get the fields that point at the object(s) the local pointer key points at
       val lpkFields =
         hg.getSuccNodes(local).foldLeft (Set.empty[IField]) ((s, k) => {
@@ -490,6 +500,8 @@ class Qry(val heapConstraints : MSet[HeapPtEdge], val pureConstraints : MSet[Pur
       // the query contains a field that may point at the object(s) the local pointer key points at
       lpkFields.intersect(qryFields).nonEmpty
     }
+
+    qryFields.nonEmpty && (localReadsFromQueryFld() || lpkFieldsAndQueryFieldsOverlap())
   }
   
   // debug only

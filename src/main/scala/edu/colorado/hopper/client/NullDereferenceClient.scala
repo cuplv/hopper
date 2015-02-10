@@ -80,7 +80,7 @@ class NullDereferenceClient(appPath : String, libPath : Option[String], mainClas
                 val retPaths = super.executeInstr(okPaths, i, blk, node, cfg, isLoopBlk, callStackSize)
                 if (!i.isStatic) {
                   val receiverLPK = Var.makeLPK(i.getReceiver, node, tf.hm)
-                  retPaths.foreach(p => if (p.qry.localMayPointIntoQuery(receiverLPK, node, tf.hm, tf.hg)) {
+                  retPaths.foreach(p => if (p.qry.localMayPointIntoQuery(receiverLPK, node, tf.hm, tf.hg, tf.cha)) {
                     PtUtil.getPt(receiverLPK, tf.hg) match {
                       case rgn if rgn.isEmpty => sys.error("handle this case!") // should leak to a refutation
                       case rgn =>
@@ -227,7 +227,7 @@ class NullDereferenceTransferFunctions(walaRes : WalaAnalysisResults,
               val qry = p.qry
               // have to check for edge again here because it may be added by call to super.execute()
               PtUtil.getConstraintEdge(refLPK, qry.localConstraints) match {
-                case None if qry.localMayPointIntoQuery(refLPK, n, hm, hg) =>
+                case None if qry.localMayPointIntoQuery(refLPK, n, hm, hg, cha) =>
                   PtUtil.getPt(refLPK, hg) match {
                     case rgn if rgn.isEmpty => false // should leak to a refutation
                     case rgn =>
@@ -323,7 +323,7 @@ class NullDereferenceTransferFunctions(walaRes : WalaAnalysisResults,
       val receiverLPK = Var.makeLPK(call.getReceiver, caller, hm)
       PtUtil.getConstraintEdge(receiverLPK, qry.localConstraints) match {
         case Some(LocalPtEdge(_, p@PureVar(_))) if qry.isNull(p) => false // refuted by null dispatch
-        case None if qry.localMayPointIntoQuery(receiverLPK, caller, hm, hg) =>
+        case None if qry.localMayPointIntoQuery(receiverLPK, caller, hm, hg, cha) =>
           PtUtil.getPt(receiverLPK, hg) match {
             case rgn if rgn.isEmpty => false // refuted by null dispatch
             case rgn =>

@@ -120,6 +120,9 @@ public class Options {
   @stringOpt(description = "Entrypoint method for analysis", _default = "main")
   public static String MAIN_METHOD = "main";
 
+  @intOpt(description = "Limit checking to specificed line in main_class (for debugging only)", _default = -2)
+  public static int LINE = -2;
+
   @stringOpt(description = "Path to home directory of droidel", _default = "../droidel")
   public static String DROIDEL_HOME = "../droidel";
 

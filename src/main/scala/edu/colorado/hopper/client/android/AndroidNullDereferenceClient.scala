@@ -251,7 +251,7 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
         val lpk = Var.makeLPK(use, n, hm)
         qry.localConstraints.exists(e => e.src.key == lpk) || {
           val queryInstanceKeys = qry.getAllObjVars.flatMap(o => o.rgn)
-          queryInstanceKeys.intersect(PtUtil.getPt(lpk, hg)).nonEmpty || qry.localMayPointIntoQuery(lpk, n, hm, hg)
+          queryInstanceKeys.intersect(PtUtil.getPt(lpk, hg)).nonEmpty || qry.localMayPointIntoQuery(lpk, n, hm, hg, cha)
         }
       }
     }
@@ -401,37 +401,43 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
     val ir = n.getIR()
     val tbl = ir.getSymbolTable
     val srcLine = IRUtil.getSourceLine(i, ir)
-    print(s"Checking possible null deref #$count ")
-    ClassUtil.pp_instr(i, ir); println(s" at source line $srcLine of ${ClassUtil.pretty(n)}")
-    val possiblyNullUse = i.getUse(0)
-    if (tbl.isNullConstant(possiblyNullUse)) {
-      // have null.foo() or null.f = ... or x = null.f
-      // technically, this can still be safe if the code is unreachable or protected by a try block, but philosophically
-      // this is useless code and ought to be reported as on error
-      println("Found definite null deref!")
-      true
+    if (Options.LINE == -2 || Options.LINE == srcLine) {
+      print(s"Checking possible null deref #$count ")
+      ClassUtil.pp_instr(i, ir);
+      println(s" at source line $srcLine of ${ClassUtil.pretty(n)}")
+      val possiblyNullUse = i.getUse(0)
+      if (tbl.isNullConstant(possiblyNullUse)) {
+        // have null.foo() or null.f = ... or x = null.f
+        // technically, this can still be safe if the code is unreachable or protected by a try block, but philosophically
+        // this is useless code and ought to be reported as on error
+        println("Found definite null deref!")
+        true
+      } else {
+        // create the query
+        val lpk = Var.makeLPK(possiblyNullUse, n, hm)
+        val nullPure = Pure.makePureVar(lpk)
+        val locEdge = PtEdge.make(lpk, nullPure)
+        val qry = Qry.make(List(locEdge), i, n, hm, solver, startBeforeI = true)
+        qry.addPureConstraint(Pure.makeEqNullConstraint(nullPure))
+        // invoke Thresher and check it
+        val foundWitness =
+          try {
+            exec.executeBackward(qry)
+          } catch {
+            case e: Throwable =>
+              println(s"Error: $e \n${e.getStackTraceString}")
+              if (Options.SCALA_DEBUG) throw e
+              else true // soundly assume we got a witness
+          }
+        exec.cleanup()
+        print(s"Deref #$count ")
+        ClassUtil.pp_instr(i, ir)
+        println(s" at source line $srcLine of ${ClassUtil.pretty(n)} can fail? $foundWitness")
+        foundWitness
+      }
     } else {
-      // create the query
-      val lpk = Var.makeLPK(possiblyNullUse, n, hm)
-      val nullPure = Pure.makePureVar(lpk)
-      val locEdge = PtEdge.make(lpk, nullPure)
-      val qry = Qry.make(List(locEdge), i, n, hm, solver, startBeforeI = true)
-      qry.addPureConstraint(Pure.makeEqNullConstraint(nullPure))
-      // invoke Thresher and check it
-      val foundWitness =
-        try {
-          exec.executeBackward(qry)
-        } catch {
-          case e: Throwable =>
-            println(s"Error: $e \n${e.getStackTraceString}")
-            if (Options.SCALA_DEBUG) throw e
-            else true // soundly assume we got a witness
-        }
-      exec.cleanup()
-      print(s"Deref #$count ")
-      ClassUtil.pp_instr(i, ir)
-      println(s" at source line $srcLine of ${ClassUtil.pretty(n)} can fail? $foundWitness")
-      foundWitness
+      println(s"Skipping check at source line $srcLine of ${ClassUtil.pretty(n)}")
+      true
     }
   }
 
