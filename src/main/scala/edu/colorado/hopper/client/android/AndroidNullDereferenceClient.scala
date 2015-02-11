@@ -468,9 +468,9 @@ object AndroidNullDereferenceClientTests extends ClientTests {
            "OnCreateCalleeRefute", "OnCreateCalleeNoRefute")
 
     val regressionDir = "src/test/java/nulls/"
-    val regressionBinDir = "target/scala-2.10/test-classes/nulls/"
+    val regressionBinDir = "target/scala-2.10/test-classes/nulls"
     val classesPathPrefix = s"$regressionDir/bin"
-    val classesPath = s"$classesPathPrefix/classes/nulls/"
+    val classesPath = s"$classesPathPrefix/classes"
     if (new File(classesPathPrefix).exists()) Process(Seq("rm", "-r", classesPathPrefix)).!!
     Process(Seq("mkdir", "-p", classesPath)).!!
     Process(Seq("cp", "-r", regressionBinDir, classesPath)).!!
