@@ -469,30 +469,30 @@ object AndroidNullDereferenceClientTests extends ClientTests {
 
     val regressionDir = "src/test/java/nulls/"
     val regressionBinDir = "target/scala-2.10/test-classes/nulls/"
+    val classesPathPrefix = s"$regressionDir/bin"
+    val classesPath = s"$classesPathPrefix/classes/nulls/"
+    if (new File(classesPathPrefix).exists()) Process(Seq("rm", "-r", classesPathPrefix)).!!
+    Process(Seq("mkdir", "-p", classesPath)).!!
+    Process(Seq("cp", "-r", regressionBinDir, classesPath)).!!
+
     if (!(new File(Options.DROIDEL_HOME).exists())) Options.DROIDEL_HOME = "lib/droidel"
     val androidJar = new File(s"${Options.DROIDEL_HOME}/stubs/out/droidel_android-4.4.2_r1.jar")
     assert(androidJar.exists(), s"Android jar ${androidJar.getAbsolutePath} does not exist")
-    var testNum = 0
 
-    val executionTimer = new Timer
     Options.JUMPING_EXECUTION = true
     Options.CONTROL_FEASIBILITY = true
+    val client = new AndroidNullDereferenceClient(appPath = regressionDir, androidLib = androidJar, useJPhantom = false)
+    var testNum = 0
+    val executionTimer = new Timer
 
     tests.foreach(test => if (Options.TEST == null || Options.TEST.isEmpty() || Options.TEST == test) {
       testNum += 1
-      val path = regressionDir + test
-      val classesPathPrefix = s"$path/bin"
-      if (new File(classesPathPrefix).exists()) Process(Seq("rm", "-r", classesPathPrefix)).!!
-      val binPath = s"$regressionBinDir$test"
-      val classesPath = s"$classesPathPrefix/classes/nulls/"
+      Options.MAIN_CLASS = test
       println("Running test " + testNum + ": " + test)
       val (mayFailCount, derefsChecked) = {
         try {
-          Process(Seq("mkdir", "-p", classesPath)).!!
-          Process(Seq("cp", "-r", binPath, classesPath)).!!
           executionTimer.start
-          new AndroidNullDereferenceClient(appPath = path, androidLib = androidJar, useJPhantom = false)
-          .checkNullDerefs()
+          client.checkNullDerefs()
         } catch {
           case e : Throwable =>
             printTestFailureMsg(test, testNum)
@@ -501,7 +501,6 @@ object AndroidNullDereferenceClientTests extends ClientTests {
       }
 
       executionTimer.stop
-      Process(Seq("rm", "-r", classesPathPrefix)).!!
       assert(derefsChecked > 0, "Expected to check >0 derefs!")
       val mayFail = mayFailCount > 0
       // tests that we aren't meant to refute have NoRefute in name
@@ -519,5 +518,6 @@ object AndroidNullDereferenceClientTests extends ClientTests {
       LoopUtil.clearCaches
       executionTimer.clear
     })
+    Process(Seq("rm", "-r", classesPathPrefix)).!!
   }
 }

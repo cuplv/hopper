@@ -1,20 +1,15 @@
-package nulls.OnCreateNoRefute;
+package nulls;
 
 import android.app.Activity;
 import android.os.Bundle;
 
-public class MyAct extends Activity {
+public class OnCreateRefute extends Activity {
 
     public Object mObj;
 
     @Override
     public void onCreate(Bundle b) {
-	mObj = new Object();
-    }
-
-    @Override
-    public void onResume() {
-	mObj = null;
+	this.mObj = new Object();
     }
 
     @Override

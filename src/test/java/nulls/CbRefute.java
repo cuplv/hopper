@@ -1,11 +1,11 @@
-package nulls.CbRefute;
+package nulls;
 
 import android.app.Activity;
 import android.content.ComponentCallbacks;
 import android.content.res.Configuration;
 import android.os.Bundle;
 
-public class MyAct extends Activity {
+public class CbRefute extends Activity {
 
     public Object mObj;
 

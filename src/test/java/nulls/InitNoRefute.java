@@ -1,13 +1,13 @@
-package nulls.InitNoRefute;
+package nulls;
 
 import android.app.Activity;
 import android.os.Bundle;
 
-public class MyAct extends Activity {
+public class InitNoRefute extends Activity {
 
     public Object mObj;
 
-    public MyAct() {
+    public InitNoRefute() {
 	this.mObj = null;
     }
 

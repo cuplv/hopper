@@ -1,9 +1,9 @@
-package nulls.OnCreateCalleeNoRefute;
+package nulls;
 
 import android.app.Activity;
 import android.os.Bundle;
 
-public class MyAct extends Activity {
+public class OnCreateCalleeNoRefute extends Activity {
 
     public Object mObj;
     public boolean doInit = false;
