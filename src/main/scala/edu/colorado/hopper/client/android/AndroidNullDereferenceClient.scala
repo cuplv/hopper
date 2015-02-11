@@ -211,11 +211,7 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
           }
 
           override def mustHappenBefore(n1 : CGNode, n2 : CGNode) : Boolean =
-          //androidSpecificMustHappenBefore(n1, n2) || super.mustHappenBefore(n1, n2)
-          androidSpecificMustHappenBefore(n1, n2) || {
-            println("calling mustHappenBefore on " + ClassUtil.pretty(n1) + " and " + ClassUtil.pretty(n2))
-            super.mustHappenBefore(n1, n2)
-          }
+            androidSpecificMustHappenBefore(n1, n2) || super.mustHappenBefore(n1, n2)
         }
 
       else new RelevanceRelation(walaRes.cg, walaRes.hg, walaRes.hm, walaRes.cha)
