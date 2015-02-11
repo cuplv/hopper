@@ -1185,20 +1185,22 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
                     // if ptYi[i] -> A is not already in our constraints, add it
                     if ((e eq anyArrConstraint) && !newQuery.addHeapConstraint(PtEdge.make(e.src, e.fld, interVar))) l
                     else
-                      if (newQuery.substitute(interVar, ptYi, hg) && newQuery.substitute(interVar, ptX, hg)) newQuery :: l
+                      if (newQuery.substitute(interVar, ptYi, hg) && newQuery.substitute(interVar, ptX, hg))
+                        newQuery :: l
                       else l // refuted by infeasible substitution
                   }
                 case (ptYi@ObjVar(_), pureX@PureVar(_)) =>
                   // e != anyArrConstraint check to account for the possibility that ptYi is a null value
-                  if (qry.isNull(pureX) && e != anyArrConstraint) l // refuted
+                  if (qry.isNull(pureX) && e != anyArrConstraint) l // refuted by simultaneous points-to: null and ptYi
                   else {
                     // essentially, we have an x == null constraint. without index-sensitivity, there's no sense in
                     // adding a y[i] == null constraint since we can't ever prove that null won't be read from the array
                     val clone = qry.clone
-                    if (Options.INDEX_SENSITIVITY)
-                      if (clone.addHeapConstraint(e)) clone :: l
+                    if (Options.INDEX_SENSITIVITY) {
+                      val snk = if (e != anyArrConstraint) ptYi else pureX
+                      if (clone.addHeapConstraint(ArrayPtEdge(e.src, e.fld, snk))) clone :: l
                       else l
-                    else clone :: l
+                    } else clone :: l
                   }
                 case (pureYi@PureVar(_), ptX@ObjVar(_)) =>
                   if (qry.isNull(pureYi)) l // refuted
