@@ -203,12 +203,13 @@ object ArrayBoundsClientTests extends ClientTests {
             printTestFailureMsg(test, testNum)
             throw e
         }
+
       executionTimer.stop
-          
+      assert(total > 0, "Expected to check >0 overflows")
       // TODO: do something more fine-grained here, since there can be more than one array access per test
-      if (test.contains("NoOverflow"))
+      if (test.contains("NoOverflow")) {
         if (!pwFailOk.contains(test)) assert(failCount == 0, s"Test $test failed.")
-      else
+      } else
         assert(failCount != 0, s"Test $test failed.")
 
       println("Test " + test + " (#" + testNum + ") passed!")
