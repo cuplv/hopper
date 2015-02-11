@@ -295,6 +295,7 @@ class NullDereferenceTransferFunctions(walaRes : WalaAnalysisResults,
           "Landroid/content/res/Resources.getText(I)Ljava/lang/CharSequence",
           "Landroid/view/ContextThemeWrapper.getResources()Landroid/content/res/Resources;",
           "Landroid/view/View.findViewById(I)Landroid/view/View;",
+          "Landroid/view/View.getResources()Landroid/content/res/Resources;",
           "Landroid/view/Window.findViewById(I)Landroid/view/View;",
           "Landroid/widget/TextView.getText()Ljava/lang/CharSequence;",
           // TODO: get rid of these eventually. calling getActivity() in the wrong place in a Fragment is sometimes a

@@ -1194,14 +1194,18 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
                   else {
                     // essentially, we have an x == null constraint. without index-sensitivity, there's no sense in
                     // adding a y[i] == null constraint since we can't ever prove that null won't be read from the array
-                    qry.clone :: l
+                    val clone = qry.clone
+                    if (Options.INDEX_SENSITIVITY)
+                      if (clone.addHeapConstraint(e)) clone :: l
+                      else l
+                    else clone :: l
                   }
                 case (pureYi@PureVar(_), ptX@ObjVar(_)) =>
                   if (qry.isNull(pureYi)) l // refuted
                   else {
-                    // essentially, we have an x == null constraint. without index-sensitivity, there's no sense in
-                    // adding a y[i] == null constraint since we can't ever prove that null won't be read from the array
-                    qry.clone :: l
+                    val clone = qry.clone
+                    // TODO: this case should be handled in a manner similar to the one above
+                    clone :: l
                   }
                 case (pureYi@PureVar(_), pureX@PureVar(_)) =>
                   val newQuery = qry.clone
