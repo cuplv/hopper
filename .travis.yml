@@ -18,7 +18,12 @@
    - "cd .."
    - "sbt compile"
    - "sbt test:compile"
- script: export LD_LIBRARY_PATH=lib:$LD_LIBRARY_PATH && sbt -J-Xmx2g "run -regressions -jumping_execution"
+env:
+   - TEST_SUITE=android_leaks
+   - TEST_SUITE=casts
+   - TEST_SUITE=array_bounds
+   - TEST_SUITE=android_derefs
+ script: export LD_LIBRARY_PATH=lib:$LD_LIBRARY_PATH && sbt -J-Xmx2g "run -regressions -jumping_execution -check_$TEST_SUITE"
  scala:
    - "2.10.2"
  jdk:
