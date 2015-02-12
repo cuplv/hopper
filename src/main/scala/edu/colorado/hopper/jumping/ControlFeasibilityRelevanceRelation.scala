@@ -243,17 +243,20 @@ class ControlFeasibilityRelevanceRelation(cg : CallGraph, hg : HeapGraph[Instanc
 
   /* @return true if in all concrete executions that call n2, n1 is called before n2. we write this as n1 < n2 */
   // pre: nodeRelevantInfoMap(n1).instructionsFormCut && !isCallableFrom(n2, n1, cg)
-  def mustHappenBefore(n1 : CGNode, n2 : CGNode) : Boolean = (n1.getMethod, n2.getMethod) match {
-    case (m1, m2) if m1.isClinit && cha.isAssignableFrom(m1.getDeclaringClass, m2.getDeclaringClass) =>
-      // we can filter if m1 is a class initializer C.<clinit> and m2 is a method o.m2() where o : T and T <: C. this is
-      // true because the class initializer for C must run before any methods on objects of type T <: C
-      true
-    case (m1, m2) if m1.isInit && (!m2.isInit || m2.getDeclaringClass != m1.getDeclaringClass) &&
-                     calledFromAllConstructors(n1) =>
-      // we can filter if m1 is a constructor that is called by all other constructors of the same class
-      true
-    case _ => false
-  }
+  def mustHappenBefore(n1 : CGNode, n2 : CGNode, checked : Set[(CGNode,CGNode)] = Set.empty) : Boolean =
+    if (checked.contains((n1, n2))) false
+    else
+      (n1.getMethod, n2.getMethod) match {
+        case (m1, m2) if m1.isClinit && cha.isAssignableFrom(m1.getDeclaringClass, m2.getDeclaringClass) =>
+          // we can filter if m1 is a class initializer C.<clinit> and m2 is a method o.m2() where o : T and T <: C.
+          // this is true because the class initializer for C must run before any methods on objects of type T <: C
+          true
+        case (m1, m2) if m1.isInit && (!m2.isInit || m2.getDeclaringClass != m1.getDeclaringClass) &&
+                         calledFromAllConstructors(n1) =>
+          // we can filter if m1 is a constructor that is called by all other constructors of the same class
+          true
+        case _ => false
+      }
 
   def filterNodeRelevantInfoMapInterprocedural(nodeRelevantInfoMap : Map[CGNode,RelevantNodeInfo],
                                                curNode : CGNode) : Map[CGNode,Set[SSAInstruction]] =

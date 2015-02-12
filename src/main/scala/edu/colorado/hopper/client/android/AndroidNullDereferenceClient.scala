@@ -110,7 +110,8 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
            * paths wtihout hitting a node satisfying @param stopPred first */
           // we have to be careful with this: need to look at the IR via isOnlyCalledFrom to be sure that callee is
           // called unconditionally
-          def isOnlyCalledFrom(callee : CGNode, pred : (CGNode => Boolean), stopPred : (CGNode => Boolean)) : Boolean = {
+          def isOnlyCalledFrom(callee : CGNode, pred : (CGNode => Boolean),
+                               stopPred : (CGNode => Boolean)) : Boolean = {
 
             @annotation.tailrec
             def isOnlyCalledFromRec(worklist : List[(CGNode,CGNode)], seen : Set[(CGNode, CGNode)]) : Boolean =
@@ -178,40 +179,57 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
             (m1.getDeclaringClass == m2.getDeclaringClass || m2.getDeclaringClass.getAllMethods.contains(m1))
 
           // TODO: restructure this to avoid redundant computation
-          def androidSpecificMustHappenBefore(n1 : CGNode, n2 : CGNode) : Boolean = (n1.getMethod, n2.getMethod) match {
-            case (m1, m2) if m1.isInit && methodsOnSameClass(m1, m2) && isFrameworkTypeOnCreate(m2) =>
-              true // <init> always happens before onCreate
-            case (m1, m2) if methodsOnSameClass(m1, m2) && isOnlyCalledFromConstructor(n1) &&
-                             (isFrameworkTypeOnCreate(m2) || isOnlyCalledFromOnCreate(n2)) =>
-              true // similar to previous case, but for methods always called only from <init>
-            case (m1, m2) if !m2.isInit && methodsOnSameClass(m1, m2) && isFrameworkTypeOnCreate(m1) &&
-                             !m1.getDeclaringClass.getDeclaredMethods.exists(m =>
-                               m.isInit && cg.getNodes(m.getReference).exists(n => isCallableFrom(n2, n, cg))) =>
-              true // C.onCreate() gets called before any method C.m() that is not called from a constructor
-            case (m1, m2) if !m2.isInit && methodsOnSameClass(m1, m2) && isOnlyCalledFromOnCreate(n1) =>
-              true // similar to previous case, but for methods called only from onCreate()
-            case (m1, m2) if extendsOrImplementsCallbackClass(m2.getDeclaringClass) =>
-              // find methods M_reg where m2 may be registered. happens-before constraints that hold on (m1, m_reg) for
-              // *all* m_reg in M-reg also hold for (m1, m2).
-              // find callback registration methods whose parameters may be bound to this callback object
-              val cbObj = hm.getPointerKeyForLocal(n2, IRUtil.thisVar)
-              val nodesThatMayRegisterCb = getNodesThatMayRegisterCb(cbObj)
-              // find application-scope methods that call the cb register method
-              val cbRegisterCallers =
-                nodesThatMayRegisterCb.foldLeft (Set.empty[CGNode]) ((s, n) =>
-                  cg.getPredNodes(n).foldLeft (s) ((s, n) => if (!ClassUtil.isLibrary(n)) s + n else s)
-                )
-              // if n1 must happen before all methods that register the callback, then the n1 must happen before the
-              // callback is invoked
-              !cbRegisterCallers.isEmpty &&
-              cbRegisterCallers.forall(caller => caller == n1 || (caller != n2 && !isCallableFrom(caller, n1, cg) &&
-                                                                  mustHappenBefore(n1, caller)))
-            // TODO: Application.onCreate() gets called before any other lifecycle methods
-            case _ => false
+          def androidSpecificMustHappenBefore(n1 : CGNode, n2 : CGNode, checked : Set[(CGNode, CGNode)]) : Boolean =
+            if (checked.contains((n1, n2))) false
+            else (n1.getMethod, n2.getMethod) match {
+              case (m1, m2) if m1.isInit && methodsOnSameClass(m1, m2) && isFrameworkTypeOnCreate(m2) =>
+                true // <init> always happens before onCreate
+              case (m1, m2) if methodsOnSameClass(m1, m2) && isOnlyCalledFromConstructor(n1) &&
+                               (isFrameworkTypeOnCreate(m2) || isOnlyCalledFromOnCreate(n2)) =>
+                true // similar to previous case, but for methods always called only from <init>
+              case (m1, m2) if !m2.isInit && methodsOnSameClass(m1, m2) && isFrameworkTypeOnCreate(m1) &&
+                               !m1.getDeclaringClass.getDeclaredMethods.exists(m =>
+                                 m.isInit && cg.getNodes(m.getReference).exists(n => isCallableFrom(n2, n, cg))) =>
+                true // C.onCreate() gets called before any method C.m() that is not called from a constructor
+              case (m1, m2) if !m2.isInit && methodsOnSameClass(m1, m2) && isOnlyCalledFromOnCreate(n1) =>
+                true // similar to previous case, but for methods called only from onCreate()
+              case (m1, m2) if extendsOrImplementsCallbackClass(m2.getDeclaringClass) =>
+                // find methods M_reg where m2 may be registered. happens-before constraints that hold on (m1, m_reg)
+                // for *all* m_reg in M-reg also hold for (m1, m2).
+                // find callback registration methods whose parameters may be bound to this callback object
+                val cbObj = hm.getPointerKeyForLocal(n2, IRUtil.thisVar)
+                val nodesThatMayRegisterCb = getNodesThatMayRegisterCb(cbObj)
+                // find application-scope methods that call the cb register method
+                val cbRegisterCallers =
+                  nodesThatMayRegisterCb.foldLeft (Set.empty[CGNode]) ((s, n) =>
+                    cg.getPredNodes(n).foldLeft (s) ((s, n) => if (!ClassUtil.isLibrary(n)) s + n else s)
+                  )
+                // if n1 must happen before all methods that register the callback, then the n1 must happen before the
+                // callback is invoked
+                if (cbRegisterCallers.isEmpty) false
+                else {
+                  val (res, _) =
+                    cbRegisterCallers.foldLeft(false, checked)((pair, caller) => {
+                      val (res, checked) = pair
+                      if (res || caller == n1) pair
+                      else {
+                        val newChecked = checked + ((n1, n2))
+                        if (caller != n2 && !isCallableFrom(caller, n1, cg)) {
+                          (mustHappenBefore(n1, caller, newChecked), newChecked)
+                        } else (res, newChecked)
+                      }
+                    })
+                  res
+                }
+              // TODO: Application.onCreate() gets called before any other lifecycle methods
+              case _ => false
           }
 
-          override def mustHappenBefore(n1 : CGNode, n2 : CGNode) : Boolean =
-            androidSpecificMustHappenBefore(n1, n2) || super.mustHappenBefore(n1, n2)
+          override def mustHappenBefore(n1 : CGNode, n2 : CGNode,
+                                        checked : Set[(CGNode, CGNode)] = Set.empty) : Boolean = {
+            if (DEBUG) println(s"Determining if ${ClassUtil.pretty(n1)} < ${ClassUtil.pretty(n2)}")
+            super.mustHappenBefore(n1, n2, checked) || androidSpecificMustHappenBefore(n1, n2, checked)
+          }
         }
 
       else new RelevanceRelation(walaRes.cg, walaRes.hg, walaRes.hm, walaRes.cha)
