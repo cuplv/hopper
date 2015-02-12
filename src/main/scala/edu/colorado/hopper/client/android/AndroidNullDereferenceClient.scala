@@ -194,7 +194,7 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
               case (m1, m2) if !m2.isInit && methodsOnSameClass(m1, m2) && isOnlyCalledFromOnCreate(n1) =>
                 true // similar to previous case, but for methods called only from onCreate()
               // TODO: this can lead to divergence. fix
-              /*case (m1, m2) if extendsOrImplementsCallbackClass(m2.getDeclaringClass) =>
+              case (m1, m2) if extendsOrImplementsCallbackClass(m2.getDeclaringClass) =>
                 // find methods M_reg where m2 may be registered. happens-before constraints that hold on (m1, m_reg)
                 // for *all* m_reg in M-reg also hold for (m1, m2).
                 // find callback registration methods whose parameters may be bound to this callback object
@@ -212,7 +212,7 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
                   val (res, _) =
                     cbRegisterCallers.foldLeft(false, checked)((pair, caller) => {
                       val (res, checked) = pair
-                      if (res || caller == n1) pair
+                      if (res || caller == n1 || checked.contains((n1, n2))) pair
                       else {
                         val newChecked = checked + ((n1, n2))
                         if (caller != n2 && !isCallableFrom(caller, n1, cg)) {
@@ -221,7 +221,7 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
                       }
                     })
                   res
-                }*/
+                }
               // TODO: Application.onCreate() gets called before any other lifecycle methods
               case _ => false
           }
@@ -231,6 +231,7 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
             if (DEBUG) println(s"Determining if ${ClassUtil.pretty(n1)} < ${ClassUtil.pretty(n2)}")
             super.mustHappenBefore(n1, n2, checked) || androidSpecificMustHappenBefore(n1, n2, checked)
           }
+
         }
 
       else new RelevanceRelation(walaRes.cg, walaRes.hg, walaRes.hm, walaRes.cha)
