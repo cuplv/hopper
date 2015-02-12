@@ -32,16 +32,18 @@ abstract class DroidelClient(appPath : String, androidLib : File, useJPhantom : 
     appTransformer
   }
 
-  val walaRes = {
+
+
+  val (walaRes, analysisCache) = {
     val analysisScope = appTransformer.makeAnalysisScope(useHarness = true)
     val timer = new Timer
     timer.start()
     println("Building call graph")
-    val res =
+    val cgBuilder =
       new AndroidCGBuilder(analysisScope, appTransformer.harnessClassName, appTransformer.harnessMethodName)
-      .makeAndroidCallGraph
+    val res = cgBuilder.makeAndroidCallGraph
     timer.printTimeTaken("Building call graph")
-    res
+    (res, cgBuilder.cache)
   }
 
 }

@@ -193,7 +193,8 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
                 true // C.onCreate() gets called before any method C.m() that is not called from a constructor
               case (m1, m2) if !m2.isInit && methodsOnSameClass(m1, m2) && isOnlyCalledFromOnCreate(n1) =>
                 true // similar to previous case, but for methods called only from onCreate()
-              case (m1, m2) if extendsOrImplementsCallbackClass(m2.getDeclaringClass) =>
+              // TODO: this can lead to divergence. fix
+              /*case (m1, m2) if extendsOrImplementsCallbackClass(m2.getDeclaringClass) =>
                 // find methods M_reg where m2 may be registered. happens-before constraints that hold on (m1, m_reg)
                 // for *all* m_reg in M-reg also hold for (m1, m2).
                 // find callback registration methods whose parameters may be bound to this callback object
@@ -220,7 +221,7 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
                       }
                     })
                   res
-                }
+                }*/
               // TODO: Application.onCreate() gets called before any other lifecycle methods
               case _ => false
           }

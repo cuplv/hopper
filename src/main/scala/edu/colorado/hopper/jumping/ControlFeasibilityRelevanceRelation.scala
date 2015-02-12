@@ -30,7 +30,7 @@ class ControlFeasibilityRelevanceRelation(cg : CallGraph, hg : HeapGraph[Instanc
   val DEBUG = Options.SCALA_DEBUG
 
   /** return Some(paths) if we should jump, None if we should not jump */
-  override def getPiecewisePaths(p : Path, jmpNum : Int) : Option[List[Path]] = {
+  override def getPiecewisePaths(p: Path, jmpNum: Int): Option[List[Path]] = {
     if (DEBUG) println("computing relevance graph")
     if (!p.qry.hasConstraint) None
     else {
@@ -55,9 +55,10 @@ class ControlFeasibilityRelevanceRelation(cg : CallGraph, hg : HeapGraph[Instanc
         val (node, relInstrs) = entry
         val (condInstrs, otherInstrs) = relInstrs.partition(i => i.isInstanceOf[SSAConditionalBranchInstruction])
         if (condInstrs.isEmpty)
-          // no relevant cond instructions, no need to do filtering
+        // no relevant cond instructions, no need to do filtering
           Path.fork(p, node, relInstrs, jmpNum, cg, hg, hm, cha, paths)
-        else { // "normal" case
+        else {
+          // "normal" case
           // conditionals need to be handled with care because we don't know what part of a conditional is relevant: the
           // true branch, the false branch, or both branches
           val ir = node.getIR
@@ -69,7 +70,7 @@ class ControlFeasibilityRelevanceRelation(cg : CallGraph, hg : HeapGraph[Instanc
               case None => l
             })
           val domInfo = Dominators.make(cfg, cfg.entry())
-          condInstrs.foldLeft (paths) ((paths, condInstr) => {
+          condInstrs.foldLeft(paths)((paths, condInstr) => {
             val (condBlk, condIndex) =
               CFGUtil.findInstr(ir, condInstr) match {
                 case Some((blk, index)) => (blk, index)
@@ -82,7 +83,7 @@ class ControlFeasibilityRelevanceRelation(cg : CallGraph, hg : HeapGraph[Instanc
             val succ2DominatesRelInstr = blksForRelInstructions.exists(b => domInfo.isDominatedBy(b, succ2))
 
             if (succ1DominatesRelInstr && succ2DominatesRelInstr)
-              // each branch of the conditional contains a relevant instruction--no need to fork conditional path
+            // each branch of the conditional contains a relevant instruction--no need to fork conditional path
               paths
             else if (succ1DominatesRelInstr) setupCondPath(node, condBlk, succ2, condIndex, paths)
             else if (succ2DominatesRelInstr) setupCondPath(node, condBlk, succ1, condIndex, paths)
@@ -102,12 +103,12 @@ class ControlFeasibilityRelevanceRelation(cg : CallGraph, hg : HeapGraph[Instanc
   // (2) if every concrete traces visits l_1 -> l_2 -> l_cur, we can rule out l_1
 
   /** check condition (1); @return true if @param toFilter is not backward-reachable from @param curNode */
-  def isNotBackwardReachableFrom(toFilter : CGNode, curNode : CGNode) : Boolean = {
+  def isNotBackwardReachableFrom(toFilter: CGNode, curNode: CGNode): Boolean = {
     // TODO: implement more precise check here
     false
   }
 
-  def isCallableFrom(snk : CGNode, src : CGNode, cg : CallGraph) : Boolean =
+  def isCallableFrom(snk: CGNode, src: CGNode, cg: CallGraph): Boolean =
     new BFSPathFinder[CGNode](cg, src, snk).find() != null
 
 
@@ -119,8 +120,8 @@ class ControlFeasibilityRelevanceRelation(cg : CallGraph, hg : HeapGraph[Instanc
   // are in S, and all of blocks u in cut-crossing edges (u, v) contain a relevant instructions. if we are able to
   // find such a cut, we only need to consider the instructions in u-blocks as relevant, since these instructions are
   // the ones we will hit first when exploring the CFG backward from the exit block
-  def filterNodeModMapIntraProcedural(nodeModMap : Map[CGNode,Set[SSAInstruction]],
-                                      curNode : CGNode) : Map[CGNode,RelevantNodeInfo] = {
+  def filterNodeModMapIntraProcedural(nodeModMap: Map[CGNode, Set[SSAInstruction]],
+                                      curNode: CGNode): Map[CGNode, RelevantNodeInfo] = {
 
 
     def filterRelevantInstrs(iter: BFSIterator[ISSABasicBlock],
@@ -161,7 +162,9 @@ class ControlFeasibilityRelevanceRelation(cg : CallGraph, hg : HeapGraph[Instanc
           if (DEBUG) {
             println("Before filtering")
             relInstrs.foreach(i => {
-              print(s"${ClassUtil.pretty(node)}:"); ClassUtil.pp_instr(i, node.getIR); println
+              print(s"${ClassUtil.pretty(node)}:");
+              ClassUtil.pp_instr(i, node.getIR);
+              println
             })
           }
           val cfg = node.getIR.getControlFlowGraph
@@ -186,7 +189,8 @@ class ControlFeasibilityRelevanceRelation(cg : CallGraph, hg : HeapGraph[Instanc
             println(s"Found relevant cut? $relevantInstructionsFormCut")
             println("After filtering")
             finalRelevantInstrs.foreach(i => {
-              ClassUtil.pp_instr(i, node.getIR); println
+              ClassUtil.pp_instr(i, node.getIR);
+              println
             })
           }
           node ->
@@ -198,12 +202,12 @@ class ControlFeasibilityRelevanceRelation(cg : CallGraph, hg : HeapGraph[Instanc
   }
 
   /** @return true if callee is called on all paths from the entry block of @param caller */
-  def mustBeCalledFrom(callee : CGNode, caller : CGNode) : Boolean = {
+  def mustBeCalledFrom(callee: CGNode, caller: CGNode): Boolean = {
     val ir = caller.getIR
     val cfg = ir.getControlFlowGraph
     val siteBlks =
       cg.getPossibleSites(caller, callee).foldLeft(Set.empty[ISSABasicBlock])((siteBlks, site) =>
-        ir.getBasicBlocksForCall(site).foldLeft (siteBlks) ((siteBlks, blk) => siteBlks + blk))
+        ir.getBasicBlocksForCall(site).foldLeft(siteBlks)((siteBlks, blk) => siteBlks + blk))
     val exitBlks = cfg.getNormalPredecessors(cfg.exit()).toSet
     !siteBlks.intersect(exitBlks).isEmpty || {
       // check that these siteBlks as a set postdominate the entry block
@@ -219,21 +223,21 @@ class ControlFeasibilityRelevanceRelation(cg : CallGraph, hg : HeapGraph[Instanc
     }
   }
 
-  def calledFromAllConstructors(n : CGNode) : Boolean = {
+  def calledFromAllConstructors(n: CGNode): Boolean = {
     val m = n.getMethod
     val declClass = m.getDeclaringClass
     val allConstructors = declClass.getDeclaredMethods.filter(m => m.isInit).toSet
-    def isCalledFromAllConstructors() : Boolean = {
+    def isCalledFromAllConstructors(): Boolean = {
       val iter =
         new BFSIterator[CGNode](cg, n) {
-          override def getConnected(n : CGNode) : java.util.Iterator[_ <: CGNode] =
+          override def getConnected(n: CGNode): java.util.Iterator[_ <: CGNode] =
             cg.getPredNodes(n).filter(n => {
               val m = n.getMethod
               m.isInit || m.getDeclaringClass == declClass
             })
         }
       val visitedConstructors =
-        GraphUtil.bfsIterFold(iter, Set.empty[IMethod], ((s : Set[IMethod], n : CGNode) => s + n.getMethod))
+        GraphUtil.bfsIterFold(iter, Set.empty[IMethod], ((s: Set[IMethod], n: CGNode) => s + n.getMethod))
       allConstructors.subsetOf(visitedConstructors)
     }
     // if allConstructors is unit size and m is a constructor, it is the only constructor and thus trivially called by
@@ -243,7 +247,7 @@ class ControlFeasibilityRelevanceRelation(cg : CallGraph, hg : HeapGraph[Instanc
 
   /* @return true if in all concrete executions that call n2, n1 is called before n2. we write this as n1 < n2 */
   // pre: nodeRelevantInfoMap(n1).instructionsFormCut && !isCallableFrom(n2, n1, cg)
-  def mustHappenBefore(n1 : CGNode, n2 : CGNode, checked : Set[(CGNode,CGNode)] = Set.empty) : Boolean =
+  def mustHappenBefore(n1: CGNode, n2: CGNode, checked: Set[(CGNode, CGNode)] = Set.empty): Boolean = {
     if (checked.contains((n1, n2))) false
     else
       (n1.getMethod, n2.getMethod) match {
@@ -251,12 +255,14 @@ class ControlFeasibilityRelevanceRelation(cg : CallGraph, hg : HeapGraph[Instanc
           // we can filter if m1 is a class initializer C.<clinit> and m2 is a method o.m2() where o : T and T <: C.
           // this is true because the class initializer for C must run before any methods on objects of type T <: C
           true
-        case (m1, m2) if m1.isInit && (!m2.isInit || m2.getDeclaringClass != m1.getDeclaringClass) &&
-                         calledFromAllConstructors(n1) =>
-          // we can filter if m1 is a constructor that is called by all other constructors of the same class
+        case (m1, m2) if m1.isInit && cha.isAssignableFrom(m1.getDeclaringClass, m2.getDeclaringClass) &&
+          m1.getDeclaringClass.getDeclaredMethods.filter(m => m.isInit).size == 1 =>
+          // we can filter if m1 is the only constructor of some type C, and m2 is a method or constructor on some type
+          // T <: C
           true
         case _ => false
       }
+  }
 
   def filterNodeRelevantInfoMapInterprocedural(nodeRelevantInfoMap : Map[CGNode,RelevantNodeInfo],
                                                curNode : CGNode) : Map[CGNode,Set[SSAInstruction]] =
