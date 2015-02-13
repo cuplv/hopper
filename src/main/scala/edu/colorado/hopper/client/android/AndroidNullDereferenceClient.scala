@@ -540,4 +540,7 @@ object AndroidNullDereferenceClientTests extends ClientTests {
     })
     Process(Seq("rm", "-r", classesPathPrefix)).!!
   }
+
+  // this is false just to ensure this only runs once during regression tests--it is clearly jumping-compatible!
+  override def isPiecewiseCompatible : Boolean = false
 }
