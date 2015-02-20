@@ -19,7 +19,7 @@ import edu.colorado.hopper.util.PtUtil
 import edu.colorado.hopper.util.PtUtil._
 import edu.colorado.thresher.core.Options
 import edu.colorado.walautil.Types._
-import edu.colorado.walautil.{Timer, ClassUtil, Util}
+import edu.colorado.walautil.{IRUtil, Timer, ClassUtil, Util}
 
 import scala.collection.JavaConversions._
 
@@ -55,33 +55,45 @@ object TransferFunctions {
       case _ => false
     })
   }
-  
-  def initializeInstanceFieldsToDefaultValues(qry : Qry, constructor : CGNode, thisPT : Set[ObjVar]) : Boolean = {
-    //println("INIT TO DEFAULT VALS FOR " + qry.id + "Q method " + ClassUtil.pretty(constructor))
-    val instanceFlds = constructor.getMethod().getDeclaringClass().getDeclaredInstanceFields()
-    
-    !qry.heapConstraints.exists(e => e match {
-      // TODO: arrays and array elements to default vals
-      case e@ObjPtEdge(src, fld, snk) if thisPT.contains(src) && instanceFlds.contains(fld.fld) => snk match {
-        case p@PureVar(_) =>
-          qry.removeHeapConstraint(e)
-          !qry.addPureConstraint(Pure.makeDefaultValConstraint(p))
-        case _ => 
-          assert(fld.fld.getFieldTypeReference().isReferenceType())
-          // must be an reference type, and thus is initialized to default value null
-          // since we had a constraint o.f -> A (and A is implicitly non-null by construction
-          // conventions of our constraint representation), this is a refutation
-          if (Options.PRINT_REFS) println("Refuted by instance fields init to default vals (ref -> null)!")
-          true
-        }      
-      case e@ArrayPtEdge(src, _, snk) if thisPT.contains(src) => snk match {
-        case p@PureVar(_) =>
-          qry.removeHeapConstraint(e)
-          !qry.addPureConstraint(Pure.makeDefaultValConstraint(p))
-        case _ => sys.error("Expecting PureVar, got " + snk)
-      }
-      case _ => false
-    })
+
+  /** @param knownThis - true if thisPT is an ObjVar in the query, false if ObjVar is fresh. */
+  def initializeInstanceFieldsToDefaultValues(qry : Qry, constructor : CGNode, thisPT : ObjVar,
+                                              knownThis : Boolean) : Boolean = {
+
+    def initializeInternal(objVarMayEqThis : ObjVar => Boolean) : Boolean = {
+      //println("INIT TO DEFAULT VALS FOR " + qry.id + "Q method " + ClassUtil.pretty(constructor))
+      val instanceFlds = constructor.getMethod().getDeclaringClass().getDeclaredInstanceFields()
+
+      !qry.heapConstraints.exists(e => e match {
+        // TODO: arrays and array elements to default vals
+        case e@ObjPtEdge(src, fld, snk) if objVarMayEqThis(src) && instanceFlds.contains(fld.fld) => snk match {
+          case p@PureVar(_) =>
+            qry.removeHeapConstraint(e)
+            !qry.addPureConstraint(Pure.makeDefaultValConstraint(p))
+          case _ =>
+            assert(fld.fld.getFieldTypeReference().isReferenceType())
+            // must be an reference type, and thus is initialized to default value null
+            // since we had a constraint o.f -> A (and A is implicitly non-null by construction
+            // conventions of our constraint representation), this is a refutation
+            if (Options.PRINT_REFS) println("Refuted by instance fields init to default vals (ref -> null)!")
+            true
+        }
+        case e@ArrayPtEdge(src, _, snk) if objVarMayEqThis(src) => snk match {
+          case p@PureVar(_) =>
+            qry.removeHeapConstraint(e)
+            !qry.addPureConstraint(Pure.makeDefaultValConstraint(p))
+          case _ => sys.error("Expecting PureVar, got " + snk)
+        }
+        case _ => false
+      })
+    }
+
+    if (knownThis) initializeInternal((o : ObjVar) => o == thisPT)
+    else
+      // technically, we could do a case split for "o refers to same instance, o refers to difference instance" each
+      // time this evaluates to true. this would be more precise, but we'd have to pay the cost of doing these case
+      // splits. this is the sound + cheap alternative
+      initializeInternal((o : ObjVar) => !o.rgn.intersect(thisPT.rgn).isEmpty)
   } 
   
 }
@@ -599,7 +611,7 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
                                    callerConstraints : MSet[LocalPtEdge],
                                    calleeConstraints : MSet[LocalPtEdge]) : Boolean = {
     if (!call.isStatic()) {
-      val thisLPK = Var.makeLPK(1, callee, hm)
+      val thisLPK = Var.makeLPK(IRUtil.thisVar, callee, hm)
       
       def handleNoEdgeCase() : Boolean = getPt(thisLPK, hg) match {
         case rgn if rgn.isEmpty => false // this -> null, refute
@@ -626,75 +638,63 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
           }
         case None => if (!handleNoEdgeCase) return false        
       }
-    }
-      
-      /*getPt(thisLPK, calleeConstraints, hg) match {
-        case Some((thisVar, thisEdge)) => // add this -> pt(this) edge if applicable
-          if (!thisEdge.isDefined) {
-            qry.getAllObjVars.find(o => !o.rgn.intersect(thisVar.rgn).isEmpty) match {
-              case Some(o) => () // possible aliasing -- do nothing 
-              case None => // no aliasing to consider; just add the constraint 
-                calleeConstraints += PtEdge.make(thisLPK, thisVar)
-            }
-          } else List(qry)
-        case None => Nil // this -> null, refute
-      }     
-    } else List(qry)*/
-    
-    val thisVar = Var.makeThisVar(callee, hm)
-    val thisPT = Qry.getPT[LocalVar,ObjVar](thisVar, calleeConstraints)  
-    
-    // initialize instance fields to default values if callee was a constructor, bind formals to actuals if default value
-    // initialization does not result in a refutation
-    (!callee.getMethod().isInit() || initializeInstanceFieldsToDefaultValues(qry, callee, thisPT)) && {     
-      val tbl = caller.getIR().getSymbolTable
 
-      // TODO: refute based on contextual constraints on caller
-      assert(call.isStatic() || !tbl.isNullConstant(call.getUse(0))) // TODO: refute based on null dispatch
-      for (i <- 0 to callee.getMethod().getNumberOfParameters() - 1) { // TODO: rewrite as forall to make clearer?
-        getConstraintEdge(Var.makeLPK(i + 1, callee, hm), calleeConstraints) match {
-          case Some(edge) =>
-            val callUse = call.getUse(i) 
-            edge.snk match {            
-              case formalObj@ObjVar(rgn) =>                
-                // if callUse is a string constant, rgn should just contain a constant string key
-                if (DEBUG) assert(!tbl.isStringConstant(callUse) || rgn.size == 1)                  
-                if (tbl.isNullConstant(callUse)) {
-                  if (Options.PRINT_REFS) println("Refuted by param binding to null")
-                  return false
-                } else {
-                  val actual = Var.makeLPK(callUse, caller, hm)                            
-                  getPtVal(actual, callerConstraints, hg) match {
-                    case (ptActual@ObjVar(rgnActual), actualEdge) =>
-                      val rgnInter = rgnActual.intersect(rgn) // do pt(actual) \cap pt(formal)
-                      if (rgnInter.isEmpty) {               
-                        if (Options.PRINT_REFS) println("Refuted by from constraints (parameter binding)!")
-                        return false
-                      } else {
-                        val interVar = ObjVar(rgnInter)   
-                        if (!qry.substitute(interVar, formalObj, hg)) return false
-                        else if (actualEdge.isDefined) {
-                          if (!qry.substitute(interVar, ptActual, hg)) return false
-                        } else if (!tbl.isStringConstant(callUse)) qry.addLocalConstraint(LocalPtEdge(LocalVar(actual), interVar))
-                        // if callUse is a string constant, this local edge has already been consumed
-                        // else, everything is fine
-                        //else if (!tbl.isStringConstant(callUse)) qry.addLocalConstraint(LocalPtEdge(LocalVar(actual), interVar))
-                      } 
-                    case (p@PureVar(_), actualEdge) =>
-                      assert(!tbl.isConstant(callUse), "Have const " + actual + " ir " + caller.getIR())
-                      if (qry.isNull(p)) return false // actual -> null, but we needed it to point to formalObj
-                      else if (!actualEdge.isDefined) qry.addLocalConstraint(PtEdge.make(actual, formalObj))
-                  }                    
-                }
-              case p@PureVar(_) =>                 
-                val pureExpr = getOrCreatePureExprForUse(callUse, caller, qry)
-                if (!qry.addPureConstraint(Pure.makeEqConstraint(p, pureExpr))) return false // refuted
-            } 
-          case None => () // this formal doesn't matter for our query
-        }      
+      // initialize instance fields to default values if callee was a constructor
+      if (callee.getMethod.isInit) {
+        val (thisPT, knownThis) =
+          PtUtil.getPt(thisLPK, calleeConstraints, hg) match {
+            case Some((obj, edge)) => (obj, edge.isDefined)
+            case None => sys.error(s"This var for ${ClassUtil.pretty(callee)} has empty pt set")
+          }
+        if (!initializeInstanceFieldsToDefaultValues(qry, callee, thisPT, knownThis)) return false
       }
-      true
     }
+
+    val tbl = caller.getIR().getSymbolTable
+
+    // TODO: refute based on contextual constraints on caller
+    assert(call.isStatic() || !tbl.isNullConstant(call.getUse(0))) // TODO: refute based on null dispatch
+    for (i <- 0 to callee.getMethod().getNumberOfParameters() - 1) { // TODO: rewrite as forall to make clearer?
+      getConstraintEdge(Var.makeLPK(i + 1, callee, hm), calleeConstraints) match {
+        case Some(edge) =>
+          val callUse = call.getUse(i)
+          edge.snk match {
+            case formalObj@ObjVar(rgn) =>
+              // if callUse is a string constant, rgn should just contain a constant string key
+              if (DEBUG) assert(!tbl.isStringConstant(callUse) || rgn.size == 1)
+              if (tbl.isNullConstant(callUse)) {
+                if (Options.PRINT_REFS) println("Refuted by param binding to null")
+                return false
+              } else {
+                val actual = Var.makeLPK(callUse, caller, hm)
+                getPtVal(actual, callerConstraints, hg) match {
+                  case (ptActual@ObjVar(rgnActual), actualEdge) =>
+                    val rgnInter = rgnActual.intersect(rgn) // do pt(actual) \cap pt(formal)
+                    if (rgnInter.isEmpty) {
+                      if (Options.PRINT_REFS) println("Refuted by from constraints (parameter binding)!")
+                      return false
+                    } else {
+                      val interVar = ObjVar(rgnInter)
+                      if (!qry.substitute(interVar, formalObj, hg)) return false
+                      else if (actualEdge.isDefined) {
+                        if (!qry.substitute(interVar, ptActual, hg)) return false
+                      } else if (!tbl.isStringConstant(callUse))
+                        qry.addLocalConstraint(LocalPtEdge(LocalVar(actual), interVar))
+                    }
+                  case (p@PureVar(_), actualEdge) =>
+                    assert(!tbl.isConstant(callUse), "Have const " + actual + " ir " + caller.getIR())
+                    if (qry.isNull(p)) return false // actual -> null, but we needed it to point to formalObj
+                    else if (!actualEdge.isDefined) qry.addLocalConstraint(PtEdge.make(actual, formalObj))
+                }
+              }
+            case p@PureVar(_) =>
+              val pureExpr = getOrCreatePureExprForUse(callUse, caller, qry)
+              if (!qry.addPureConstraint(Pure.makeEqConstraint(p, pureExpr))) return false // refuted
+          }
+        case None => () // this formal doesn't matter for our query
+      }
+    }
+    true
   }
   
   private def getOrCreatePureExprForUse(useNum : Int, n : CGNode, qry : Qry) : PureExpr = {

@@ -76,11 +76,12 @@ object Path {
                 setupJumpPath(newPath, instr, node.getIR().getControlFlowGraph().entry(), -1, node,
                               hm, hg, cha, jmpNum))
               newPath.qry.localConstraints.find(e => e match {
-                case LocalPtEdge(LocalVar(key), ObjVar(_)) => key.getValueNumber() == 1                  
+                case LocalPtEdge(LocalVar(key), ObjVar(_)) => key.getValueNumber() == IRUtil.thisVar
                 case _ => false
               }) match {
                 case Some(LocalPtEdge(_, receiverObj@ObjVar(_))) =>
-                  if (TransferFunctions.initializeInstanceFieldsToDefaultValues(newPath.qry, node, Set(receiverObj)))
+                  if (TransferFunctions.initializeInstanceFieldsToDefaultValues(newPath.qry, node, receiverObj,
+                                                                                knownThis = true))
                     newPath :: paths
                   else paths // refuted by initialization to default vals
                 case other => sys.error("Couldn't find local pointer to receiver in " + newPath + "; got " + other)
