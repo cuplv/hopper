@@ -55,7 +55,7 @@ class ControlFeasibilityRelevanceRelation(cg : CallGraph, hg : HeapGraph[Instanc
         val (node, relInstrs) = entry
         val (condInstrs, otherInstrs) = relInstrs.partition(i => i.isInstanceOf[SSAConditionalBranchInstruction])
         if (condInstrs.isEmpty)
-        // no relevant cond instructions, no need to do filtering
+          // no relevant cond instructions, no need to do filtering
           Path.fork(p, node, relInstrs, jmpNum, cg, hg, hm, cha, paths)
         else {
           // "normal" case

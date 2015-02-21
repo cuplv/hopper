@@ -1,20 +1,26 @@
 package edu.colorado.hopper.client.android
 
 import java.io.File
+import java.util
 
 import com.ibm.wala.analysis.pointers.HeapGraph
 import com.ibm.wala.classLoader.{IMethod, IField, IClass}
 import com.ibm.wala.demandpa.alg.BudgetExceededException
-import com.ibm.wala.ipa.callgraph.impl.FakeRootClass
+import com.ibm.wala.ipa.callgraph.impl.{Everywhere, FakeRootClass}
 import com.ibm.wala.ipa.callgraph.{CallGraph, CGNode}
 import com.ibm.wala.ipa.callgraph.propagation._
 import com.ibm.wala.ipa.modref.ModRef
 import com.ibm.wala.ssa._
+import com.ibm.wala.types._
+import com.ibm.wala.util.graph.dominators.Dominators
+import com.ibm.wala.util.graph.impl.{GraphInverter, DelegatingNumberedNodeManager}
+import com.ibm.wala.util.graph.{Graph, NumberedEdgeManager, AbstractNumberedGraph, NumberedGraph}
 import com.ibm.wala.util.graph.traverse.BFSIterator
+import com.ibm.wala.util.intset.IntSet
 import edu.colorado.droidel.constants.{AndroidConstants, AndroidLifecycle, DroidelConstants}
 import edu.colorado.droidel.driver.AbsurdityIdentifier
 import edu.colorado.hopper.client.{ClientTests, NullDereferenceTransferFunctions}
-import edu.colorado.hopper.executor.DefaultSymbolicExecutor
+import edu.colorado.hopper.executor.{TransferFunctions, DefaultSymbolicExecutor}
 import edu.colorado.hopper.jumping.{ControlFeasibilityRelevanceRelation, RelevanceRelation, DefaultJumpingSymbolicExecutor, JumpingTransferFunctions}
 import edu.colorado.hopper.solver.Z3Solver
 import edu.colorado.hopper.state._
@@ -89,6 +95,272 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
             AndroidLifecycle.getOrCreateFrameworkCreatedClasses(cha).exists(androidClass =>
               cha.isAssignableFrom(c, androidClass)
             )
+
+          def isFrameworkOrStubNode(n : CGNode) : Boolean =
+            ClassUtil.isLibrary(n) || {
+              val methodName = n.getMethod.getDeclaringClass.getName.toString
+              methodName.startsWith(s"L${DroidelConstants.STUB_DIR}") ||
+              methodName.startsWith(s"L${DroidelConstants.HARNESS_DIR}") ||
+              methodName.startsWith(s"L${DroidelConstants.PREWRITTEN_STUB_DIR}")
+            }
+
+          /** given an application-space CGNode n, compute the node(s) invoked by the framework that may call this node.
+            * to be more concrete, if the app is onCreate() { foo() } onDestroy() { foo() } and n is foo, then this
+            * method will return {onCreate, onDestroy} */
+          def getLibraryAppFrontierNodesFor(n : CGNode) : Set[CGNode] = {
+            require(!isFrameworkOrStubNode(n), s"Can't get frontier nodes for library node $n")
+            val iter = new BFSIterator[CGNode](cg, n) {
+              override def getConnected(n : CGNode) : java.util.Iterator[_ <: CGNode] = {
+                cg.getPredNodes(n).filter(n => !isFrameworkOrStubNode(n))
+              }
+            }
+
+            def hasNonAppPred(n : CGNode) : Boolean = cg.getPredNodes(n).exists(n => isFrameworkOrStubNode(n))
+
+            val initFrontierNodes = if (hasNonAppPred(n)) Set(n) else Set.empty[CGNode]
+
+            GraphUtil.bfsIterFold(iter, initFrontierNodes, ((s : Set[CGNode], n : CGNode) =>
+              if (hasNonAppPred(n)) s + n
+              else s
+            ))
+          }
+
+          // sources for lifecycle info:
+          // http://developer.android.com/training/basics/activity-lifecycle/starting.html
+          // https://github.com/xxv/android-lifecycle
+          val activityLifecycleGraph = {
+            val activityTypeName = TypeName.findOrCreate(ClassUtil.walaifyClassName(AndroidConstants.ACTIVITY_TYPE))
+            val activityTypeRef = TypeReference.findOrCreate(ClassLoaderReference.Primordial, activityTypeName)
+            val onCreate =
+              cha.resolveMethod(MethodReference.findOrCreate(activityTypeRef, Selector.make(AndroidLifecycle.ACTIVITY_ONCREATE)))
+            val onStart =
+              cha.resolveMethod(MethodReference.findOrCreate(activityTypeRef, Selector.make(AndroidLifecycle.ACTIVITY_ONSTART)))
+            val onResume =
+              cha.resolveMethod(MethodReference.findOrCreate(activityTypeRef, Selector.make(AndroidLifecycle.ACTIVITY_ONRESUME)))
+            val onPause =
+              cha.resolveMethod(MethodReference.findOrCreate(activityTypeRef, Selector.make(AndroidLifecycle.ACTIVITY_ONPAUSE)))
+            val onStop =
+              cha.resolveMethod(MethodReference.findOrCreate(activityTypeRef, Selector.make(AndroidLifecycle.ACTIVITY_ONSTOP)))
+            val onRestart =
+              cha.resolveMethod(MethodReference.findOrCreate(activityTypeRef, Selector.make(AndroidLifecycle.ACTIVITY_ONRESTART)))
+            val onDestroy =
+              cha.resolveMethod(MethodReference.findOrCreate(activityTypeRef, Selector.make(AndroidLifecycle.ACTIVITY_ONDESTROY)))
+            assert(onCreate != null)
+            assert(onStart != null)
+            assert(onResume != null)
+            assert(onPause != null)
+            assert(onStop != null)
+            assert(onRestart != null)
+            assert(onDestroy != null)
+            val g = new GraphImpl[IMethod](root = Some(onCreate))
+            g.addEdge(onCreate, onStart)
+            g.addEdge(onStart, onResume)
+            g.addEdge(onResume, onPause)
+            g.addEdge(onPause, onStop)
+            g.addEdge(onStop, onRestart)
+            g.addEdge(onRestart, onStart)
+            g.addEdge(onStop, onDestroy)
+            g
+          }
+
+          def specializeLifecycleGraph(curNode : CGNode, relevantMethods : Set[IMethod]) : GraphImpl[IMethod] = {
+            val curMethod = curNode.getMethod
+            val curClass = curMethod.getDeclaringClass
+            val curNodeIsCallback = extendsOrImplementsCallbackClass(curClass)
+            val (lifecycleClass, frontierMethodsForRegister) =
+            if (curNodeIsCallback) {
+              val cbObj = hm.getPointerKeyForLocal(curNode, IRUtil.thisVar)
+              val nodesThatMayRegisterCb = getNodesThatMayRegisterCb(cbObj)
+              // get the frontier nodes that (transitively) call the registration method
+              val frontierMethodsForRegister =
+                nodesThatMayRegisterCb.foldLeft (Set.empty[IMethod]) ((s, n) => {
+                  val registerPreds = cg.getPredNodes(n)
+                  registerPreds.foldLeft (s) ((s, n) =>
+                    if (!ClassUtil.isLibrary(n))
+                      getLibraryAppFrontierNodesFor(n).foldLeft(s)((s, n) => s + n.getMethod)
+                    else s
+                  )
+                })
+              if (frontierMethodsForRegister.isEmpty) (curClass, Set.empty[IMethod])
+              else
+                // pick the class of the register method of the lifecycle we care with
+                (frontierMethodsForRegister.head.getDeclaringClass, frontierMethodsForRegister)
+            } else (curClass, Set.empty[IMethod])
+
+            // start off with the standard Java lifecycle graph--<clinit> -> constructor for all constructros
+            val clinit = lifecycleClass.getClassInitializer match {
+              case null =>
+                cg.getFakeRootNode.getMethod // no class initializer, but we need a single root. make something up
+              case clinit => clinit
+            }
+            val specializedLifecyleGraph = new GraphImpl[IMethod](root = Some(clinit))
+            val constructors = lifecycleClass.getDeclaredMethods.filter(m => m.isInit)
+
+            // TODO: be smart with constructors that call each other
+            if (constructors.size > 1) {
+              val constructorCGNodeMap =
+                constructors.map(constructor => constructor -> cg.getNodes(constructor.getReference))
+            }
+
+            // add <clinit> -> constructor happens-before edges
+            constructors.foreach(constructor => specializedLifecyleGraph.addEdge(clinit, constructor))
+
+
+            // check if c extends an Android framework type. if it does, we'll create a specialized lifecycle graph for
+            // it. if it doesn't, we'll just give it the standard Java lifecycle graph
+            AndroidLifecycle.getOrCreateFrameworkCreatedClasses(cha).find(frameworkClass =>
+              cha.isAssignableFrom(frameworkClass, lifecycleClass)) match {
+                case Some(frameworkClass) =>
+                  // got Android lifecycle type
+                  assert(frameworkClass.getReference.getName.toString == ClassUtil.walaifyClassName(AndroidConstants.ACTIVITY_TYPE),
+                         s"Unimplemented: lifecycle graph template for $frameworkClass")
+                  relevantMethods.foreach(m => println(ClassUtil.pretty(m)))
+                  // if methods contains a method m such that c.originalMethod() resolves to m, return m. else, return
+                  // originalMethod
+                  def trySpecializeMethod(originalMethod : IMethod, methods : Set[IMethod], c : IClass) : Option[IMethod] = {
+                    val classRef = c.getReference
+                    val resolvedMethod = cha.resolveMethod(MethodReference.findOrCreate(classRef, originalMethod.getSelector))
+                    if (methods.contains(resolvedMethod)) Some(resolvedMethod)
+                    else None
+                  }
+
+                  // try to specialize methods in the lifecycle graph template to methods in our class of interest
+                  val specializationMap =
+                    activityLifecycleGraph.nodes.foldLeft (Map.empty[IMethod,IMethod]) ((m, method) => {
+                      trySpecializeMethod(method, relevantMethods, lifecycleClass) match {
+                        case Some(specializedMethod) => m + (method -> specializedMethod)
+                        case None => m
+                      }
+                    })
+
+                  activityLifecycleGraph.root match {
+                    case Some(root) =>
+                      val newRoot = specializationMap.getOrElse(root, root)
+                      // add contructor -> root edges
+                      constructors.foreach(constructor => specializedLifecyleGraph.addEdge(constructor, newRoot))
+                    case None => sys.error("expecting rooted graph")
+                  }
+
+                  // walk through the lifecycle graph and add its edges to our specialized graph, using the specialization map
+                  // as appropriate
+                  activityLifecycleGraph.edges.foreach(edgePair => {
+                    val (src, snk) = edgePair
+                    val (newSrc, newSnk) = (specializationMap.getOrElse(src, src), specializationMap.getOrElse(snk, snk))
+                    specializedLifecyleGraph.addEdge(newSrc, newSnk)
+                  })
+
+                  // TODO: add onResume -> {all non-lifecycle callbacks} edges?
+
+                case None => () // got "normal" type, nothing else to do
+              }
+
+            if (curNodeIsCallback) {
+              val lifecycleGraphMethods = specializedLifecyleGraph.nodes().toSet
+              // add edge from register method to the callback. this models the constraint that the callback must be
+              // registered somewhere before cb
+              frontierMethodsForRegister.foreach(registerMethod =>
+                if (lifecycleGraphMethods.contains(registerMethod))
+                specializedLifecyleGraph.addEdge(registerMethod, curMethod)
+              )
+            }
+
+            specializedLifecyleGraph
+          }
+
+          def controlFeasibilityFilter(nodeModMap : Map[CGNode,Set[SSAInstruction]], curNode : CGNode) = {
+            val curMethod = curNode.getMethod
+            val frontierMethods =
+              nodeModMap.flatMap(entry => getLibraryAppFrontierNodesFor(entry._1).map(n => n.getMethod)).toSet
+            assert(!frontierMethods.isEmpty, "Should always have nonzero number of frontier methods")
+            // create a lifecycle graph for the class of the current method
+            val lifecycleGraph =
+              specializeLifecycleGraph(curNode, frontierMethods + curMethod)
+            val methodsToVisit = {
+              val graphMethods = lifecycleGraph.nodes().toSet
+              if (!graphMethods.contains(curMethod))
+                // current method has no lifecycle constraints, any frontier method could be visited next
+                frontierMethods
+              else {
+                val methodsNotInLifecyleGraph = frontierMethods.filter(m => !graphMethods.contains(m))
+                lifecycleGraph.root match {
+                  case Some(root) =>
+                    val iter = new BFSIterator[IMethod](lifecycleGraph, lifecycleGraph.getPredNodes(curMethod)) {
+                      override def getConnected(n: IMethod): java.util.Iterator[_ <: IMethod] = {
+                        // cut off the search when we hit a relevant method
+                        if (frontierMethods.contains(n)) java.util.Collections.emptyIterator()
+                        else asJavaIterator(lifecycleGraph.getPredNodes(n))
+                      }
+                    }
+                    GraphUtil.bfsIterFold(iter, methodsNotInLifecyleGraph, ((s: Set[IMethod], m: IMethod) =>
+                      if (frontierMethods.contains(m)) s + m
+                      else s
+                      )
+                    )
+                  case None => sys.error("Expected rooted graph")
+                }
+              }
+            }
+
+            methodsToVisit.map(m => cg.getNode(m, Everywhere.EVERYWHERE))
+          }
+
+          /** return Some(paths) if we should jump, None if we should not jump */
+          override def getPiecewisePaths(p: Path, jmpNum: Int): Option[List[Path]] = {
+            if (DEBUG) println("computing relevance graph")
+            if (p.qry.heapConstraints.isEmpty) None
+            else {
+              val qry = p.qry
+              val modMap = super.getNodeModifierMap(qry, ignoreLocalConstraints = true)
+              val nodesToJumpTo = controlFeasibilityFilter(modMap, qry.node).toList
+              if (nodesToJumpTo.isEmpty) println("Refuted by lack of control-feasible paths!")
+
+              /*val curMethod = p.node.getMethod
+              val curClass = curMethod.getDeclaringClass
+
+              val curMethodThisConstraint =
+                if (!curMethod.isStatic) {
+                  // find constraint on this var for current node, try to transfer to jump node
+                  qry.localConstraints.find(e => e match {
+                    case LocalPtEdge(LocalVar(lpk), thisVar@ObjVar(_)) if IRUtil.isThisVar(lpk.getValueNumber) => true
+                    case _ => false
+                  })
+                } else None*/
+
+              p.clearCallStack()
+
+              // jump to the exit block of each relevant node
+              Some(nodesToJumpTo.map(jmpNode => {
+                val copy = p.deepCopy
+                val jmpBlk = jmpNode.getIR.getExitBlock
+                val qry = copy.qry
+                Path.setupBlockAndCallStack(copy, jmpNode, jmpBlk, -1, jmpNum)
+                val jmpMethod = jmpNode.getMethod
+                // transfer the this constraint from the current method to the jump method
+
+                // TODO: can probably do something more permissive than checking class equality here
+                if (!jmpMethod.isStatic) {//&& curClass == jmpMethod.getDeclaringClass)
+                  /*curMethodThisConstraint match {
+                    case Some(e) =>
+                      val jmpMethodThisConstraint = PtEdge.make(Var.makeLocalVar(IRUtil.thisVar, jmpNode, hm), e.snk)
+                      println("Transferring this constraint " + jmpMethodThisConstraint)
+                      qry.addLocalConstraint(jmpMethodThisConstraint)
+                    case None =>*/
+                      // TODO: this is unsound, do this better
+                      // try find something in our constraints that may-alias the this var, add appropriate constraint
+                      val thisLPK = Var.makeLPK(IRUtil.thisVar, jmpNode, hm)
+                      val thisPT = PtUtil.getPt(thisLPK, hg)
+                      qry.heapConstraints.find(e => e match {
+                        case ObjPtEdge(src@ObjVar(srcRgn), _, _) if !srcRgn.intersect(thisPT).isEmpty =>
+                          val thisConstraint = PtEdge.make(Var.makeLocalVar(IRUtil.thisVar, jmpNode, hm), src)
+                          qry.addLocalConstraint(thisConstraint)
+                          true
+                        case _ => false
+                      })
+                }
+                copy
+              }))
+            }
+          }
 
           override def isCallableFrom(snk : CGNode, src : CGNode, cg : CallGraph) : Boolean =
             getReachableInAndroidCG(cg, src).contains(snk)
@@ -317,9 +589,11 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
       override val keepLoopConstraints = true
 
       private def doJump(p : Path) : Iterable[Path] = {
-        p.qry.localConstraints.clear()
+        require(!p.node.getMethod.isInit)
+        //p.qry.localConstraints.clear()
         if (DEBUG) println("After weakening, query is " + p.qry)
         val curJmp = { jmpNum += 1; jmpNum }
+
         rr.getPiecewisePaths(p, curJmp) match {
           case Some(unfilteredPiecewisePaths) =>
             val piecewisePaths =
@@ -335,7 +609,7 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
 
       // TODO: if callee is relevant to heap constraint only, choose to jump instead of diving in?
       override def returnFromCall(p : Path) : Iterable[Path] =
-        if (p.callStackSize == 1) {
+        if (p.callStackSize == 1 && !p.node.getMethod.isInit) {
           val qry = p.qry
           // keep one constraint on null and the access path to the constraint--drop all other constraints
           qry.heapConstraints.find(e => e.snk match {
