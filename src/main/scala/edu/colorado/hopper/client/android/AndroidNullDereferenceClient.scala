@@ -116,21 +116,24 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
             * to be more concrete, if the app is onCreate() { foo() } onDestroy() { foo() } and n is foo, then this
             * method will return {onCreate, onDestroy} */
           def getLibraryAppFrontierNodesFor(n : CGNode) : Set[CGNode] = {
-            require(!isFrameworkOrStubNode(n), s"Can't get frontier nodes for library node $n")
-            val iter = new BFSIterator[CGNode](cg, n) {
-              override def getConnected(n : CGNode) : java.util.Iterator[_ <: CGNode] = {
-                cg.getPredNodes(n).filter(n => !isFrameworkOrStubNode(n))
+            // library nodes are already on the wrong side of the library/app frontier, can't do anything
+            if (isFrameworkOrStubNode(n)) Set(n)
+            else {
+              val iter = new BFSIterator[CGNode](cg, n) {
+                override def getConnected(n: CGNode): java.util.Iterator[_ <: CGNode] = {
+                  cg.getPredNodes(n).filter(n => !isFrameworkOrStubNode(n))
+                }
               }
+
+              def hasNonAppPred(n: CGNode): Boolean = cg.getPredNodes(n).exists(n => isFrameworkOrStubNode(n))
+
+              val initFrontierNodes = if (hasNonAppPred(n)) Set(n) else Set.empty[CGNode]
+
+              GraphUtil.bfsIterFold(iter, initFrontierNodes, ((s: Set[CGNode], n: CGNode) =>
+                if (hasNonAppPred(n)) s + n
+                else s
+                ))
             }
-
-            def hasNonAppPred(n : CGNode) : Boolean = cg.getPredNodes(n).exists(n => isFrameworkOrStubNode(n))
-
-            val initFrontierNodes = if (hasNonAppPred(n)) Set(n) else Set.empty[CGNode]
-
-            GraphUtil.bfsIterFold(iter, initFrontierNodes, ((s : Set[CGNode], n : CGNode) =>
-              if (hasNonAppPred(n)) s + n
-              else s
-            ))
           }
 
           def specializeLifecycleGraph(curNode : CGNode, relevantMethods : Set[IMethod]) : GraphImpl[IMethod] = {
