@@ -18,6 +18,7 @@ import com.ibm.wala.util.graph.{Graph, NumberedEdgeManager, AbstractNumberedGrap
 import com.ibm.wala.util.graph.traverse.BFSIterator
 import com.ibm.wala.util.intset.IntSet
 import edu.colorado.droidel.constants.{AndroidConstants, AndroidLifecycle, DroidelConstants}
+import edu.colorado.droidel.constants.AndroidLifecycle._
 import edu.colorado.droidel.driver.AbsurdityIdentifier
 import edu.colorado.hopper.client.{ClientTests, NullDereferenceTransferFunctions}
 import edu.colorado.hopper.executor.{TransferFunctions, DefaultSymbolicExecutor}
@@ -91,6 +92,13 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
               } else s
             })
 
+          val activityLifecycleGraph = AndroidLifecycle.makeActivityLifecycleGraph(cha)
+          val serviceLifecycleGraph = AndroidLifecycle.makeServiceLifecycleGraph(cha)
+          val appFragmentLifecycleGraph =
+            AndroidLifecycle.makeFragmentLifecycleGraph(TypeName.findOrCreate(ClassUtil.walaifyClassName(AndroidConstants.APP_FRAGMENT_TYPE)), cha)
+          val supportFragmentLifecycleGraph =
+            AndroidLifecycle.makeFragmentLifecycleGraph(TypeName.findOrCreate(ClassUtil.walaifyClassName(AndroidConstants.FRAGMENT_TYPE)), cha)
+
           def isAndroidLifecycleType(c : IClass) : Boolean =
             AndroidLifecycle.getOrCreateFrameworkCreatedClasses(cha).exists(androidClass =>
               cha.isAssignableFrom(c, androidClass)
@@ -125,44 +133,6 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
             ))
           }
 
-          // sources for lifecycle info:
-          // http://developer.android.com/training/basics/activity-lifecycle/starting.html
-          // https://github.com/xxv/android-lifecycle
-          val activityLifecycleGraph = {
-            val activityTypeName = TypeName.findOrCreate(ClassUtil.walaifyClassName(AndroidConstants.ACTIVITY_TYPE))
-            val activityTypeRef = TypeReference.findOrCreate(ClassLoaderReference.Primordial, activityTypeName)
-            val onCreate =
-              cha.resolveMethod(MethodReference.findOrCreate(activityTypeRef, Selector.make(AndroidLifecycle.ACTIVITY_ONCREATE)))
-            val onStart =
-              cha.resolveMethod(MethodReference.findOrCreate(activityTypeRef, Selector.make(AndroidLifecycle.ACTIVITY_ONSTART)))
-            val onResume =
-              cha.resolveMethod(MethodReference.findOrCreate(activityTypeRef, Selector.make(AndroidLifecycle.ACTIVITY_ONRESUME)))
-            val onPause =
-              cha.resolveMethod(MethodReference.findOrCreate(activityTypeRef, Selector.make(AndroidLifecycle.ACTIVITY_ONPAUSE)))
-            val onStop =
-              cha.resolveMethod(MethodReference.findOrCreate(activityTypeRef, Selector.make(AndroidLifecycle.ACTIVITY_ONSTOP)))
-            val onRestart =
-              cha.resolveMethod(MethodReference.findOrCreate(activityTypeRef, Selector.make(AndroidLifecycle.ACTIVITY_ONRESTART)))
-            val onDestroy =
-              cha.resolveMethod(MethodReference.findOrCreate(activityTypeRef, Selector.make(AndroidLifecycle.ACTIVITY_ONDESTROY)))
-            assert(onCreate != null)
-            assert(onStart != null)
-            assert(onResume != null)
-            assert(onPause != null)
-            assert(onStop != null)
-            assert(onRestart != null)
-            assert(onDestroy != null)
-            val g = new GraphImpl[IMethod](root = Some(onCreate))
-            g.addEdge(onCreate, onStart)
-            g.addEdge(onStart, onResume)
-            g.addEdge(onResume, onPause)
-            g.addEdge(onPause, onStop)
-            g.addEdge(onStop, onRestart)
-            g.addEdge(onRestart, onStart)
-            g.addEdge(onStop, onDestroy)
-            g
-          }
-
           def specializeLifecycleGraph(curNode : CGNode, relevantMethods : Set[IMethod]) : GraphImpl[IMethod] = {
             val curMethod = curNode.getMethod
             val curClass = curMethod.getDeclaringClass
@@ -194,17 +164,57 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
               case clinit => clinit
             }
             val specializedLifecyleGraph = new GraphImpl[IMethod](root = Some(clinit))
-            val constructors = lifecycleClass.getDeclaredMethods.filter(m => m.isInit)
 
-            // TODO: be smart with constructors that call each other
-            if (constructors.size > 1) {
-              val constructorCGNodeMap =
-                constructors.map(constructor => constructor -> cg.getNodes(constructor.getReference))
+            val constructors = {
+              val allConstructors = lifecycleClass.getDeclaredMethods.filter(m => m.isInit)
+              if (allConstructors.size > 1) {
+                //val constructorCGNodeMap =
+                  //allConstructors.map(constructor => constructor -> cg.getNodes(constructor.getReference))
+                // TODO: be smart with constructors that call each other
+                allConstructors
+              } else allConstructors
             }
 
             // add <clinit> -> constructor happens-before edges
             constructors.foreach(constructor => specializedLifecyleGraph.addEdge(clinit, constructor))
 
+            def specializeAndroidLifecycleGraph(lifecycleGraph : GraphImpl[IMethod]) : Unit = {
+              // if methods contains a method m such that c.originalMethod() resolves to m, return m. else, return
+              // originalMethod
+              def trySpecializeMethod(originalMethod : IMethod, methods : Set[IMethod],
+                                      c : IClass) : Option[IMethod] = {
+                val classRef = c.getReference
+                val resolvedMethod =
+                  cha.resolveMethod(MethodReference.findOrCreate(classRef, originalMethod.getSelector))
+                if (methods.contains(resolvedMethod)) Some(resolvedMethod)
+                else None
+              }
+
+              // try to specialize methods in the lifecycle graph template to methods in our class of interest
+              val specializationMap =
+                lifecycleGraph.nodes.foldLeft (Map.empty[IMethod,IMethod]) ((m, method) => {
+                  trySpecializeMethod(method, relevantMethods, lifecycleClass) match {
+                    case Some(specializedMethod) => m + (method -> specializedMethod)
+                    case None => m
+                  }
+                })
+
+              lifecycleGraph.root match {
+                case Some(root) =>
+                  val newRoot = specializationMap.getOrElse(root, root)
+                  // add contructor -> root edges
+                  constructors.foreach(constructor => specializedLifecyleGraph.addEdge(constructor, newRoot))
+                case None => sys.error("expecting rooted graph")
+              }
+
+              // walk through the lifecycle graph and add its edges to our specialized graph, using the specialization map
+              // as appropriate
+              lifecycleGraph.edges.foreach(edgePair => {
+                val (src, snk) = edgePair
+                val (newSrc, newSnk) = (specializationMap.getOrElse(src, src), specializationMap.getOrElse(snk, snk))
+                specializedLifecyleGraph.addEdge(newSrc, newSnk)
+              })
+            }
 
             // check if c extends an Android framework type. if it does, we'll create a specialized lifecycle graph for
             // it. if it doesn't, we'll just give it the standard Java lifecycle graph
@@ -212,45 +222,16 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
               cha.isAssignableFrom(frameworkClass, lifecycleClass)) match {
                 case Some(frameworkClass) =>
                   // got Android lifecycle type
-                  assert(frameworkClass.getReference.getName.toString == ClassUtil.walaifyClassName(AndroidConstants.ACTIVITY_TYPE),
-                         s"Unimplemented: lifecycle graph template for $frameworkClass")
-                  relevantMethods.foreach(m => println(ClassUtil.pretty(m)))
-                  // if methods contains a method m such that c.originalMethod() resolves to m, return m. else, return
-                  // originalMethod
-                  def trySpecializeMethod(originalMethod : IMethod, methods : Set[IMethod], c : IClass) : Option[IMethod] = {
-                    val classRef = c.getReference
-                    val resolvedMethod = cha.resolveMethod(MethodReference.findOrCreate(classRef, originalMethod.getSelector))
-                    if (methods.contains(resolvedMethod)) Some(resolvedMethod)
-                    else None
-                  }
-
-                  // try to specialize methods in the lifecycle graph template to methods in our class of interest
-                  val specializationMap =
-                    activityLifecycleGraph.nodes.foldLeft (Map.empty[IMethod,IMethod]) ((m, method) => {
-                      trySpecializeMethod(method, relevantMethods, lifecycleClass) match {
-                        case Some(specializedMethod) => m + (method -> specializedMethod)
-                        case None => m
-                      }
-                    })
-
-                  activityLifecycleGraph.root match {
-                    case Some(root) =>
-                      val newRoot = specializationMap.getOrElse(root, root)
-                      // add contructor -> root edges
-                      constructors.foreach(constructor => specializedLifecyleGraph.addEdge(constructor, newRoot))
-                    case None => sys.error("expecting rooted graph")
-                  }
-
-                  // walk through the lifecycle graph and add its edges to our specialized graph, using the specialization map
-                  // as appropriate
-                  activityLifecycleGraph.edges.foreach(edgePair => {
-                    val (src, snk) = edgePair
-                    val (newSrc, newSnk) = (specializationMap.getOrElse(src, src), specializationMap.getOrElse(snk, snk))
-                    specializedLifecyleGraph.addEdge(newSrc, newSnk)
-                  })
-
-                  // TODO: add onResume -> {all non-lifecycle callbacks} edges?
-
+                  val typeStr = frameworkClass.getReference.getName.toString
+                  if (typeStr == ClassUtil.walaifyClassName(AndroidConstants.ACTIVITY_TYPE))
+                    specializeAndroidLifecycleGraph(activityLifecycleGraph)
+                  else if (typeStr == ClassUtil.walaifyClassName(AndroidConstants.SERVICE_TYPE))
+                    specializeAndroidLifecycleGraph(serviceLifecycleGraph)
+                  else if (typeStr == ClassUtil.walaifyClassName(AndroidConstants.APP_FRAGMENT_TYPE))
+                    specializeAndroidLifecycleGraph(appFragmentLifecycleGraph)
+                  else if (typeStr == ClassUtil.walaifyClassName(AndroidConstants.FRAGMENT_TYPE))
+                    specializeAndroidLifecycleGraph(supportFragmentLifecycleGraph)
+                  // else. we don't know anything about the lifecycle of this component, nothing to do
                 case None => () // got "normal" type, nothing else to do
               }
 
