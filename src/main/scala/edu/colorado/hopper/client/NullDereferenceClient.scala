@@ -275,8 +275,14 @@ class NullDereferenceTransferFunctions(walaRes : WalaAnalysisResults,
     val javaAnnots =
       Set("Ljava/lang/Integer.valueOf(I)Ljava/lang/Integer;",
           "Ljava/lang/Object.toString()Ljava/lang/String;",
-          "Ljava/lang/StringBuilder.append(Ljava/lang/String;)Ljava/lang/StringBuilder;",
+          "Ljava/lang/StringBuilder.append(Z)Ljava/lang/StringBuilder;",
+          "Ljava/lang/StringBuilder.append(C)Ljava/lang/StringBuilder;",
+          "Ljava/lang/StringBuilder.append([C)Ljava/lang/StringBuilder;",
           "Ljava/lang/StringBuilder.append(I)Ljava/lang/StringBuilder;",
+          "Ljava/lang/StringBuilder.append(J)Ljava/lang/StringBuilder;",
+          "Ljava/lang/StringBuilder.append(Ljava/lang/CharSequence;)Ljava/lang/StringBuilder;",
+          "Ljava/lang/StringBuilder.append(Ljava/lang/String;)Ljava/lang/StringBuilder;",
+          "Ljava/lang/StringBuilder.append(Ljava/lang/StringBuffer;)Ljava/lang/StringBuilder;",
           "Ljava/lang/ThreadLocal.get()Ljava/lang/Object;"
       )
 
