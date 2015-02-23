@@ -189,7 +189,7 @@ class RelevanceRelation(val cg : CallGraph, val hg : HeapGraph[InstanceKey], val
   /** return Some(paths) if we should jump, None if we should not jump */
   def getPiecewisePaths(p : Path, jmpNum : Int) : Option[List[Path]] = {
     if (DEBUG) println("computing relevance graph")
-    if (!p.qry.hasConstraint) return None
+    if (p.qry.heapConstraints.isEmpty) return None
 
     // get producers
     val relMap = getNodeRelevantInstrsMap(p.qry, ignoreLocalConstraints = true)
