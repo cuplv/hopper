@@ -285,7 +285,16 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
               }
             }
 
-            methodsToVisit.map(m => cg.getNode(m, Everywhere.EVERYWHERE))
+            val methodNodeMap = nodeModMap.map(entry => {
+              val n = entry._1
+              n.getMethod -> n
+            })
+            methodsToVisit.foldLeft (Set.empty[CGNode]) ((s, m) =>
+              methodNodeMap.get(m) match {
+                case Some(n) => s + n
+                case None => cg.getNodes(m.getReference).foldLeft (s) ((s, n) => s + n)
+              }
+            )
           }
 
           /** return Some(paths) if we should jump, None if we should not jump */
