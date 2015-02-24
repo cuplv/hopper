@@ -61,10 +61,6 @@ object AndroidNullDereferenceClient {
 class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhantom : Boolean = true)
     extends DroidelClient(appPath, androidLib, useJPhantom) {
 
-  walaRes.cg.foreach(n =>
-    if (!ClassUtil.isLibrary(n)) n.iterateNewSites().foreach(site =>
-      println("method " + n + " site " + site.getDeclaredType + " resolved " + walaRes.cha.lookupClass(site.getDeclaredType))))
-
   val DEBUG = Options.SCALA_DEBUG
   val rr =
     if (Options.JUMPING_EXECUTION)
@@ -132,11 +128,10 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
               def hasNonAppPred(n: CGNode): Boolean = cg.getPredNodes(n).exists(n => isFrameworkOrStubNode(n))
 
               val initFrontierNodes = if (hasNonAppPred(n)) Set(n) else Set.empty[CGNode]
-
               GraphUtil.bfsIterFold(iter, initFrontierNodes, ((s: Set[CGNode], n: CGNode) =>
                 if (hasNonAppPred(n)) s + n
                 else s
-                ))
+              ))
             }
           }
 
