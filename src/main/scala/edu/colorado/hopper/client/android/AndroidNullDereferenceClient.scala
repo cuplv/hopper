@@ -170,6 +170,9 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
 
             val constructors = {
               val allConstructors = lifecycleClass.getDeclaredMethods.filter(m => m.isInit)
+              if (DEBUG)
+                println(s"Have ${allConstructors.size} constructors: ${allConstructors.toList}")
+
               if (allConstructors.size > 1) {
                 //val constructorCGNodeMap =
                   //allConstructors.map(constructor => constructor -> cg.getNodes(constructor.getReference))
@@ -259,6 +262,10 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
             // create a lifecycle graph for the class of the current method
             val lifecycleGraph =
               specializeLifecycleGraph(curNode, frontierMethods + curMethod)
+            if (DEBUG) {
+              println("Specialized lifecycle graph:")
+              lifecycleGraph.edges().foreach(p => println(s"${ClassUtil.pretty(p._1)} -> ${ClassUtil.pretty(p._2)}"))
+            }
             val methodsToVisit = {
               val graphMethods = lifecycleGraph.nodes().toSet
               if (!graphMethods.contains(curMethod))
@@ -299,12 +306,14 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
 
           /** return Some(paths) if we should jump, None if we should not jump */
           override def getPiecewisePaths(p: Path, jmpNum: Int): Option[List[Path]] = {
-            if (DEBUG) println("computing relevance graph")
+            if (DEBUG) println("Computing relevance graph")
             if (p.qry.heapConstraints.isEmpty) None
             else {
               val qry = p.qry
               val modMap = super.getNodeModifierMap(qry, ignoreLocalConstraints = true)
+              if (DEBUG) println(s"Before control-feas filtering, ${modMap.keys} are relevant")
               val nodesToJumpTo = controlFeasibilityFilter(modMap, qry.node).toList
+              if (DEBUG) println(s"After control-feas filtering, ${nodesToJumpTo} are relevant")
               if (nodesToJumpTo.isEmpty) println("Refuted by lack of control-feasible paths!")
 
               /*val curMethod = p.node.getMethod
@@ -611,7 +620,9 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
           }) match {
             case Some(e) =>
               val keepEdges = qry.getAccessPrefixPathFor(e)
-              // guaranteed to exist because getAccessPathPrefix returns at least e
+              // TODO: turning this off for now because it can hurt control-feasibility--may make sense to turn on for
+              // normal Hopper
+              /*// guaranteed to exist because getAccessPathPrefix returns at least e
               val accessPathHead = keepEdges.head.src
               // see if the access path leading to the null constraint is rooted in a function parameter other than
               // "this". if this is the case, we want to keep going backward without jumping in order to get a more
@@ -623,9 +634,9 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
                   case _ => false
                 })
               // have access path originating from non-this param and not at an entrypoint callback, don't jump
-              if (accessPathRootedInNonThisParam && !isEntrypointCallback(p.node)) super.returnFromCall(p)
+              if (accessPathRootedInNonThisParam && !isEntrypointCallback(p.node)) super.returnFromCall(p)*/
+              if (!isEntrypointCallback(p.node)) super.returnFromCall(p)
               else { // have access path originating from this or at entrypoint callback, jump
-                // TODO: remove inner class this constraints?
                 if (DEBUG) println(s"have complete access path or at function boundary of entrypoint cb ${p.node}")
                 // weaken query by removing all constraints but access path, then jump
                 qry.heapConstraints.foreach(e => if (!keepEdges.contains(e)) qry.removeHeapConstraint(e))
