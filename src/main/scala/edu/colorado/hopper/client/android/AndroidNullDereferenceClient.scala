@@ -242,8 +242,16 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
 
           def controlFeasibilityFilter(nodeModMap : Map[CGNode,Set[SSAInstruction]], curNode : CGNode) = {
             val curMethod = curNode.getMethod
-            val frontierMethods =
-              nodeModMap.flatMap(entry => getLibraryAppFrontierNodesFor(entry._1).map(n => n.getMethod)).toSet
+            val (frontierMethods, frontierToOriginalMap) =
+              nodeModMap.foldLeft (Set.empty[IMethod], Map.empty[IMethod,Set[CGNode]]) ((pair, entry) => {
+                val curNode = entry._1
+                val frontierMethodsForCurNode = getLibraryAppFrontierNodesFor(curNode).map(n => n.getMethod)
+                frontierMethodsForCurNode.foldLeft (pair) ((pair, method) => {
+                  val (frontierMethods, frontierToOriginalMap) = pair
+                  (frontierMethods + method, Util.updateSMap(frontierToOriginalMap, method, curNode))
+                })
+              })
+
             assert(!frontierMethods.isEmpty, "Should always have nonzero number of frontier methods")
             // create a lifecycle graph for the class of the current method
             val lifecycleGraph =
@@ -252,13 +260,14 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
               println("Specialized lifecycle graph:")
               lifecycleGraph.edges().foreach(p => println(s"${ClassUtil.pretty(p._1)} -> ${ClassUtil.pretty(p._2)}"))
             }
-            val methodsToVisit = {
+            val (methodsToVisitMustAlias, methodsToVisitMustNotAlias) = {
               val graphMethods = lifecycleGraph.nodes().toSet
               if (!graphMethods.contains(curMethod))
                 // current method has no lifecycle constraints, any frontier method could be visited next
-                frontierMethods
+                (frontierMethods, Set.empty[IMethod])
               else {
-                val methodsNotInLifecyleGraph = frontierMethods.filter(m => !graphMethods.contains(m))
+                val (methodsInLifecycleGraph, methodsNotInLifecyleGraph) =
+                  frontierMethods.partition(m => graphMethods.contains(m))
                 lifecycleGraph.root match {
                   case Some(root) =>
                     val iter = new BFSIterator[IMethod](lifecycleGraph, lifecycleGraph.getPredNodes(curMethod)) {
@@ -268,11 +277,34 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
                         else asJavaIterator(lifecycleGraph.getPredNodes(n))
                       }
                     }
-                    GraphUtil.bfsIterFold(iter, methodsNotInLifecyleGraph, ((s: Set[IMethod], m: IMethod) =>
-                      if (frontierMethods.contains(m)) s + m
-                      else s
+                    val toVisitIfMustAlias =
+                      GraphUtil.bfsIterFold(iter, methodsNotInLifecyleGraph, ((s: Set[IMethod], m: IMethod) =>
+                        if (frontierMethods.contains(m)) s + m
+                        else s
+                        )
                       )
-                    )
+                    val filteredByMustAlias = methodsInLifecycleGraph.filter(m => !toVisitIfMustAlias.contains(m))
+                    // we can avoid visiting the nodes in this set *if* we know that the receiver of the current node
+                    // must-aliases the receiver of each node in toVisit. otherwise, we must consider visiting the
+                    // these nodes as well, but we get to add a receiver must-not alias constraint.
+                    // we leverage this fact by quickly checking if adding this constraint makes all of the relevant
+                    // instructions non-relevant. if this is the case, we can avoid visiting the node in question
+                    val toVisitIfMustNotAlias = filteredByMustAlias.filter(f => {
+                      val originalNodesForFrontierMethod = frontierToOriginalMap(f)
+                      originalNodesForFrontierMethod.forall(n => {
+                        nodeModMap(n).forall(i => {
+                          val instrRelevantIfReceiverMustNotAlias =
+                            i match {
+                              case i : SSAPutInstruction => i.isStatic || !IRUtil.isThisVar(i.getRef)
+                              case i => true
+                            }
+                          if (DEBUG && instrRelevantIfReceiverMustNotAlias)
+                            println(s"Instruction ${ClassUtil.pretty(n)}: $i still relevant with must-not-alias")
+                          instrRelevantIfReceiverMustNotAlias
+                        })
+                      })
+                    })
+                    (toVisitIfMustAlias, toVisitIfMustNotAlias)
                   case None => sys.error("Expected rooted graph")
                 }
               }
@@ -282,12 +314,15 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
               val n = entry._1
               n.getMethod -> n
             })
-            methodsToVisit.foldLeft (Set.empty[CGNode]) ((s, m) =>
-              methodNodeMap.get(m) match {
-                case Some(n) => s + n
-                case None => cg.getNodes(m.getReference).foldLeft (s) ((s, n) => s + n)
-              }
-            )
+
+            def getNodesForMethods(methods : Set[IMethod]) : Set[CGNode] =
+              methods.foldLeft (Set.empty[CGNode]) ((s, m) =>
+                methodNodeMap.get(m) match {
+                  case Some(n) => s + n
+                  case None => cg.getNodes(m.getReference).foldLeft (s) ((s, n) => s + n)
+                }
+              )
+            (getNodesForMethods(methodsToVisitMustAlias), getNodesForMethods(methodsToVisitMustNotAlias))
           }
 
           /** return Some(paths) if we should jump, None if we should not jump */
@@ -298,55 +333,43 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
               val qry = p.qry
               val modMap = super.getNodeModifierMap(qry, ignoreLocalConstraints = true)
               if (DEBUG) println(s"Before control-feas filtering, ${modMap.keys} are relevant")
-              val nodesToJumpTo = controlFeasibilityFilter(modMap, qry.node).toList
-              if (DEBUG) println(s"After control-feas filtering, ${nodesToJumpTo} are relevant")
-              if (nodesToJumpTo.isEmpty) println("Refuted by lack of control-feasible paths!")
-
-              /*val curMethod = p.node.getMethod
-              val curClass = curMethod.getDeclaringClass
-
-              val curMethodThisConstraint =
-                if (!curMethod.isStatic) {
-                  // find constraint on this var for current node, try to transfer to jump node
-                  qry.localConstraints.find(e => e match {
-                    case LocalPtEdge(LocalVar(lpk), thisVar@ObjVar(_)) if IRUtil.isThisVar(lpk.getValueNumber) => true
-                    case _ => false
-                  })
-                } else None*/
+              val (nodesToJumpToMustAlias, nodesToJumpToMustNotAlias) = controlFeasibilityFilter(modMap, qry.node)
 
               p.clearCallStack()
 
-              // jump to the exit block of each relevant node
-              Some(nodesToJumpTo.map(jmpNode => {
-                val copy = p.deepCopy
-                val jmpBlk = jmpNode.getIR.getExitBlock
-                val qry = copy.qry
-                Path.setupBlockAndCallStack(copy, jmpNode, jmpBlk, -1, jmpNum)
-                val jmpMethod = jmpNode.getMethod
-                // transfer the this constraint from the current method to the jump method
-
-                // TODO: can probably do something more permissive than checking class equality here
-                if (!jmpMethod.isStatic) {//&& curClass == jmpMethod.getDeclaringClass)
-                  /*curMethodThisConstraint match {
-                    case Some(e) =>
-                      val jmpMethodThisConstraint = PtEdge.make(Var.makeLocalVar(IRUtil.thisVar, jmpNode, hm), e.snk)
-                      println("Transferring this constraint " + jmpMethodThisConstraint)
-                      qry.addLocalConstraint(jmpMethodThisConstraint)
-                    case None =>*/
-                      // TODO: this is unsound, do this better
-                      // try find something in our constraints that may-alias the this var, add appropriate constraint
-                      val thisLPK = Var.makeLPK(IRUtil.thisVar, jmpNode, hm)
-                      val thisPT = PtUtil.getPt(thisLPK, hg)
-                      qry.heapConstraints.find(e => e match {
-                        case ObjPtEdge(src@ObjVar(srcRgn), _, _) if !srcRgn.intersect(thisPT).isEmpty =>
-                          val thisConstraint = PtEdge.make(Var.makeLocalVar(IRUtil.thisVar, jmpNode, hm), src)
-                          qry.addLocalConstraint(thisConstraint)
-                          true
-                        case _ => false
-                      })
+              def addReceiverConstraint(qry: Qry, jmpNode: CGNode, mustAlias: Boolean): Unit =
+                if (!jmpNode.getMethod.isStatic) {
+                  val thisLPK = Var.makeLPK(IRUtil.thisVar, jmpNode, hm)
+                  val thisPT = PtUtil.getPt(thisLPK, hg)
+                  qry.heapConstraints.find(e => e match {
+                    case ObjPtEdge(src@ObjVar(srcRgn), _, _) if !srcRgn.intersect(thisPT).isEmpty =>
+                      val receiverVar =
+                        if (mustAlias) src // must-alias, use src
+                        else {
+                          // must-not-alias, create fresh var
+                          val freshReceiverObjVar = ObjVar(thisPT)
+                          Var.markCantAlias(freshReceiverObjVar, src)
+                          freshReceiverObjVar
+                        }
+                      qry.addLocalConstraint(PtEdge.make(Var.makeLocalVar(IRUtil.thisVar, jmpNode, hm), receiverVar))
+                      true
+                    case _ => false
+                  })
                 }
-                copy
-              }))
+
+              def setUpJumpPaths(nodesToJumpTo: Set[CGNode], mustAlias: Boolean, paths: List[Path] = Nil) =
+                nodesToJumpTo.foldLeft(paths)((paths, jmpNode) => {
+                  val copy = p.deepCopy
+                  val jmpBlk = jmpNode.getIR.getExitBlock
+                  val qry = copy.qry
+                  Path.setupBlockAndCallStack(copy, jmpNode, jmpBlk, -1, jmpNum)
+                  // transfer the this constraint from the current method to the jump method
+                  addReceiverConstraint(qry, jmpNode, mustAlias)
+                  copy :: paths
+                })
+
+              val mustAliasCases = setUpJumpPaths(nodesToJumpToMustAlias, mustAlias = true)
+              Some(setUpJumpPaths(nodesToJumpToMustNotAlias, mustAlias = false, mustAliasCases))
             }
           }
 
@@ -757,7 +780,7 @@ object AndroidNullDereferenceClientTests extends ClientTests {
   override def runRegressionTests() : Unit = {
     val tests =
       List("InitRefute", "InitNoRefute", "OnCreateRefute", "OnCreateNoRefute", "CbRefute", "CbNoRefute",
-           "OnCreateCalleeRefute", "OnCreateCalleeNoRefute")
+           "OnCreateCalleeRefute", "OnCreateCalleeNoRefute", "DifferentInstanceNoRefute")
 
     val regressionDir = "src/test/java/nulls/"
     val regressionBinDir = "target/scala-2.10/test-classes/nulls"
