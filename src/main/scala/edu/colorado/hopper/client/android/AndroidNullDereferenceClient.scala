@@ -4,7 +4,7 @@ import java.io.File
 import java.util
 
 import com.ibm.wala.analysis.pointers.HeapGraph
-import com.ibm.wala.classLoader.{IMethod, IField, IClass}
+import com.ibm.wala.classLoader.{IBytecodeMethod, IMethod, IField, IClass}
 import com.ibm.wala.demandpa.alg.BudgetExceededException
 import com.ibm.wala.ipa.callgraph.impl.{Everywhere, FakeRootClass}
 import com.ibm.wala.ipa.callgraph.{CallGraph, CGNode}
@@ -60,6 +60,10 @@ object AndroidNullDereferenceClient {
 
 class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhantom : Boolean = true)
     extends DroidelClient(appPath, androidLib, useJPhantom) {
+
+  walaRes.cg.foreach(n =>
+    if (!ClassUtil.isLibrary(n)) n.iterateNewSites().foreach(site =>
+      println("method " + n + " site " + site.getDeclaredType + " resolved " + walaRes.cha.lookupClass(site.getDeclaredType))))
 
   val DEBUG = Options.SCALA_DEBUG
   val rr =
@@ -167,20 +171,7 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
               case clinit => clinit
             }
             val specializedLifecyleGraph = new GraphImpl[IMethod](root = Some(clinit))
-
-            val constructors = {
-              val allConstructors = lifecycleClass.getDeclaredMethods.filter(m => m.isInit)
-              if (DEBUG)
-                println(s"Have ${allConstructors.size} constructors: ${allConstructors.toList}")
-
-              if (allConstructors.size > 1) {
-                //val constructorCGNodeMap =
-                  //allConstructors.map(constructor => constructor -> cg.getNodes(constructor.getReference))
-                // TODO: be smart with constructors that call each other
-                allConstructors
-              } else allConstructors
-            }
-
+            val constructors = lifecycleClass.getDeclaredMethods.filter(m => m.isInit)
             // add <clinit> -> constructor happens-before edges
             constructors.foreach(constructor => specializedLifecyleGraph.addEdge(clinit, constructor))
 
@@ -670,14 +661,21 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
   val solver = new Z3Solver
 
   /* @return true if @param i can perform a null dereference */
-  def canDerefFail(i : SSAInstruction, n : CGNode, hm : HeapModel, count : Int) = {
+  def canDerefFail(i : SSAInstruction, instrIndex : Int, n : CGNode, hm : HeapModel, count : Int) = {
     val ir = n.getIR()
     val tbl = ir.getSymbolTable
     val srcLine = IRUtil.getSourceLine(i, ir)
     if (Options.LINE == -2 || Options.LINE == srcLine) {
+      // we need the bytecode index to differentiate different derefs at the same line
+      val bytecodeIndex = n.getMethod match {
+        case m : IBytecodeMethod => m.getBytecodeIndex(instrIndex)
+        case _ => -1
+      }
+
       print(s"Checking possible null deref #$count ")
       ClassUtil.pp_instr(i, ir);
-      println(s" at source line $srcLine of ${ClassUtil.pretty(n)}")
+      val derefId = s" at source line $srcLine bytecode index $bytecodeIndex of ${ClassUtil.pretty(n)}"
+      println(derefId)
       val possiblyNullUse = i.getUse(0)
       if (tbl.isNullConstant(possiblyNullUse)) {
         // have null.foo() or null.f = ... or x = null.f
@@ -705,7 +703,7 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
         exec.cleanup()
         print(s"Deref #$count ")
         ClassUtil.pp_instr(i, ir)
-        println(s" at source line $srcLine of ${ClassUtil.pretty(n)} can fail? $foundWitness")
+        println(s"$derefId can fail? $foundWitness")
         foundWitness
       }
     } else {
@@ -736,15 +734,16 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
           case null => countPair
           case ir =>
             val tbl = ir.getSymbolTable
-            ir.getInstructions.foldLeft (countPair) ((countPair, i) => {
+            ir.getInstructions.zipWithIndex.foldLeft (countPair) ((countPair, pair) => {
+              val (i, index) = pair
               val (failCount, totalCount) = countPair
               i match {
                 case i: SSAInvokeInstruction if !i.isStatic && !IRUtil.isThisVar(i.getReceiver) &&
                   !i.getDeclaredTarget.isInit && !tbl.isStringConstant(i.getReceiver) =>
-                  if (canDerefFail(i, n, walaRes.hm, totalCount)) (failCount + 1, totalCount + 1)
+                  if (canDerefFail(i, index, n, walaRes.hm, totalCount)) (failCount + 1, totalCount + 1)
                   else (failCount, totalCount + 1)
                 case i: SSAFieldAccessInstruction if !i.isStatic && !IRUtil.isThisVar(i.getRef) =>
-                  if (canDerefFail(i, n, walaRes.hm, totalCount)) (failCount + 1, totalCount + 1)
+                  if (canDerefFail(i, index, n, walaRes.hm, totalCount)) (failCount + 1, totalCount + 1)
                   else (failCount, totalCount + 1)
 
                 case _ => countPair
