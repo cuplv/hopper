@@ -501,7 +501,7 @@ class Qry(val heapConstraints : MSet[HeapPtEdge], val pureConstraints : MSet[Pur
       lpkFields.intersect(qryFields).nonEmpty
     }
 
-    qryFields.nonEmpty && (localReadsFromQueryFld()) //|| lpkFieldsAndQueryFieldsOverlap())
+    qryFields.nonEmpty && (localReadsFromQueryFld() || lpkFieldsAndQueryFieldsOverlap())
   }
   
   // debug only
@@ -556,7 +556,7 @@ class Qry(val heapConstraints : MSet[HeapPtEdge], val pureConstraints : MSet[Pur
   }  
   
   override def deepCopy : Concretizable = sys.error("no")
-  
+
   override def qry = this
   
   override def toString : String = id + "Q { " + constraintsToString(localConstraints, " *\n") + " *\n" + constraintsToString(heapConstraints, " *\n") + 

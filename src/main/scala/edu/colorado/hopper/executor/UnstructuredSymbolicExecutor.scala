@@ -118,7 +118,7 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
         val callees = cg.getPossibleTargets(caller, i.getCallSite())
         if (callees.isEmpty()) {
           // check for null dispatch
-          val okPaths = paths.filter(p => tf.isDispatchFeasible(i, caller, p.qry))
+          val okPaths = paths.filter(p => tf.isDispatchFeasible(i, caller, p))
           val retPaths = handleEmptyCallees(okPaths, i, caller)
           (List.empty[Path], retPaths)
         } else paths.foldLeft (List.empty[Path], List.empty[Path]) ((pair, p) =>
@@ -128,7 +128,7 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
             val (enterPaths, skipPaths) = pair
 
             val qry = calleePath.qry
-            if (tf.isDispatchFeasible(i, caller, qry) && tf.isRetvalFeasible(i, caller, callee, qry) &&
+            if (tf.isDispatchFeasible(i, caller, calleePath) && tf.isRetvalFeasible(i, caller, callee, calleePath) &&
                 callee.getMethod().getReference() != Path.SYSTEM_EXIT) {
               if (Path.methodBlacklistContains(callee.getMethod())) {
                 // skip method if it is in our blacklist

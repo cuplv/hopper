@@ -80,7 +80,8 @@ class NullDereferenceClient(appPath : String, libPath : Option[String], mainClas
                 val retPaths = super.executeInstr(okPaths, i, blk, node, cfg, isLoopBlk, callStackSize)
                 if (!i.isStatic) {
                   val receiverLPK = Var.makeLPK(i.getReceiver, node, tf.hm)
-                  retPaths.foreach(p => if (p.qry.localMayPointIntoQuery(receiverLPK, node, tf.hm, tf.hg, tf.cha)) {
+                  retPaths.foreach(p => if (!p.isInJump &&
+                                            p.qry.localMayPointIntoQuery(receiverLPK, node, tf.hm, tf.hg, tf.cha)) {
                     PtUtil.getPt(receiverLPK, tf.hg) match {
                       case rgn if rgn.isEmpty => sys.error("handle this case!") // should lead to a refutation
                       case rgn =>
@@ -232,10 +233,9 @@ class NullDereferenceTransferFunctions(walaRes : WalaAnalysisResults,
         case None =>
           val retPaths = super.execute(s, qry, n)
           val tbl = n.getIR.getSymbolTable
-          retPaths.filter(p =>
+          retPaths.filter(qry =>
             if (tbl.isConstant(i.getRef)) true
             else {
-              val qry = p.qry
               // have to check for edge again here because it may be added by call to super.execute()
               PtUtil.getConstraintEdge(refLPK, qry.localConstraints) match {
                 case None if qry.localMayPointIntoQuery(refLPK, n, hm, hg, cha) =>
@@ -335,7 +335,7 @@ class NullDereferenceTransferFunctions(walaRes : WalaAnalysisResults,
           if (f.isEmpty || (f \\ "NonNull").isEmpty) s
           else {
             val parsedArr = f.attribute("descriptor").head.text.split(":")
-            val (fldName, fldType) = (parsedArr(0), parsedArr(1))
+            val fldName = parsedArr(0)
             val walaifedName = s"$className.$fldName"
             s + walaifedName
           }
@@ -348,8 +348,9 @@ class NullDereferenceTransferFunctions(walaRes : WalaAnalysisResults,
     }
   }
 
-  override def isDispatchFeasible(call : SSAInvokeInstruction, caller : CGNode, qry : Qry) : Boolean =
+  override def isDispatchFeasible(call : SSAInvokeInstruction, caller : CGNode, p : Path) : Boolean =
     call.isStatic || {
+      val qry = p.qry
       val receiverLPK = Var.makeLPK(call.getReceiver, caller, hm)
       PtUtil.getConstraintEdge(receiverLPK, qry.localConstraints) match {
         case Some(LocalPtEdge(_, p@PureVar(_))) if qry.isNull(p) => false // refuted by null dispatch
@@ -360,7 +361,7 @@ class NullDereferenceTransferFunctions(walaRes : WalaAnalysisResults,
               val tbl = caller.getIR.getSymbolTable
               if (tbl.isNullConstant(call.getReceiver)) false
               else {
-                if (!tbl.isConstant(call.getReceiver))
+                if (!tbl.isConstant(call.getReceiver) && !p.isInJump)
                   qry.addLocalConstraint(PtEdge.make(receiverLPK, ObjVar(rgn)))
                 true
               }
@@ -370,8 +371,9 @@ class NullDereferenceTransferFunctions(walaRes : WalaAnalysisResults,
     }
 
   // use Nit annotations to get easy refutation when we have a null constraint on a callee with a known non-null retval
-  override def isRetvalFeasible(call : SSAInvokeInstruction, caller : CGNode, callee : CGNode, qry : Qry) : Boolean =
+  override def isRetvalFeasible(call : SSAInvokeInstruction, caller : CGNode, callee : CGNode, p : Path) : Boolean =
     !call.hasDef || !call.getDeclaredResultType.isReferenceType || {
+      val qry = p.qry
       val m = callee.getMethod
       val methodIdentifier = s"${ClassUtil.pretty(m.getDeclaringClass)}.${m.getSelector}"
       if (nonNullRetMethods.contains(methodIdentifier)) {
@@ -381,7 +383,7 @@ class NullDereferenceTransferFunctions(walaRes : WalaAnalysisResults,
             false
           case _ => true
         }
-      } else super.isRetvalFeasible(call, caller, callee, qry)
+      } else super.isRetvalFeasible(call, caller, callee, p)
     }
 
 }

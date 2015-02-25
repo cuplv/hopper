@@ -441,8 +441,9 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
     }
   }
 
-  def isDispatchFeasible(call : SSAInvokeInstruction, caller : CGNode, qry : Qry) : Boolean =
+  def isDispatchFeasible(call : SSAInvokeInstruction, caller : CGNode, p : Path) : Boolean =
     call.isStatic || {
+      val qry = p.qry
       val receiver = Var.makeLPK(call.getReceiver, caller, hm)
       getConstraintEdge(receiver, qry.localConstraints) match {
         case Some(LocalPtEdge(_, p@PureVar(_))) if qry.isNull(p) => false // refuted by null dispatch
@@ -450,8 +451,9 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
       }
     }
 
-  def isRetvalFeasible(call : SSAInvokeInstruction, caller : CGNode, callee : CGNode, qry : Qry) : Boolean =
+  def isRetvalFeasible(call : SSAInvokeInstruction, caller : CGNode, callee : CGNode, p : Path) : Boolean =
     !call.hasDef || !call.getDeclaredResultType.isReferenceType || {
+      val qry = p.qry
       val callerRet = Var.makeLPK(call.getDef(), caller, hm)
       val calleeRet = Var.makeRVK(callee, hm)
       getConstraintEdge(callerRet, qry.localConstraints) match {
