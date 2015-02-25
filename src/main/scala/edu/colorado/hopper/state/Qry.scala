@@ -501,7 +501,7 @@ class Qry(val heapConstraints : MSet[HeapPtEdge], val pureConstraints : MSet[Pur
       lpkFields.intersect(qryFields).nonEmpty
     }
 
-    qryFields.nonEmpty && (localReadsFromQueryFld() || lpkFieldsAndQueryFieldsOverlap())
+    qryFields.nonEmpty && (localReadsFromQueryFld()) //|| lpkFieldsAndQueryFieldsOverlap())
   }
   
   // debug only

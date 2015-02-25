@@ -101,7 +101,7 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
 
           def isAndroidLifecycleType(c : IClass) : Boolean =
             AndroidLifecycle.getOrCreateFrameworkCreatedClasses(cha).exists(androidClass =>
-              cha.isAssignableFrom(c, androidClass)
+              cha.isAssignableFrom(androidClass, c)
             )
 
           def isFrameworkOrStubNode(n : CGNode) : Boolean =
@@ -136,28 +136,30 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
           }
 
           def specializeLifecycleGraph(curNode : CGNode, relevantMethods : Set[IMethod]) : GraphImpl[IMethod] = {
+            if (DEBUG) println(s"Doing lifecycle specialization for ${ClassUtil.pretty(curNode)}")
             val curMethod = curNode.getMethod
             val curClass = curMethod.getDeclaringClass
             val curNodeIsCallback = extendsOrImplementsCallbackClass(curClass)
             val (lifecycleClass, frontierMethodsForRegister) =
-            if (curNodeIsCallback) {
-              val cbObj = hm.getPointerKeyForLocal(curNode, IRUtil.thisVar)
-              val nodesThatMayRegisterCb = getNodesThatMayRegisterCb(cbObj)
-              // get the frontier nodes that (transitively) call the registration method
-              val frontierMethodsForRegister =
-                nodesThatMayRegisterCb.foldLeft (Set.empty[IMethod]) ((s, n) => {
-                  val registerPreds = cg.getPredNodes(n)
-                  registerPreds.foldLeft (s) ((s, n) =>
-                    if (!ClassUtil.isLibrary(n))
-                      getLibraryAppFrontierNodesFor(n).foldLeft(s)((s, n) => s + n.getMethod)
-                    else s
-                  )
-                })
-              if (frontierMethodsForRegister.isEmpty) (curClass, Set.empty[IMethod])
-              else
-                // pick the class of the register method of the lifecycle we care with
-                (frontierMethodsForRegister.head.getDeclaringClass, frontierMethodsForRegister)
-            } else (curClass, Set.empty[IMethod])
+              if (curNodeIsCallback && !isAndroidLifecycleType(curClass)) {
+                val cbObj = hm.getPointerKeyForLocal(curNode, IRUtil.thisVar)
+                val nodesThatMayRegisterCb = getNodesThatMayRegisterCb(cbObj)
+                // get the frontier nodes that (transitively) call the registration method
+                val frontierMethodsForRegister =
+                  nodesThatMayRegisterCb.foldLeft (Set.empty[IMethod]) ((s, n) => {
+                    val registerPreds = cg.getPredNodes(n)
+                    registerPreds.foldLeft (s) ((s, n) =>
+                      if (!ClassUtil.isLibrary(n))
+                        getLibraryAppFrontierNodesFor(n).foldLeft(s)((s, n) => s + n.getMethod)
+                      else s
+                    )
+                  })
+                if (frontierMethodsForRegister.isEmpty) (curClass, Set.empty[IMethod])
+                else
+                  // pick the class of the register method of the lifecycle we care with
+                  (frontierMethodsForRegister.head.getDeclaringClass, frontierMethodsForRegister)
+              } else (curClass, Set.empty[IMethod])
+            if (DEBUG) println(s"Picked lifecycle class ${ClassUtil.pretty(lifecycleClass)}")
 
             // start off with the standard Java lifecycle graph--<clinit> -> constructor for all constructros
             val clinit = lifecycleClass.getClassInitializer match {
@@ -199,13 +201,34 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
                 case None => sys.error("expecting rooted graph")
               }
 
-              // walk through the lifecycle graph and add its edges to our specialized graph, using the specialization map
-              // as appropriate
+              // walk through the lifecycle graph and add its edges to our specialized graph, using the specialization
+              // map as appropriate
               lifecycleGraph.edges.foreach(edgePair => {
                 val (src, snk) = edgePair
                 val (newSrc, newSnk) = (specializationMap.getOrElse(src, src), specializationMap.getOrElse(snk, snk))
                 specializedLifecyleGraph.addEdge(newSrc, newSnk)
               })
+            }
+
+            val ACTIVITY_TYPE_STR = ClassUtil.walaifyClassName(AndroidConstants.ACTIVITY_TYPE)
+            val SERVICE_TYPE_STR = ClassUtil.walaifyClassName(AndroidConstants.SERVICE_TYPE)
+            val APP_FRAGMENT_TYPE_STR = ClassUtil.walaifyClassName(AndroidConstants.APP_FRAGMENT_TYPE)
+            val SUPPORT_FRAGMENT_TYPE_STR = ClassUtil.walaifyClassName(AndroidConstants.FRAGMENT_TYPE)
+
+            // each lifecycle type has an "active" state where it processes user interactions. this method returns the
+            // last method in the lifcycle graph that is called before the type enters the active state
+            def getActiveStatePredecessor(typeStr : String, lifecycleGraph : GraphImpl[IMethod]) : Option[IMethod] =
+              typeStr match {
+                case ACTIVITY_TYPE_STR =>
+                  lifecycleGraph.nodes().find(m =>
+                    m.getSelector == Selector.make(AndroidLifecycle.ACTIVITY_ONPREPAREOPTIONSMENU))
+                case SERVICE_TYPE_STR =>
+                  lifecycleGraph.nodes().find(m => m.getSelector == Selector.make(AndroidLifecycle.SERVICE_ONCREATE))
+                case APP_FRAGMENT_TYPE_STR =>
+                  lifecycleGraph.nodes().find(m => m.getSelector == Selector.make(AndroidLifecycle.FRAGMENT_ONRESUME))
+                case SUPPORT_FRAGMENT_TYPE_STR =>
+                  lifecycleGraph.nodes().find(m => m.getSelector == Selector.make(AndroidLifecycle.FRAGMENT_ONRESUME))
+                case _ => None
             }
 
             // check if c extends an Android framework type. if it does, we'll create a specialized lifecycle graph for
@@ -214,16 +237,24 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
               cha.isAssignableFrom(frameworkClass, lifecycleClass)) match {
                 case Some(frameworkClass) =>
                   // got Android lifecycle type
-                  val typeStr = frameworkClass.getReference.getName.toString
-                  if (typeStr == ClassUtil.walaifyClassName(AndroidConstants.ACTIVITY_TYPE))
-                    specializeAndroidLifecycleGraph(activityLifecycleGraph)
-                  else if (typeStr == ClassUtil.walaifyClassName(AndroidConstants.SERVICE_TYPE))
-                    specializeAndroidLifecycleGraph(serviceLifecycleGraph)
-                  else if (typeStr == ClassUtil.walaifyClassName(AndroidConstants.APP_FRAGMENT_TYPE))
-                    specializeAndroidLifecycleGraph(appFragmentLifecycleGraph)
-                  else if (typeStr == ClassUtil.walaifyClassName(AndroidConstants.FRAGMENT_TYPE))
-                    specializeAndroidLifecycleGraph(supportFragmentLifecycleGraph)
-                  // else. we don't know anything about the lifecycle of this component, nothing to do
+                  val typeStr =frameworkClass.getReference.getName.toString
+                  typeStr match {
+                    case ACTIVITY_TYPE_STR => specializeAndroidLifecycleGraph (activityLifecycleGraph)
+                    case SERVICE_TYPE_STR => specializeAndroidLifecycleGraph (serviceLifecycleGraph)
+                    case APP_FRAGMENT_TYPE_STR => specializeAndroidLifecycleGraph (appFragmentLifecycleGraph)
+                    case SUPPORT_FRAGMENT_TYPE_STR => specializeAndroidLifecycleGraph (supportFragmentLifecycleGraph)
+                    case _ => // else. we don't know anything about the lifecycle of this component
+                  }
+                  if (curNodeIsCallback && curMethod.getDeclaringClass == lifecycleClass &&
+                      !specializedLifecyleGraph.nodes.contains(curMethod))
+                    getActiveStatePredecessor(typeStr, specializedLifecyleGraph) match {
+                      case Some(activeStatePred) =>
+                        // this type has an active state. find any of its callbacks cb that are not in the lifecycle graph
+                        // graph and add {active state} -> cb edges to account for the fact that these callbacks only fire in
+                        // the active state for the component
+                        specializedLifecyleGraph.addEdge(activeStatePred, curMethod)
+                      case None => ()
+                    }
                 case None => () // got "normal" type, nothing else to do
               }
 
@@ -693,7 +724,6 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
       print(s"Checking possible null deref #$count ")
       ClassUtil.pp_instr(i, ir);
       val derefId = s" at source line $srcLine bytecode index $bytecodeIndex of ${ClassUtil.pretty(n)}"
-      println(derefId)
       val possiblyNullUse = i.getUse(0)
       if (tbl.isNullConstant(possiblyNullUse)) {
         // have null.foo() or null.f = ... or x = null.f
@@ -780,7 +810,8 @@ object AndroidNullDereferenceClientTests extends ClientTests {
   override def runRegressionTests() : Unit = {
     val tests =
       List("InitRefute", "InitNoRefute", "OnCreateRefute", "OnCreateNoRefute", "CbRefute", "CbNoRefute",
-           "OnCreateCalleeRefute", "OnCreateCalleeNoRefute", "DifferentInstanceNoRefute")
+           "OnCreateCalleeRefute", "OnCreateCalleeNoRefute", "DifferentInstanceNoRefute",
+           "UncommonLifecycleCallbackRefute")
 
     val regressionDir = "src/test/java/nulls/"
     val regressionBinDir = "target/scala-2.10/test-classes/nulls"

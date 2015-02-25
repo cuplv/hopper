@@ -68,8 +68,8 @@ class NullDereferenceClient(appPath : String, libPath : Option[String], mainClas
                 paths.filter(p =>
                   PtUtil.getConstraintEdge(Var.makeLPK(i.getReceiver(), p.node, walaRes.hm), p.qry.localConstraints) match {
                     case Some(LocalPtEdge(_, pv@PureVar(_))) if p.qry.isNull(pv) =>
-                      // y is null--we could never have reached the current program point because executing this instruction would
-                      // have thrown a NPE
+                      // y is null--we could never have reached the current program point because executing this
+                      // instruction would have thrown a NPE
                       if (Options.PRINT_REFS) println("Refuted by dominating null check!")
                       false
                     case _ => true
@@ -82,7 +82,7 @@ class NullDereferenceClient(appPath : String, libPath : Option[String], mainClas
                   val receiverLPK = Var.makeLPK(i.getReceiver, node, tf.hm)
                   retPaths.foreach(p => if (p.qry.localMayPointIntoQuery(receiverLPK, node, tf.hm, tf.hg, tf.cha)) {
                     PtUtil.getPt(receiverLPK, tf.hg) match {
-                      case rgn if rgn.isEmpty => sys.error("handle this case!") // should leak to a refutation
+                      case rgn if rgn.isEmpty => sys.error("handle this case!") // should lead to a refutation
                       case rgn =>
                         // add constraint y != null (effectively)
                         p.qry.addLocalConstraint(PtEdge.make(receiverLPK, ObjVar(rgn)))
@@ -101,7 +101,8 @@ class NullDereferenceClient(appPath : String, libPath : Option[String], mainClas
     val hg = walaRes.hg
     
     // don't check Dacapo harness methods
-    def shouldIgnore(n : CGNode) : Boolean = n.getMethod().getDeclaringClass().getName().toString().startsWith("Ldacapo")
+    def shouldIgnore(n : CGNode) : Boolean =
+      n.getMethod().getDeclaringClass().getName().toString().startsWith("Ldacapo")
     
     val filteredCg = cg.filter(n => !ClassUtil.isLibrary(n) && !shouldIgnore(n) && n.getIR() != null)
     val dangerKeys = filteredCg.foldLeft (Set.empty[InstanceKey]) ((dangerKeys, n) => {
