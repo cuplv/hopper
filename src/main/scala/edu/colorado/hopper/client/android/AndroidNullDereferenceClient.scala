@@ -660,22 +660,38 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
           }) match {
             case Some(e) =>
               val keepEdges = qry.getAccessPrefixPathFor(e)
-              // TODO: turning this off for now because it can hurt control-feasibility--may make sense to turn on for
-              // normal Hopper
-              /*// guaranteed to exist because getAccessPathPrefix returns at least e
-              val accessPathHead = keepEdges.head.src
-              // see if the access path leading to the null constraint is rooted in a function parameter other than
-              // "this". if this is the case, we want to keep going backward without jumping in order to get a more
-              // complete access path to the null constraint
-              val accessPathRootedInNonThisParam =
-                qry.localConstraints.exists(e => e match {
-                  case LocalPtEdge(LocalVar(key), snk) =>
-                    snk == accessPathHead && !IRUtil.isThisVar(key.getValueNumber)
-                  case _ => false
-                })
-              // have access path originating from non-this param and not at an entrypoint callback, don't jump
-              if (accessPathRootedInNonThisParam && !isEntrypointCallback(p.node)) super.returnFromCall(p)*/
-              if (!isEntrypointCallback(p.node)) super.returnFromCall(p)
+              val shouldJump =
+                isEntrypointCallback(p.node) || {
+                  e match {
+                    case ObjPtEdge(_, InstanceFld(fld), _) =>
+                      println("got null objptedge")
+                      val keepEdges = qry.getAccessPrefixPathFor(e)
+                      // guaranteed to exist because getAccessPathPrefix returns at least e
+                      val accessPathHead = keepEdges.head.src
+                      // see if the access path leading to the null constraint is rooted in a function parameter other than
+                      // "this". if this is the case, we want to keep going backward without jumping in order to get a more
+                      // complete access path to the null constraint
+                      val accessPathRootedInNonThisParam =
+                        qry.localConstraints.exists(e => e match {
+                          case LocalPtEdge(LocalVar(key), snk) => snk == accessPathHead && !IRUtil.isThisVar(key.getValueNumber)
+                          case _ => false
+                        })
+                      def someCallerMayReadOrWriteFld(): Boolean = cg.getPredNodes(p.node).exists(n => n.getIR match {
+                        case null => false
+                        case ir =>
+                          val fldRef = fld.getReference
+                          ir.iterateAllInstructions().exists(i => i match {
+                            case i: SSAFieldAccessInstruction => i.getDeclaredField == fldRef
+                            case _ => false
+                          })
+                      })
+                      // don't jump if the access path is not rooted in this or if a caller may read/write the field
+                      // that points to nul
+                      !accessPathRootedInNonThisParam && !someCallerMayReadOrWriteFld
+                    case _ => false
+                  }
+                }
+              if (!shouldJump) super.returnFromCall(p)
               else { // have access path originating from this or at entrypoint callback, jump
                 if (DEBUG) println(s"have complete access path or at function boundary of entrypoint cb ${p.node}")
                 // weaken query by removing all constraints but access path, then jump
