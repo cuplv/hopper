@@ -767,7 +767,8 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
     import walaRes._
     /*val id = new AbsurdityIdentifier("")
     val absurdities = id.getAbsurdities(walaRes, reportLibraryAbsurdities = false)
-    println(s"Have ${absurdities.size} absurdities")*/
+    println(s"Have ${absurdities.size} absurdities")
+    absurdities.foreach(println)*/
 
     def shouldCheck(n : CGNode) : Boolean = {
       // TODO: tmp, just for testing

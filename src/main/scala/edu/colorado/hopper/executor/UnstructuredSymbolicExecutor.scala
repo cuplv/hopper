@@ -130,16 +130,18 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
             val qry = calleePath.qry
             if (tf.isDispatchFeasible(i, caller, calleePath) && tf.isRetvalFeasible(i, caller, callee, calleePath) &&
                 callee.getMethod().getReference() != Path.SYSTEM_EXIT) {
-              if (Path.methodBlacklistContains(callee.getMethod())) {
+              if (callee.getIR == null) {
+                val newSkipPaths = handleEmptyCallees(List(calleePath), i, caller)
+                (enterPaths,
+                 newSkipPaths.foldLeft (skipPaths) ((paths, p) => if (skipPaths.contains(p)) paths else p :: paths))
+              } else if (Path.methodBlacklistContains(callee.getMethod())) {
                 // skip method if it is in our blacklist
                 calleePath.dropReturnValueConstraints(i, caller, tf)
                 (enterPaths, if (skipPaths.contains(calleePath)) skipPaths else calleePath :: skipPaths)
-              } else if (calleePath.callStackSize >= Options.MAX_CALLSTACK_DEPTH || callee.getIR == null ||
-                callee == caller) {
+              } else if (calleePath.callStackSize >= Options.MAX_CALLSTACK_DEPTH || callee == caller) {
                 if (DEBUG)
                   println("skipping call to " + callee.getMethod.getName() + " due to " +
                     (if (calleePath.callStackSize >= Options.MAX_CALLSTACK_DEPTH) "depth-out"
-                    else if (callee.getIR == null) "null IR"
                     else if (callee == caller) "recursion"
                     else "blacklist")
                   )
