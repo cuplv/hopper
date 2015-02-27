@@ -250,7 +250,7 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
                     getActiveStatePredecessor(typeStr, specializedLifecyleGraph) match {
                       case Some(activeStatePred) =>
                         // this type has an active state. find any of its callbacks cb that are not in the lifecycle graph
-                        // graph and add {active state} -> cb edges to account for the fact that these callbacks only fire in
+                        // and add {active state} -> cb edges to account for the fact that these callbacks only fire in
                         // the active state for the component
                         specializedLifecyleGraph.addEdge(activeStatePred, curMethod)
                       case None => ()
@@ -419,7 +419,8 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
             )
           }
 
-          // careful: we have to look at the IR to make sure this is called unconditionally as well as looking at the call graph
+          // careful: we have to look at the IR to make sure this is called unconditionally as well as looking at the
+          // call graph
           /* @return true if when we walking backward from @param callee, we hit a node satisfying @param pred on all
            * paths wtihout hitting a node satisfying @param stopPred first */
           // we have to be careful with this: need to look at the IR via isOnlyCalledFrom to be sure that callee is
@@ -664,16 +665,16 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
                 isEntrypointCallback(p.node) || {
                   e match {
                     case ObjPtEdge(_, InstanceFld(fld), _) =>
-                      println("got null objptedge")
                       val keepEdges = qry.getAccessPrefixPathFor(e)
                       // guaranteed to exist because getAccessPathPrefix returns at least e
                       val accessPathHead = keepEdges.head.src
-                      // see if the access path leading to the null constraint is rooted in a function parameter other than
-                      // "this". if this is the case, we want to keep going backward without jumping in order to get a more
-                      // complete access path to the null constraint
+                      // see if the access path leading to the null constraint is rooted in a function parameter other
+                      // than "this". if this is the case, we want to keep going backward without jumping in order to
+                      // get a more complete access path to the null constraint
                       val accessPathRootedInNonThisParam =
                         qry.localConstraints.exists(e => e match {
-                          case LocalPtEdge(LocalVar(key), snk) => snk == accessPathHead && !IRUtil.isThisVar(key.getValueNumber)
+                          case LocalPtEdge(LocalVar(key), snk) =>
+                            snk == accessPathHead && !IRUtil.isThisVar(key.getValueNumber)
                           case _ => false
                         })
                       def someCallerMayReadOrWriteFld(): Boolean = cg.getPredNodes(p.node).exists(n => n.getIR match {
@@ -743,8 +744,8 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
       val possiblyNullUse = i.getUse(0)
       if (tbl.isNullConstant(possiblyNullUse)) {
         // have null.foo() or null.f = ... or x = null.f
-        // technically, this can still be safe if the code is unreachable or protected by a try block, but philosophically
-        // this is useless code and ought to be reported as on error
+        // technically, this can still be safe if the code is unreachable or protected by a try block, but
+        // philosophically this is useless code and ought to be reported as on error
         println("Found definite null deref!")
         true
       } else {
@@ -787,9 +788,12 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
     absurdities.foreach(println)*/
 
     def shouldCheck(n : CGNode) : Boolean = {
-      // TODO: tmp, just for testing
-      val checkClass = if (Options.MAIN_CLASS == "Main") true else n.getMethod.getDeclaringClass.getName.toString.contains(Options.MAIN_CLASS)
-      val checkMethod = if (Options.MAIN_METHOD == "main") true else n.getMethod.getName.toString == Options.MAIN_METHOD
+      // check Options allows us to restrict analysis to a particular class or method
+      val checkClass =
+        if (Options.MAIN_CLASS == "Main") true
+        else n.getMethod.getDeclaringClass.getName.toString.contains(Options.MAIN_CLASS)
+      val checkMethod =
+        if (Options.MAIN_METHOD == "main") true else n.getMethod.getName.toString == Options.MAIN_METHOD
       checkClass && checkMethod && !ClassUtil.isLibrary(n)
     }
 
