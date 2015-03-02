@@ -527,8 +527,9 @@ class Qry(val heapConstraints : MSet[HeapPtEdge], val pureConstraints : MSet[Pur
   }
   
   def getPT(v : StackVar) : Set[Val] = Qry.getPT(v, localConstraints)
-  
-  def dispose() : Unit = solver.dispose
+
+  // TODO: enable disposing solver context in parallel mode
+  def dispose() : Unit = if (!Options.PARALLEL) solver.dispose
   
   def cleanup() : Unit = dispose
   

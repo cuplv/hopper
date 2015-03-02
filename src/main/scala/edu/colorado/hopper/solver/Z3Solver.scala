@@ -49,7 +49,7 @@ class Z3Solver extends ModelSolver[AST] {
     ""
   }
   
-  override def dispose() : Unit = ctx.Dispose()
+  override def dispose() : Unit =  ctx.Dispose()
     
   private def interpretSolverOutput(status : Status) : Boolean = status match {
     case Status.UNSATISFIABLE => false

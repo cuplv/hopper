@@ -99,6 +99,9 @@ public class Options {
   @boolOpt(description = "Should we use ptBy information and recursive simplification to further narrow from constraints?", _default = false)
   public static boolean AGGRESSIVE_FROM_NARROWING = false;
 
+  @boolOpt(description = "Processs queries in parallel. Still an experimental feature", _default = false)
+  public static boolean PARALLEL = false;
+
   @intOpt(description = "Time out and report a witness if we spend more time than this on a query", _default = 10)
   public static int TIMEOUT = 10;  
   

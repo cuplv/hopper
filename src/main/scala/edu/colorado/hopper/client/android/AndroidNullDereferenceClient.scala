@@ -23,7 +23,7 @@ import edu.colorado.droidel.driver.AbsurdityIdentifier
 import edu.colorado.hopper.client.{ClientTests, NullDereferenceTransferFunctions}
 import edu.colorado.hopper.executor.{TransferFunctions, DefaultSymbolicExecutor}
 import edu.colorado.hopper.jumping.{ControlFeasibilityRelevanceRelation, RelevanceRelation, DefaultJumpingSymbolicExecutor, JumpingTransferFunctions}
-import edu.colorado.hopper.solver.Z3Solver
+import edu.colorado.hopper.solver.{Z3Solver, ThreadSafeZ3Solver}
 import edu.colorado.hopper.state._
 import edu.colorado.hopper.util.PtUtil
 import edu.colorado.thresher.core.Options
@@ -61,8 +61,32 @@ object AndroidNullDereferenceClient {
 class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhantom : Boolean = true)
     extends DroidelClient(appPath, androidLib, useJPhantom) {
 
+  val PARALLEL = Options.PARALLEL
   val DEBUG = Options.SCALA_DEBUG
-  val rr =
+
+  val rr = if (PARALLEL) None else Some(makeRR())
+  val tf = if (PARALLEL) None else Some(makeTF(getOrCreateRelevanceRelation()))
+  val exec = if (PARALLEL) None else Some(makeExec)
+  // need a single solver with synchronized methods rather than a solver per-query because the Z3 bindings are not
+  // thread-safe and tend to crash even when we use multiple solvers with no shared state.
+  val solver = Some(makeSolver())
+
+  def getOrCreate[T](tOpt : Option[T], makeT : Unit => T) : T = tOpt match {
+    case Some(t) => t
+    case None => makeT()
+  }
+
+  def getOrCreateRelevanceRelation() = getOrCreate(rr, (_ : Unit) => makeRR)
+
+  def getOrCreateTransferFunctions(rr : RelevanceRelation) = getOrCreate(tf, (_ : Unit) => makeTF(rr))
+
+  def getOrCreateSymbolicExecutor() = getOrCreate(exec, (_ : Unit) => makeExec())
+
+  def getOrCreateSolver() = getOrCreate(solver, (_ : Unit) => makeSolver())
+
+  def makeSolver() = if (PARALLEL) new ThreadSafeZ3Solver() else new Z3Solver()
+
+  def makeRR() : RelevanceRelation =
     if (Options.JUMPING_EXECUTION)
       if (Options.CONTROL_FEASIBILITY)
         new ControlFeasibilityRelevanceRelation(walaRes.cg, walaRes.hg, walaRes.hm, walaRes.cha) {
@@ -552,7 +576,7 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
       else new RelevanceRelation(walaRes.cg, walaRes.hg, walaRes.hm, walaRes.cha)
     else null
 
-  val tf = new NullDereferenceTransferFunctions(walaRes, new File(s"$appPath/nit_annots.xml")) {
+  def makeTF(rr : RelevanceRelation) = new NullDereferenceTransferFunctions(walaRes, new File(s"$appPath/nit_annots.xml")) {
 
     def useMayBeRelevantToQuery(use : Int, qry : Qry, n : CGNode, hm : HeapModel,
                                 hg : HeapGraph[InstanceKey]) : Boolean = {
@@ -625,8 +649,11 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
       }))
     } else paths
 
-  val exec =
-    if (Options.JUMPING_EXECUTION) new DefaultJumpingSymbolicExecutor(tf, rr) {
+  def makeExec() =
+    if (Options.JUMPING_EXECUTION) {
+      val rr = getOrCreateRelevanceRelation()
+      val tf = getOrCreateTransferFunctions(rr)
+      new DefaultJumpingSymbolicExecutor(tf, rr) {
 
       // TODO: do we want this?
       override val keepLoopConstraints = true
@@ -719,15 +746,17 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
       override def handleEmptyCallees(paths : List[Path], i : SSAInvokeInstruction, caller : CGNode) : List[Path] =
         handleEmptyCalleesImpl(paths, i, caller, tf.hm)
 
-    } else new DefaultSymbolicExecutor(tf) {
+      }
+    } else new DefaultSymbolicExecutor(makeTF(makeRR())) {
       override def handleEmptyCallees(paths : List[Path], i : SSAInvokeInstruction, caller : CGNode) : List[Path] =
         handleEmptyCalleesImpl(paths, i, caller, tf.hm)
     }
 
-  val solver = new Z3Solver
-
   /* @return true if @param i can perform a null dereference */
-  def canDerefFail(i : SSAInstruction, instrIndex : Int, n : CGNode, hm : HeapModel, count : Int) = {
+  def canDerefFail(instrIndex : Int, n : CGNode, hm : HeapModel, count : Int) = {
+    val solver = getOrCreateSolver()
+    val exec = getOrCreateSymbolicExecutor
+    val i = n.getIR.getInstructions()(instrIndex)
     val ir = n.getIR()
     val tbl = ir.getSymbolTable
     val srcLine = IRUtil.getSourceLine(i, ir)
@@ -741,6 +770,7 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
       print(s"Checking possible null deref #$count ")
       ClassUtil.pp_instr(i, ir);
       val derefId = s" at source line $srcLine bytecode index $bytecodeIndex of ${ClassUtil.pretty(n)}"
+      println(derefId)
       val possiblyNullUse = i.getUse(0)
       if (tbl.isNullConstant(possiblyNullUse)) {
         // have null.foo() or null.f = ... or x = null.f
@@ -797,30 +827,34 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
       checkClass && checkMethod && !ClassUtil.isLibrary(n)
     }
 
-    val (nullDerefs, derefsChecked) =
-      walaRes.cg.foldLeft (0,0) ((countPair, n) => {
+    val derefsToCheck =
+      walaRes.cg.foldLeft (List.empty[(Int,CGNode)]) ((l, n) =>
         if (shouldCheck(n)) n.getIR match {
-          case null => countPair
+          case null => l
           case ir =>
             val tbl = ir.getSymbolTable
-            ir.getInstructions.zipWithIndex.foldLeft (countPair) ((countPair, pair) => {
+            ir.getInstructions.zipWithIndex.foldLeft(l)((l, pair) => {
               val (i, index) = pair
-              val (failCount, totalCount) = countPair
+              //val (failCount, totalCount) = countPair
               i match {
                 case i: SSAInvokeInstruction if !i.isStatic && !IRUtil.isThisVar(i.getReceiver) &&
                   !i.getDeclaredTarget.isInit && !tbl.isStringConstant(i.getReceiver) =>
-                  if (canDerefFail(i, index, n, walaRes.hm, totalCount)) (failCount + 1, totalCount + 1)
-                  else (failCount, totalCount + 1)
+                  (index, n) :: l
                 case i: SSAFieldAccessInstruction if !i.isStatic && !IRUtil.isThisVar(i.getRef) =>
-                  if (canDerefFail(i, index, n, walaRes.hm, totalCount)) (failCount + 1, totalCount + 1)
-                  else (failCount, totalCount + 1)
-
-                case _ => countPair
+                  (index, n) :: l
+                case _ => l
               }
             })
-        } else countPair
-      })
+        } else l
+      )
 
+    val derefsToCheckList = if (PARALLEL) derefsToCheck.par else derefsToCheck
+    val results =
+      derefsToCheckList.map(pair => {
+        val (index, node) = pair
+        if (canDerefFail(index, node, hm, 0)) 1 else 0
+      })
+    val (nullDerefs, derefsChecked) = (results.sum, results.size)
     println(s"Found $nullDerefs potential null derefs out of $derefsChecked derefs checked")
     (nullDerefs, derefsChecked)
   }

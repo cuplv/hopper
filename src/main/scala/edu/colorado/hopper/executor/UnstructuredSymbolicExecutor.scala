@@ -29,8 +29,6 @@ object UnstructuredSymbolicExecutor {
 
   // add path constraints from switch upon entering block rather than upon crossing case expression
   private val PRE_CONSTRAIN_SWITCHES = true
-
-  private val timekeeper = new Timer
 }
 
 class DefaultSymbolicExecutor(override val tf : TransferFunctions,
@@ -38,6 +36,7 @@ class DefaultSymbolicExecutor(override val tf : TransferFunctions,
 
 trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
   val tf : TransferFunctions
+  val timekeeper : Timer = new Timer
 
   // if true, keep path constraints from loop heads. otherwise, drop them
   val keepLoopConstraints : Boolean
