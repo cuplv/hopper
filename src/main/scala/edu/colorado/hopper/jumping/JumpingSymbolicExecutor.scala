@@ -34,6 +34,8 @@ trait JumpingSymbolicExecutor extends UnstructuredSymbolicExecutor {
                                           ir : IR, passPaths : List[Path], failPaths : List[Path], test : Path => Boolean) =
     super.forkToPredecessorBlocks(instrPaths, startBlk, loopHeader, ir, passPaths, failPaths, test)
 
+  final def returnFromCallNoJump(p : Path) : Iterable[Path] = super.returnFromCall(p)
+
   override def forkToPredecessorBlocks(instrPaths : List[Path], startBlk : ISSABasicBlock, loopHeader : Option[ISSABasicBlock],
                                        ir : IR, passPaths : List[Path], failPaths : List[Path], test : Path => Boolean) =
    // disallowing nested jumps for now
