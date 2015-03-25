@@ -230,8 +230,33 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
         // philosophically this is useless code and ought to be reported as on error
         println("Found definite null deref!")
         true
-      } else {
-        // create the query
+      } else if (Options.FLOW_INSENSITIVE_ONLY)
+        // check the derefence using the flow-insensitive non-null annotations of Nit
+        exec.tf match {
+          case tf : NullDereferenceTransferFunctions =>
+            val cg = tf.cg
+            val cha = tf.cha
+            // try to find the def of possiblyNullUse and use Nit annotations to show it is assigned to a non-null value
+            !ir.iterateAllInstructions().exists(i => i match {
+              case i : SSAInvokeInstruction if i.getDef == possiblyNullUse =>
+                // the deref cannot fail if every method this call can dispatch to has a non-null annotation
+                val targets = cg.getPossibleTargets(n, i.getCallSite)
+                !targets.isEmpty && targets.forall(n => tf.hasNitNonNullReturnAnnotation(n.getMethod))
+              case i : SSAGetInstruction if i.getDef == possiblyNullUse =>
+                // we can refute if this is a field read x = y.f and we have a non-null annotation on f
+                cha.resolveField(i.getDeclaredField) match {
+                  case null => false
+                  case f =>
+                    // the deref cannot fail if it was read from a field has a non-null annotation
+                    tf.hasNitNonNullFieldAnnotation(f)
+                }
+              /// TODO: can add case for phi that checks all vars flowing to the phi
+              case _ => false // deref'd var flows from parameter, may fail
+            })
+          case _ => false // transfer functions have no Nit annotations, may fail
+        }
+      else {
+        // check the dereference using Thresher
         val lpk = Var.makeLPK(possiblyNullUse, n, hm)
         val nullPure = Pure.makePureVar(lpk)
         val locEdge = PtEdge.make(lpk, nullPure)

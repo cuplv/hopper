@@ -2,12 +2,13 @@ package edu.colorado.hopper.client
 
 import java.io.File
 
+import com.ibm.wala.classLoader.{IField, IMethod}
 import com.ibm.wala.ipa.callgraph.CGNode
 import com.ibm.wala.ipa.callgraph.propagation._
 import com.ibm.wala.ssa._
 import com.ibm.wala.types.TypeReference
 import edu.colorado.hopper.executor.{DefaultSymbolicExecutor, TransferFunctions}
-import edu.colorado.hopper.jumping.{JumpingTransferFunctions, DefaultJumpingSymbolicExecutor, RelevanceRelation}
+import edu.colorado.hopper.jumping.{DefaultJumpingSymbolicExecutor, JumpingTransferFunctions, RelevanceRelation}
 import edu.colorado.hopper.state._
 import edu.colorado.hopper.util.PtUtil
 import edu.colorado.thresher.core.Options
@@ -211,14 +212,15 @@ class NullDereferenceTransferFunctions(walaRes : WalaAnalysisResults,
             // editor magic (or order of initialization silliness)--refute
             if (Options.PRINT_REFS) println("Refuted by read from inner class this!")
             Nil
-          } else {
-            val c = fld.getDeclaringClass
-            val fldIdentifier = s"${ClassUtil.pretty(c)}.${fld.getName.toString}"
-            if (nonNullFields.contains(fldIdentifier)) {
-              if (Options.PRINT_REFS) println("Refuted by nit annotation on field!")
-              Nil
-            } else super.execute(s, qry, n)
-          }
+          } else
+            cha.resolveField(fld) match {
+              case null => super.execute (s, qry, n)
+              case fld =>
+                if (hasNitNonNullFieldAnnotation(fld)) {
+                  if (Options.PRINT_REFS) println ("Refuted by nit annotation on field!")
+                  Nil
+                } else super.execute (s, qry, n)
+            }
         case _ => super.execute(s, qry, n)
       }
     case i: SSAFieldAccessInstruction if !i.isStatic() => // x = y.f or y.f = x
@@ -348,6 +350,16 @@ class NullDereferenceTransferFunctions(walaRes : WalaAnalysisResults,
     }
   }
 
+  private def getNitMethodIdentifier(m : IMethod) =
+    s"${ClassUtil.pretty(m.getDeclaringClass)}.${m.getSelector}"
+
+  private def getNitFieldIdentifier(f : IField) =
+    s"${ClassUtil.pretty(f.getDeclaringClass)}.${f.getName.toString}"
+
+  def hasNitNonNullReturnAnnotation(m : IMethod) : Boolean = nonNullRetMethods.contains(getNitMethodIdentifier(m))
+
+  def hasNitNonNullFieldAnnotation(f : IField) : Boolean = nonNullFields.contains(getNitFieldIdentifier(f))
+
   override def isDispatchFeasible(call : SSAInvokeInstruction, caller : CGNode, p : Path) : Boolean =
     call.isStatic || {
       val qry = p.qry
@@ -375,15 +387,14 @@ class NullDereferenceTransferFunctions(walaRes : WalaAnalysisResults,
     !call.hasDef || !call.getDeclaredResultType.isReferenceType || {
       val qry = p.qry
       val m = callee.getMethod
-      val methodIdentifier = s"${ClassUtil.pretty(m.getDeclaringClass)}.${m.getSelector}"
-      if (nonNullRetMethods.contains(methodIdentifier)) {
+      if (hasNitNonNullReturnAnnotation(m))
         getConstraintEdgeForDef(call, qry.localConstraints, caller) match {
           case Some(LocalPtEdge(_, p@PureVar(_))) if qry.isNull(p) =>
             if (Options.PRINT_REFS) println(s"Refuted by Nit annotation on ${ClassUtil.pretty(callee)}")
             false
           case _ => true
         }
-      } else super.isRetvalFeasible(call, caller, callee, p)
+      else super.isRetvalFeasible(call, caller, callee, p)
     }
 
 }
