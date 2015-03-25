@@ -237,6 +237,8 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
         val locEdge = PtEdge.make(lpk, nullPure)
         val qry = Qry.make(List(locEdge), i, n, hm, solver, startBeforeI = true)
         qry.addPureConstraint(Pure.makeEqNullConstraint(nullPure))
+        val qryTimer = new Timer
+        qryTimer.start()
         // invoke Thresher and check it
         val foundWitness =
           try {
@@ -247,10 +249,11 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
               if (Options.SCALA_DEBUG) throw e
               else true // soundly assume we got a witness
           }
+        qryTimer.stop()
         exec.cleanup()
         print(s"Deref #$count ")
         ClassUtil.pp_instr(i, ir)
-        println(s"$derefId can fail? $foundWitness")
+        println(s"$derefId can fail? $foundWitness. Checking took ${qryTimer.time} seconds")
         foundWitness
       }
     } else {
@@ -286,7 +289,6 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
             val tbl = ir.getSymbolTable
             ir.getInstructions.zipWithIndex.foldLeft(l)((l, pair) => {
               val (i, index) = pair
-              //val (failCount, totalCount) = countPair
               i match {
                 case i: SSAInvokeInstruction if !i.isStatic && !IRUtil.isThisVar(i.getReceiver) &&
                   !i.getDeclaredTarget.isInit && !tbl.isStringConstant(i.getReceiver) =>
