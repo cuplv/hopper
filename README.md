@@ -21,9 +21,11 @@ Run
 
     ./hopper.sh -app <path_to_bytecodes> -<check>
 
-where `<path_to_bytecodes>` is a path to a JAR or directory containing the Java bytecodes to be checked and `<check>` is one of `-check_casts` (check safety of downcasts), `-check_array_bounds` (check for out-of-bounds array accesses), `-check_nulls` (check for null dereferences), or `-check_android_leaks` (check for Android memory leaks).
+where `<path_to_bytecodes>` is a path to a JAR or directory containing the Java bytecodes to be checked and `<check>` is one of `check_android_derefs` (check nulls for null dereferences with special handling for Android), `-check_casts` (check safety of downcasts), `-check_array_bounds` (check for out-of-bounds array accesses), `-check_nulls` (check for null dereferences), or `-check_android_leaks` (check for Android memory leaks).
 
-The primary advantage of Hopper over Thresher is the `-piecewise_execution` flag, which enables goal-directed control-flow abstraction. This flag tells Hopper to try to achieve better scalability by "jumping" between relevant code regions rather than strictly following the program's control-flow.
+The primary advantage of Hopper over Thresher is the `-jumping_execution` flag, which enables goal-directed control-flow abstraction. This flag tells Hopper to try to achieve better scalability by "jumping" between relevant code regions rather than strictly following the program's control-flow. For better precision while jumping, use the `-control_feasibility` flag.
+
+For example, to check for null dereferences in the Android app `app.apk`, you should run `./hopper.sh -check_android_derefs -jumping_execution -control_feasibility -app app.apk`. 
 
 About
 -----
@@ -31,4 +33,17 @@ The core functionality of Hopper is an engine for *refuting* queries written in 
 
 Hopper has several built-in clients (as described above) but writing your own clients is meant to be easy: just extend the `Client` class and write a checker that takes a program as input and emits separation logic formulae representing your client.
 
-For more on Hopper and its predecessor tool Thresher, see our paper [draft](https://www.cs.colorado.edu/~sabl4745/papers/piecewise.pdf) on goal-directed control-flow abstraction, our PLDI '13 [paper](https://www.cs.colorado.edu/~sabl4745/papers/pldi13-thresher.pdf), or the Thresher [project page](http://pl.cs.colorado.edu/projects/thresher/).
+For more on Hopper and its predecessor tool Thresher, see our PLDI '13 [paper](https://www.cs.colorado.edu/~sabl4745/papers/pldi13-thresher.pdf) or the Thresher [project page](http://pl.cs.colorado.edu/projects/thresher/).
+
+Bugs found
+----------
+Here is a selection of bugs found using the assistance of Hopper and its predecessor tool Thresher:
+
+[Android framework](https://code.google.com/p/android/issues/detail?id=48055) - write into all HashMap's (fixed)
+[SeriesGuide Android app](https://github.com/UweTrottmann/SeriesGuide/pull/449) - null dereference (fixed)
+[SeriesGuide Android app](https://github.com/UweTrottmann/SeriesGuide/pull/450) - null dereference (fixed)
+[LastFM Android app](https://github.com/lastfm/lastfm-android/pull/5) - null dereference
+[ConnectBot Android app](https://github.com/connectbot/connectbot/pull/60) - null dereference
+[ConnectBot Android app](https://github.com/connectbot/connectbot/pull/61) - null dereference
+[K9Mail Android app](https://groups.google.com/forum/?fromgroups=#!topic/k-9-mail/JhoXL2c4UfU) - memory leak (fixed)
+[Jython](https://bitbucket.org/jython/jython/pull-request/52/fixing-potential-array-index-out-of-bounds) - array out of bounds error
