@@ -37,13 +37,20 @@ For more on Hopper and its predecessor tool Thresher, see our PLDI '13 [paper](h
 
 Bugs found
 ----------
-Here is a selection of bugs found using the assistance of Hopper and its predecessor tool Thresher:
+Here is a selection of bugs found using the assistance of Hopper/Thresher:
 
 [Android framework](https://code.google.com/p/android/issues/detail?id=48055) - write into all HashMap's (fixed)
+
 [SeriesGuide Android app](https://github.com/UweTrottmann/SeriesGuide/pull/449) - null dereference (fixed)
+
 [SeriesGuide Android app](https://github.com/UweTrottmann/SeriesGuide/pull/450) - null dereference (fixed)
+
 [LastFM Android app](https://github.com/lastfm/lastfm-android/pull/5) - null dereference
+
 [ConnectBot Android app](https://github.com/connectbot/connectbot/pull/60) - null dereference
+
 [ConnectBot Android app](https://github.com/connectbot/connectbot/pull/61) - null dereference
+
 [K9Mail Android app](https://groups.google.com/forum/?fromgroups=#!topic/k-9-mail/JhoXL2c4UfU) - memory leak (fixed)
+
 [Jython](https://bitbucket.org/jython/jython/pull-request/52/fixing-potential-array-index-out-of-bounds) - array out of bounds error
