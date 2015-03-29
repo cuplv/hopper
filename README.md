@@ -11,7 +11,15 @@ Hopper requires Scala 2.10.2 or later and sbt 0.13 or later.
 
 (1) Download [Droidel](https://github.com/cuplv/droidel) and follow the installation instructions. Publish Droidel to your local Maven repository by running `sbt publishLocal` in the droidel/ directory.   
 
-(2) Download Z3 to hopper/lib and follow the [instructions](http://leodemoura.github.io/blog/2012/12/10/z3-for-java.html) for building the Java bindings of Z3. Copy z3/build/com.microsoft.z3.jar, libz3.dylib and libz3java.dylib (OSX) or libz3.so and libz3java.so (Linux) to hopper/lib.
+(2) Download [Z3](https://github.com/Z3Prover/z3), compile the Java bindings, and copy the produced .dylib (OSX), *.so (Linux) .jar files to droidel/lib:
+
+  git clone https://github.com/Z3Prover/z3.git; cd z3
+  python scripts/mk_make.py --java; cd build
+  make
+  cp *.jar ../..
+  cp *.dylib ../.. || cp *.so ../..
+
+to hopper/lib and follow the [instructions](http://leodemoura.github.io/blog/2012/12/10/z3-for-java.html) for building the Java bindings of Z3. Copy z3/build/com.microsoft.z3.jar, libz3.dylib and libz3java.dylib (OSX) or libz3.so and libz3java.so (Linux) to hopper/lib.
 
 (3) Build Hopper with `sbt compile` and run with `./hopper.sh`.
 
@@ -45,11 +53,11 @@ Here is a selection of bugs found using the assistance of Hopper/Thresher:
 
 [SeriesGuide Android app](https://github.com/UweTrottmann/SeriesGuide/pull/450) - null dereference (fixed)
 
+[ConnectBot Android app](https://github.com/connectbot/connectbot/pull/60) - null dereference (fixed)
+
+[ConnectBot Android app](https://github.com/connectbot/connectbot/pull/61) - null dereference (fixed)
+
 [LastFM Android app](https://github.com/lastfm/lastfm-android/pull/5) - null dereference
-
-[ConnectBot Android app](https://github.com/connectbot/connectbot/pull/60) - null dereference
-
-[ConnectBot Android app](https://github.com/connectbot/connectbot/pull/61) - null dereference
 
 [K9Mail Android app](https://groups.google.com/forum/?fromgroups=#!topic/k-9-mail/JhoXL2c4UfU) - memory leak (fixed)
 
