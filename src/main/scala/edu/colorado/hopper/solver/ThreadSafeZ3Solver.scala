@@ -9,9 +9,9 @@ import scala.collection.mutable.HashMap
 class ThreadSafeZ3Solver extends ModelSolver[AST] {
   val ctx : Context = new Context
   val solver = {
-    val solver = ctx.MkSolver
-    val params = ctx.MkParams()
-    params.Add("soft_timeout", 10000)
+    val solver = ctx.mkSolver
+    val params = ctx.mkParams()
+    params.add("timeout", 10000)
     solver.setParameters(params)
     solver
   }
@@ -19,20 +19,20 @@ class ThreadSafeZ3Solver extends ModelSolver[AST] {
   // We maintain a mapping from Z3 names to PureVars for producing useful models
   val names : MMap[String, PureVar] = new HashMap[String, PureVar]
 
-  override def checkSAT : Boolean = this.synchronized { interpretSolverOutput(solver.Check) }
+  override def checkSAT : Boolean = this.synchronized { interpretSolverOutput(solver.check) }
 
   override def checkSATWithAssumptions(assumes : List[String]) : Boolean =
     this.synchronized {
-      interpretSolverOutput(solver.Check(assumes.map(assume => ctx.MkBoolConst(assume)).toArray))
+      interpretSolverOutput(solver.check(assumes.map(assume => ctx.mkBoolConst(assume)) : _*))
     }
 
-  override def push() : Unit = this.synchronized { solver.Push() }
-  override def pop() : Unit = this.synchronized { solver.Pop() }
+  override def push() : Unit = this.synchronized { solver.push() }
+  override def pop() : Unit = this.synchronized { solver.pop() }
 
   override def getUNSATCore : String = sys.error("Unimp")
 
   override def dispose() : Unit = this.synchronized {
-    ctx.Dispose()
+    ctx.dispose()
   }
 
   private def interpretSolverOutput(status : Status) : Boolean = status match {
@@ -43,45 +43,45 @@ class ThreadSafeZ3Solver extends ModelSolver[AST] {
       throw new UnknownSMTResult("Z3 decidability or timeout issue--got Status.UNKNOWN")
   }
 
-  override def mkAssert(a : AST) : Unit = this.synchronized { solver.Assert(a.asInstanceOf[BoolExpr]) }
+  override def mkAssert(a : AST) : Unit = this.synchronized { solver.add(a.asInstanceOf[BoolExpr]) }
 
-  override def mkNot(o : AST) : AST = this.synchronized { ctx.MkNot(o.asInstanceOf[BoolExpr]) }
+  override def mkNot(o : AST) : AST = this.synchronized { ctx.mkNot(o.asInstanceOf[BoolExpr]) }
   override def mkEq(lhs : AST, rhs : AST) : AST =
-    this.synchronized { ctx.MkEq(lhs.asInstanceOf[Expr], rhs.asInstanceOf[Expr]) }
+    this.synchronized { ctx.mkEq(lhs.asInstanceOf[Expr], rhs.asInstanceOf[Expr]) }
   override def mkNe(lhs : AST, rhs : AST) : AST =
-    this.synchronized { ctx.MkNot(ctx.MkEq(lhs.asInstanceOf[Expr], rhs.asInstanceOf[Expr])) }
+    this.synchronized { ctx.mkNot(ctx.mkEq(lhs.asInstanceOf[Expr], rhs.asInstanceOf[Expr])) }
   override def mkGt(lhs : AST, rhs : AST) : AST =
-    this.synchronized { ctx.MkGt(lhs.asInstanceOf[ArithExpr], rhs.asInstanceOf[ArithExpr]) }
+    this.synchronized { ctx.mkGt(lhs.asInstanceOf[ArithExpr], rhs.asInstanceOf[ArithExpr]) }
   override def mkLt(lhs : AST, rhs : AST) : AST =
-    this.synchronized { ctx.MkLt(lhs.asInstanceOf[ArithExpr], rhs.asInstanceOf[ArithExpr]) }
+    this.synchronized { ctx.mkLt(lhs.asInstanceOf[ArithExpr], rhs.asInstanceOf[ArithExpr]) }
   override def mkGe(lhs : AST, rhs : AST) : AST =
-    this.synchronized { ctx.MkGe(lhs.asInstanceOf[ArithExpr], rhs.asInstanceOf[ArithExpr]) }
+    this.synchronized { ctx.mkGe(lhs.asInstanceOf[ArithExpr], rhs.asInstanceOf[ArithExpr]) }
   override def mkLe(lhs : AST, rhs : AST) : AST =
-    this.synchronized { ctx.MkLe(lhs.asInstanceOf[ArithExpr], rhs.asInstanceOf[ArithExpr]) }
+    this.synchronized { ctx.mkLe(lhs.asInstanceOf[ArithExpr], rhs.asInstanceOf[ArithExpr]) }
 
   override def mkAdd(lhs : AST, rhs : AST) : AST =
-    this.synchronized { ctx.MkAdd(Array(lhs.asInstanceOf[ArithExpr], rhs.asInstanceOf[ArithExpr])) }
+    this.synchronized { ctx.mkAdd(lhs.asInstanceOf[ArithExpr], rhs.asInstanceOf[ArithExpr]) }
   override def mkSub(lhs : AST, rhs : AST) : AST =
-    this.synchronized { ctx.MkSub(Array(lhs.asInstanceOf[ArithExpr], rhs.asInstanceOf[ArithExpr])) }
+    this.synchronized { ctx.mkSub(lhs.asInstanceOf[ArithExpr], rhs.asInstanceOf[ArithExpr]) }
   override def mkMul(lhs : AST, rhs : AST) : AST =
-    this.synchronized { ctx.MkMul(Array(lhs.asInstanceOf[ArithExpr], rhs.asInstanceOf[ArithExpr])) }
+    this.synchronized { ctx.mkMul(lhs.asInstanceOf[ArithExpr], rhs.asInstanceOf[ArithExpr]) }
   override def mkDiv(lhs : AST, rhs : AST) : AST =
-    this.synchronized { ctx.MkDiv(lhs.asInstanceOf[ArithExpr], rhs.asInstanceOf[ArithExpr]) }
+    this.synchronized { ctx.mkDiv(lhs.asInstanceOf[ArithExpr], rhs.asInstanceOf[ArithExpr]) }
   override def mkRem(lhs : AST, rhs : AST) : AST =
-    this.synchronized { ctx.MkMod(lhs.asInstanceOf[IntExpr], rhs.asInstanceOf[IntExpr]) }
+    this.synchronized { ctx.mkMod(lhs.asInstanceOf[IntExpr], rhs.asInstanceOf[IntExpr]) }
   override def mkImplies(lhs : AST, rhs : AST) : AST =
-    this.synchronized { ctx.MkImplies(lhs.asInstanceOf[BoolExpr], rhs.asInstanceOf[BoolExpr]) }
+    this.synchronized { ctx.mkImplies(lhs.asInstanceOf[BoolExpr], rhs.asInstanceOf[BoolExpr]) }
   override def mkAnd(lhs : AST, rhs : AST) : AST =
-    this.synchronized { ctx.MkAnd(Array(lhs.asInstanceOf[BoolExpr], rhs.asInstanceOf[BoolExpr])) }
+    this.synchronized { ctx.mkAnd(lhs.asInstanceOf[BoolExpr], rhs.asInstanceOf[BoolExpr]) }
   override def mkOr(lhs : AST, rhs : AST) : AST =
-    this.synchronized { ctx.MkOr(Array(lhs.asInstanceOf[BoolExpr], rhs.asInstanceOf[BoolExpr])) }
+    this.synchronized { ctx.mkOr(lhs.asInstanceOf[BoolExpr], rhs.asInstanceOf[BoolExpr]) }
   override def mkXor(lhs : AST, rhs : AST) : AST =
-    this.synchronized { ctx.MkXor(lhs.asInstanceOf[BoolExpr], rhs.asInstanceOf[BoolExpr]) }
+    this.synchronized { ctx.mkXor(lhs.asInstanceOf[BoolExpr], rhs.asInstanceOf[BoolExpr]) }
 
-  override def mkIntVal(i : Int) : AST = this.synchronized { ctx.MkInt(i) }
-  override def mkBoolVal(b : Boolean) : AST = this.synchronized { ctx.MkBool(b) }
-  override def mkIntVar(s : String) : AST = this.synchronized { ctx.MkIntConst(s) }
-  override def mkBoolVar(s : String) : AST = this.synchronized { ctx.MkBoolConst(s) }
+  override def mkIntVal(i : Int) : AST = this.synchronized { ctx.mkInt(i) }
+  override def mkBoolVal(b : Boolean) : AST = this.synchronized { ctx.mkBool(b) }
+  override def mkIntVar(s : String) : AST = this.synchronized { ctx.mkIntConst(s) }
+  override def mkBoolVar(s : String) : AST = this.synchronized { ctx.mkBoolConst(s) }
 
   override def toAST(p: PureExpr) : AST = this.synchronized {
     p match {

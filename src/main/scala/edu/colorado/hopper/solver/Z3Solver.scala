@@ -1,28 +1,17 @@
 package edu.colorado.hopper.solver
 
-import scala.Array.fallbackCanBuildFrom
-import scala.collection.mutable.HashMap
-import com.microsoft.z3.AST
-import com.microsoft.z3.ArithExpr
-import com.microsoft.z3.BoolExpr
-import com.microsoft.z3.Context
-import com.microsoft.z3.Expr
-import com.microsoft.z3.IntExpr
-import com.microsoft.z3.IntNum
-import com.microsoft.z3.Status
-import edu.colorado.hopper.state.BoolVal
-import edu.colorado.hopper.state.IntVal
-import edu.colorado.hopper.state.PureVal
-import edu.colorado.hopper.state.PureVar
+import com.microsoft.z3.{AST, ArithExpr, BoolExpr, Context, Expr, IntExpr, Status}
+import edu.colorado.hopper.state.{PureExpr, PureVal, PureVar}
 import edu.colorado.walautil.Types.MMap
-import edu.colorado.hopper.state.PureExpr
+
+import scala.collection.mutable.HashMap
 
 class Z3Solver extends ModelSolver[AST] {    
   val ctx : Context = new Context
   val solver = {    
-    val solver = ctx.MkSolver
-    val params = ctx.MkParams()
-    params.Add("soft_timeout", 10000)
+    val solver = ctx.mkSolver
+    val params = ctx.mkParams()
+    params.add("timeout", 10000)
     solver.setParameters(params)
     solver
   }
@@ -30,26 +19,17 @@ class Z3Solver extends ModelSolver[AST] {
   // We maintain a mapping from Z3 names to PureVars for producing useful models
   val names : MMap[String, PureVar] = new HashMap[String, PureVar]
   
-  override def checkSAT : Boolean = interpretSolverOutput(solver.Check)
+  override def checkSAT : Boolean = interpretSolverOutput(solver.check)
   
   override def checkSATWithAssumptions(assumes : List[String]) : Boolean =
-    interpretSolverOutput(solver.Check(assumes.map(assume => ctx.MkBoolConst(assume)).toArray))
+    interpretSolverOutput(solver.check(assumes.map(assume => ctx.mkBoolConst(assume)) : _*))
 
-  override def push() : Unit = solver.Push()
-  override def pop() : Unit = solver.Pop()
+  override def push() : Unit = solver.push()
+  override def pop() : Unit = solver.pop()
 
-  // TMP! find some way to translate this back into pure constraints
-  override def getUNSATCore : String = { 
-    val unsats = solver.UnsatCore().foldLeft (List.empty[String]) ((l, s) => s.toString() :: l)
-    println("UNSAT: " + unsats)
-    solver.Assertions().foreach(e => {
-      println("unsats have " + e)
-      if (unsats.contains(e.toString)) println(e.toString())
-    })
-    ""
-  }
+  override def getUNSATCore : String =  sys.error("Unimp")
   
-  override def dispose() : Unit =  ctx.Dispose()
+  override def dispose() : Unit =  ctx.dispose()
     
   private def interpretSolverOutput(status : Status) : Boolean = status match {
     case Status.UNSATISFIABLE => false
@@ -59,30 +39,30 @@ class Z3Solver extends ModelSolver[AST] {
       throw new UnknownSMTResult("Z3 decidability or timeout issue--got Status.UNKNOWN")
   } 
   
-  override def mkAssert(a : AST) : Unit = solver.Assert(a.asInstanceOf[BoolExpr])
+  override def mkAssert(a : AST) : Unit = solver.add(a.asInstanceOf[BoolExpr])
   
-  override def mkNot(o : AST) : AST = ctx.MkNot(o.asInstanceOf[BoolExpr])
-  override def mkEq(lhs : AST, rhs : AST) : AST = ctx.MkEq(lhs.asInstanceOf[Expr], rhs.asInstanceOf[Expr]) 
-  override def mkNe(lhs : AST, rhs : AST) : AST = ctx.MkNot(ctx.MkEq(lhs.asInstanceOf[Expr], rhs.asInstanceOf[Expr])) 
-  override def mkGt(lhs : AST, rhs : AST) : AST = ctx.MkGt(lhs.asInstanceOf[ArithExpr], rhs.asInstanceOf[ArithExpr]) 
-  override def mkLt(lhs : AST, rhs : AST) : AST = ctx.MkLt(lhs.asInstanceOf[ArithExpr], rhs.asInstanceOf[ArithExpr]) 
-  override def mkGe(lhs : AST, rhs : AST) : AST = ctx.MkGe(lhs.asInstanceOf[ArithExpr], rhs.asInstanceOf[ArithExpr]) 
-  override def mkLe(lhs : AST, rhs : AST) : AST = ctx.MkLe(lhs.asInstanceOf[ArithExpr], rhs.asInstanceOf[ArithExpr])
+  override def mkNot(o : AST) : AST = ctx.mkNot(o.asInstanceOf[BoolExpr])
+  override def mkEq(lhs : AST, rhs : AST) : AST = ctx.mkEq(lhs.asInstanceOf[Expr], rhs.asInstanceOf[Expr])
+  override def mkNe(lhs : AST, rhs : AST) : AST = ctx.mkNot(ctx.mkEq(lhs.asInstanceOf[Expr], rhs.asInstanceOf[Expr]))
+  override def mkGt(lhs : AST, rhs : AST) : AST = ctx.mkGt(lhs.asInstanceOf[ArithExpr], rhs.asInstanceOf[ArithExpr])
+  override def mkLt(lhs : AST, rhs : AST) : AST = ctx.mkLt(lhs.asInstanceOf[ArithExpr], rhs.asInstanceOf[ArithExpr])
+  override def mkGe(lhs : AST, rhs : AST) : AST = ctx.mkGe(lhs.asInstanceOf[ArithExpr], rhs.asInstanceOf[ArithExpr])
+  override def mkLe(lhs : AST, rhs : AST) : AST = ctx.mkLe(lhs.asInstanceOf[ArithExpr], rhs.asInstanceOf[ArithExpr])
   
-  override def mkAdd(lhs : AST, rhs : AST) : AST = ctx.MkAdd(Array(lhs.asInstanceOf[ArithExpr], rhs.asInstanceOf[ArithExpr])) 
-  override def mkSub(lhs : AST, rhs : AST) : AST = ctx.MkSub(Array(lhs.asInstanceOf[ArithExpr], rhs.asInstanceOf[ArithExpr]))
-  override def mkMul(lhs : AST, rhs : AST) : AST = ctx.MkMul(Array(lhs.asInstanceOf[ArithExpr], rhs.asInstanceOf[ArithExpr]))
-  override def mkDiv(lhs : AST, rhs : AST) : AST = ctx.MkDiv(lhs.asInstanceOf[ArithExpr], rhs.asInstanceOf[ArithExpr]) 
-  override def mkRem(lhs : AST, rhs : AST) : AST = ctx.MkMod(lhs.asInstanceOf[IntExpr], rhs.asInstanceOf[IntExpr])
-  override def mkImplies(lhs : AST, rhs : AST) : AST = ctx.MkImplies(lhs.asInstanceOf[BoolExpr], rhs.asInstanceOf[BoolExpr])
-  override def mkAnd(lhs : AST, rhs : AST) : AST = ctx.MkAnd(Array(lhs.asInstanceOf[BoolExpr], rhs.asInstanceOf[BoolExpr]))
-  override def mkOr(lhs : AST, rhs : AST) : AST = ctx.MkOr(Array(lhs.asInstanceOf[BoolExpr], rhs.asInstanceOf[BoolExpr]))
-  override def mkXor(lhs : AST, rhs : AST) : AST = ctx.MkXor(lhs.asInstanceOf[BoolExpr], rhs.asInstanceOf[BoolExpr])
+  override def mkAdd(lhs : AST, rhs : AST) : AST = ctx.mkAdd(lhs.asInstanceOf[ArithExpr], rhs.asInstanceOf[ArithExpr])
+  override def mkSub(lhs : AST, rhs : AST) : AST = ctx.mkSub(lhs.asInstanceOf[ArithExpr], rhs.asInstanceOf[ArithExpr])
+  override def mkMul(lhs : AST, rhs : AST) : AST = ctx.mkMul(lhs.asInstanceOf[ArithExpr], rhs.asInstanceOf[ArithExpr])
+  override def mkDiv(lhs : AST, rhs : AST) : AST = ctx.mkDiv(lhs.asInstanceOf[ArithExpr], rhs.asInstanceOf[ArithExpr])
+  override def mkRem(lhs : AST, rhs : AST) : AST = ctx.mkMod(lhs.asInstanceOf[IntExpr], rhs.asInstanceOf[IntExpr])
+  override def mkImplies(lhs : AST, rhs : AST) : AST = ctx.mkImplies(lhs.asInstanceOf[BoolExpr], rhs.asInstanceOf[BoolExpr])
+  override def mkAnd(lhs : AST, rhs : AST) : AST = ctx.mkAnd(lhs.asInstanceOf[BoolExpr], rhs.asInstanceOf[BoolExpr])
+  override def mkOr(lhs : AST, rhs : AST) : AST = ctx.mkOr(lhs.asInstanceOf[BoolExpr], rhs.asInstanceOf[BoolExpr])
+  override def mkXor(lhs : AST, rhs : AST) : AST = ctx.mkXor(lhs.asInstanceOf[BoolExpr], rhs.asInstanceOf[BoolExpr])
      
-  override def mkIntVal(i : Int) : AST = ctx.MkInt(i)
-  override def mkBoolVal(b : Boolean) : AST = ctx.MkBool(b)
-  override def mkIntVar(s : String) : AST = ctx.MkIntConst(s)
-  override def mkBoolVar(s : String) : AST = ctx.MkBoolConst(s)
+  override def mkIntVal(i : Int) : AST = ctx.mkInt(i)
+  override def mkBoolVal(b : Boolean) : AST = ctx.mkBool(b)
+  override def mkIntVar(s : String) : AST = ctx.mkIntConst(s)
+  override def mkBoolVar(s : String) : AST = ctx.mkBoolConst(s)
   
   override def toAST(p: PureExpr) : AST = {
     p match {
@@ -93,27 +73,6 @@ class Z3Solver extends ModelSolver[AST] {
     }
     super.toAST(p)
   }
-  
-  private def z3ExprToPureVal(e: Expr): PureVal = e match {
-    case (e: IntNum) => IntVal(e.Int())
-    case (e: BoolExpr) => BoolVal(e.IsTrue())
-  }
-  
-  override def model: Option[Map[PureVar, PureVal]] = solver.Check match {
-    case Status.SATISFIABLE => Some({
-      val m = solver.Model
-      Map() ++ m.ConstDecls.flatMap(decl => {
-        val name = decl.Name
-        val value = m.Eval(ctx.MkIntConst(name), true)
-        names.get(name.toString()) match {
-          case Some(purevar) => {
-            val pureval = z3ExprToPureVal(value)
-            List((purevar, pureval))
-          }
-          case _ => List()
-        }
-      })
-    })
-    case _ => None
-  }
+
+  override def model: Option[Map[PureVar, PureVal]] = sys.error("Unimp")
 }
