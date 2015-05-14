@@ -13,13 +13,13 @@ Hopper requires Scala 2.10.2 or later and sbt 0.13 or later.
 
 (2) Download [Z3](https://github.com/Z3Prover/z3), compile the Java bindings, and copy the produced *.dylib (OSX), *.so (Linux), and *.jar files to hopper/lib:
 
-
-   git clone https://github.com/Z3Prover/z3.git; cd z3
-   python scripts/mk_make.py --java; cd build
-   make
-   cp *.jar ../..
-   cp *.dylib ../.. || cp *.so ../..
-
+```
+git clone https://github.com/Z3Prover/z3.git; cd z3
+python scripts/mk_make.py --java; cd build
+make
+cp *.jar ../..
+cp *.dylib ../.. || cp *.so ../..
+```
 
 (3) Build Hopper with `sbt compile` and run with `./hopper.sh`. Note: you'll need to change the `SCALA` environment variable in `hopper.sh` to point at a Scala 2.10.2 runtime.
 
