@@ -1570,20 +1570,34 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
           assert(p.isReferenceType)
           assert(!n.getIR().getSymbolTable().isConstant(s.getVal()))
           qry.removeLocalConstraint(e)
-          if (qry.isNull(p)) {
+          val y = Var.makeLPK(s.getVal(), n, hm)
+          if (qry.isNull(p))
             // since x is null, y must also be null
-            val y = Var.makeLPK(s.getVal(), n, hm)
             getConstraintEdge(y, qry.localConstraints) match {
               case Some(LocalPtEdge(_, ObjVar(_))) => // we have y -> A, where A is non-null
                 false
-              case Some(LocalPtEdge(_, PureVar(_))) => // we have y -> null 
+              case Some(LocalPtEdge(_, PureVar(_))) => // we have y -> null
                 true
               case None => // no y -> ... edge in our constraints. add y -> p (implicitly, p == null) constraint
-                assert(p.isReferenceType)
                 qry.addLocalConstraint(PtEdge.make(y, p))
                 true
             }
-          } else sys.error("non-null constraint")
+          else
+            // TODO: should make this case more precise/stop adding non-null constraints with PureVar's altogether
+            // since x is non-null, y must also be non-null
+            getConstraintEdge(y, qry.localConstraints) match {
+              case Some(LocalPtEdge(_, p@PureVar(_))) if qry.isNull(p)=> // we have y -> null, refute
+                false
+              case _ =>
+                PtUtil.getPt(y, hg) match {
+                  case rgn if rgn.isEmpty =>
+                    false // refuted by empty pt set
+                  case rgn =>
+                    qry.addLocalConstraint(PtEdge.make(y, ObjVar(rgn)))
+                    true
+                }
+            }
+
         case None => // no edge x -> _
           val y = Var.makeLPK(s.getVal, n, hm)
 
