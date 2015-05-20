@@ -199,7 +199,7 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
         handleEmptyCalleesImpl(paths, i, caller, tf.hm)
 
       }
-    } else new DefaultSymbolicExecutor(makeTF(makeRR())) {
+    } else new DefaultSymbolicExecutor(getOrCreateTransferFunctions(makeRR())) {
       override def handleEmptyCallees(paths : List[Path], i : SSAInvokeInstruction, caller : CGNode) : List[Path] =
         handleEmptyCalleesImpl(paths, i, caller, tf.hm)
     }

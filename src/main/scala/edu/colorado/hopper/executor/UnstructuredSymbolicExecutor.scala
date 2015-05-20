@@ -853,7 +853,7 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
       }      
     } catch {
       case WitnessFoundException =>
-        println("Witness found via exception")
+        println("Possible witness found, can't refute.")
         null // TODO: this is a hack. find something reasonable to do here
       case BudgetExceededException =>
         println("Exceeded timeout of " + Options.TIMEOUT + " seconds. Giving up.")
