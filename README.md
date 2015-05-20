@@ -21,7 +21,7 @@ cp *.jar ../..
 cp *.dylib ../.. || cp *.so ../..
 ```
 
-(3) Build Hopper with `sbt compile` and run with `./hopper.sh`. Note: you'll need to change the `SCALA` environment variable in `hopper.sh` to point at a Scala 2.10.2 runtime.
+(3) Build Hopper with `sbt ";compile;copy-resources"` and run with `./hopper.sh`. Note: you'll need to change the `SCALA` environment variable in `hopper.sh` to point at a Scala 2.10.2 runtime.
 
 Usage
 -----

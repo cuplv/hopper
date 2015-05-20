@@ -66,8 +66,8 @@ class DowncastCheckingClient(appPath : String, libPath : Option[String], mainCla
       } else Set.empty[String]
 
     // see if a list of cast queries was specified on the command line
-    val queries = if (Options.QUERIES.isEmpty) Set.empty[String] else parseCastList(Options.QUERIES)
-    if (!queries.isEmpty) println(s"Solving ${queries.size} queries from ${Options.QUERIES}")
+    val queries = if (Options.CAST_QUERIES.isEmpty) Set.empty[String] else parseCastList(Options.CAST_QUERIES)
+    if (!queries.isEmpty) println(s"Solving ${queries.size} queries from ${Options.CAST_QUERIES}")
     var checkedQueries = Set.empty[String]
 
     val exec = makeSymbolicExecutor(walaRes)
@@ -96,8 +96,7 @@ class DowncastCheckingClient(appPath : String, libPath : Option[String], mainCla
                     val declaredResultType = declaredResultTypes.head
                     // skip casts to primitive types and exception types
                     if (!declaredResultType.isPrimitiveType &&
-                        !ClassUtil.isThrowableType(declaredResultType, cha) && 
-                        (Options.CAST < 0 || Options.CAST == total)) {
+                        !ClassUtil.isThrowableType(declaredResultType, cha)) {
                       val bytecodeMethod = node.getMethod().asInstanceOf[IBytecodeMethod]
                       // bytecode index is the only way we can get different points-to analyses to agree on which casts are the same
                       val bytecodeIndex = bytecodeMethod.getBytecodeIndex(index)

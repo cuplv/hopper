@@ -20,7 +20,7 @@ import edu.colorado.hopper.jumping.{JumpingTransferFunctions, DefaultJumpingSymb
 import edu.colorado.hopper.synthesis.{SynthesisSymbolicExecutor, SynthesisTransferFunctions}
 import edu.colorado.thresher.core._
 import edu.colorado.walautil.cg.ImprovedZeroXContainerCFABuilder
-import edu.colorado.walautil.{ClassUtil, Timer, Util, WalaAnalysisResults}
+import edu.colorado.walautil._
 
 import scala.collection.JavaConversions.{asJavaCollection, collectionAsScalaIterable, iterableAsScalaIterable}
 
@@ -71,7 +71,9 @@ abstract class Client(appPath : String, libPath : Option[String], mainClass : St
 
   // add bypass logic that delegates to stubs if applicable
   def addBypassLogic(options : AnalysisOptions, analysisScope : AnalysisScope, cha : IClassHierarchy) : Unit = {
-    com.ibm.wala.ipa.callgraph.impl.Util.setNativeSpec("config/natives.xml")
+    val nativeSpec = JavaUtil.getResourceAsFile("natives.xml", getClass)
+    assert(nativeSpec.exists(), "Can't find native spec")
+    com.ibm.wala.ipa.callgraph.impl.Util.setNativeSpec(nativeSpec.getAbsolutePath)
     com.ibm.wala.ipa.callgraph.impl.Util.addDefaultBypassLogic(options, analysisScope,
       classOf[com.ibm.wala.ipa.callgraph.impl.Util].getClassLoader(), cha)
   }
@@ -204,10 +206,15 @@ abstract class Client(appPath : String, libPath : Option[String], mainClass : St
     // set exclusions if appropriate
     val exclusionsFile = new File(Options.EXCLUSIONS)
     if (exclusionsFile.exists()) {
-      if (DEBUG) println(s"Using exclusions file ${exclusionsFile.getAbsolutePath()}")
+      if (DEBUG) println(s"Using specified exclusions file ${exclusionsFile.getAbsolutePath()}")
       analysisScope.setExclusions(new FileOfClasses(new FileInputStream(exclusionsFile)))
+    } else if (Options.EXCLUSIONS.equals(Options.DEFAULT_EXCLUSIONS)) {
+    // look up default exclusions in the resources
+      if (DEBUG) println("Using default exclusions file")
+      val exclStream = getClass.getResourceAsStream(s"${File.separator}${Options.EXCLUSIONS}")
+      analysisScope.setExclusions(new FileOfClasses(exclStream))
     } else if (DEBUG)
-      println(s"Exclusions file ${exclusionsFile.getAbsolutePath()} does not exist, not using exclusions")
+        println(s"Exclusions file ${exclusionsFile.getAbsolutePath()} does not exist, not using exclusions")
   }
 
   def makeTransferFunctions(walaRes : WalaAnalysisResults) : TransferFunctions =
@@ -230,7 +237,7 @@ abstract class Client(appPath : String, libPath : Option[String], mainClass : St
   }
 
   def getWALAStubs : Option[File] = {
-    val f = new File("config/primordial.jar.model")
+    val f = JavaUtil.getResourceAsFile("primordial.jar.model", getClass)
     if (f.exists()) Some(f) else None
   }
 

@@ -20,6 +20,9 @@ import com.ibm.wala.types.TypeReference;
 import com.ibm.wala.util.intset.EmptyIntSet;
 import com.ibm.wala.util.intset.IntSet;
 import com.ibm.wala.util.intset.IntSetUtil;
+import edu.colorado.walautil.JavaUtil;
+
+import java.io.File;
 
 /** special context-sensitivity policy for test purposes only 
  * 
@@ -118,7 +121,9 @@ public class FakeMapContextSelector implements ContextSelector {
       throw new IllegalArgumentException("options is null");
     }
     com.ibm.wala.ipa.callgraph.impl.Util.addDefaultSelectors(options, cha);
-    com.ibm.wala.ipa.callgraph.impl.Util.setNativeSpec("config/natives.xml");
+    File nativeSpec = JavaUtil.getResourceAsFile("natives.xml", FakeMapContextSelector.class);
+    assert nativeSpec.exists();
+    com.ibm.wala.ipa.callgraph.impl.Util.setNativeSpec(nativeSpec.getAbsolutePath());
     com.ibm.wala.ipa.callgraph.impl.Util.addDefaultBypassLogic(options, scope, com.ibm.wala.ipa.callgraph.impl.Util.class.getClassLoader(), cha);
     ContextSelector appSelector = null;
     SSAContextInterpreter appInterpreter = null;

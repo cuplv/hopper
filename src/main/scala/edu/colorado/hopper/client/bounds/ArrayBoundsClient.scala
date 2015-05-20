@@ -72,7 +72,6 @@ class ArrayBoundsClient(appPath : String, libPath : Option[String], mainClass : 
           val arrayLocal = Var.makeLPK(arrayUse, n, hm)
           val arrayRgn = PtUtil.getPt(arrayLocal, hg)
           if (arrayRgn.isEmpty) countPair // empty pt set -- don't bother to check and can't count toward total
-          else if (Options.CAST > 0 && Options.CAST != countPair._2) (countPair._1, countPair._2 + 1) // hack for debugging - let us target a particular access
           else if (proveSet.contains(countPair._2)) {
             println(s"Skipping possible bounds fail # ${countPair._2 + 1} due to prove set")
             (countPair._1 + 1, countPair._2 + 1)
@@ -183,7 +182,7 @@ object ArrayBoundsClientTests extends ClientTests {
 
     val regressionDir = "target/scala-2.10/test-classes/bounds/"
     var testNum = 0
-  
+
     val executionTimer = new Timer
   
     tests foreach(test => if (Options.TEST == null || Options.TEST.isEmpty() || Options.TEST == test) {

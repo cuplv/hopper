@@ -32,8 +32,6 @@ abstract class DroidelClient(appPath : String, androidLib : File, useJPhantom : 
     appTransformer
   }
 
-
-
   val (walaRes, analysisCache) = {
     val analysisScope = appTransformer.makeAnalysisScope(useHarness = true)
     val timer = new Timer

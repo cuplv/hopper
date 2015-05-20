@@ -34,7 +34,7 @@ public class Options {
   @boolOpt(description = "Print reasons for refutations", _default = false)
   public static boolean PRINT_REFS = false;
 
-  @boolOpt(description = "Give up after assertion failure/crash", _default = true)
+  @boolOpt(description = "Give up after internal assertion failure/crash", _default = true)
   public static boolean EXIT_ON_FAIL = true;
 
   @boolOpt(description = "Perform flow-insensitive points-to analysis only; don't do symbolic execution", _default = false)
@@ -43,7 +43,7 @@ public class Options {
   @boolOpt(description = "Handle exceptions soundly", _default = false)
   public static boolean SOUND_EXCEPTIONS = false;
 
-  @boolOpt(description = "Use jumping symbolic executor", _default = false)
+  @boolOpt(description = "Use jumping symbolic executor for better scalability", _default = false)
   public static boolean JUMPING_EXECUTION = false;
 
   @boolOpt(description = "Backtrack after failed jumps", _default = false)
@@ -52,7 +52,7 @@ public class Options {
   @boolOpt(description = "Use control-feasibility information for more precise jumps", _default = false)
   public static boolean CONTROL_FEASIBILITY = false;
   
-  @boolOpt(description = "", _default = false)
+  @boolOpt(description = "(under development)", _default = false)
   public static boolean SYNTHESIS = false;
   
   @boolOpt(description = "Check for Android Activity leaks", _default = false)
@@ -61,7 +61,7 @@ public class Options {
   @boolOpt(description = "Check for null dereferences in Android apps", _default = false)
   public static boolean CHECK_ANDROID_DEREFS = false;
   
-  @boolOpt(description = "Check user assrtions", _default = false)
+  @boolOpt(description = "Check user assertions", _default = false)
   public static boolean CHECK_ASSERTS = false;
   
   @boolOpt(description = "Check downcast safety", _default = false)
@@ -104,9 +104,6 @@ public class Options {
 
   @intOpt(description = "Time out and report a witness if we spend more time than this on a query", _default = 10)
   public static int TIMEOUT = 10;  
-  
-  @intOpt(description = "Check a cast with a particular number", _default = -1)
-  public static int CAST = -1;
 
   @stringOpt(description = "Usage: -app <path to directory of .class files to analyze>", _default = "")
   public static String APP;
@@ -131,13 +128,15 @@ public class Options {
 
   @stringOpt(description = "Usage: -android_jar <path to jar file for version of android libraries>", _default = "config/android-4.4.2_r1.jar")
   public static String ANDROID_JAR = DROIDEL_HOME + "/stubs/out/droidel_android-4.4.2_r1.jar";
-  
-  @stringOpt(description = "List of classes to excluse from analysis", _default = "config/exclusions.txt")
-  public static String EXCLUSIONS = "config/exclusions.txt";
 
-  @stringOpt(description = "List of queries to answer", _default = "")
-  public static String QUERIES = "";
-  
+  public static final String DEFAULT_EXCLUSIONS = "exclusions.txt";
+
+  @stringOpt(description = "List of classes to excluse from analysis", _default = DEFAULT_EXCLUSIONS)
+  public static String EXCLUSIONS = DEFAULT_EXCLUSIONS;
+
+  @stringOpt(description = "List of downcast queries to answer (by number)", _default = "")
+  public static String CAST_QUERIES = "";
+
   @stringOpt(description = "Run a particular test", _default = "")
   public static String TEST;
 
