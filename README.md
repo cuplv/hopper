@@ -3,11 +3,11 @@
 Hopper
 ======
 
-Hopper is a goal-directed static analysis tool for languages that run on the JVM. It is a much-improved version and more feature-ful version of [Thresher](https://github.com/cuplv/thresher) written in Scala rather than Java.
+Hopper is a goal-directed static analysis tool for languages that run on the JVM. It is a much-improved and more feature-ful version of [Thresher](https://github.com/cuplv/thresher) written in Scala rather than Java.
 
 Installation
 ------------
-Hopper requires Scala 2.10.2 or later and sbt 0.13 or later.
+Hopper requires Scala 2.10 (tested with 2.10.2 and 2.10.5) and sbt 0.1 or later.
 
 (1) Download [Droidel](https://github.com/cuplv/droidel) and follow the installation instructions. Publish Droidel to your local Maven repository by running `sbt publishLocal` in the droidel/ directory.
 
@@ -62,3 +62,12 @@ Here is a selection of bugs found using the assistance of Hopper/Thresher:
 [K9Mail Android app](https://groups.google.com/forum/?fromgroups=#!topic/k-9-mail/JhoXL2c4UfU) - memory leak (fixed)
 
 [Jython](https://bitbucket.org/jython/jython/pull-request/52/fixing-potential-array-index-out-of-bounds) - array out of bounds error
+
+Troubleshooting
+---------------
+Problem: Hopper compilation fails with missing dependency from `walautil` or `droidel`.
+Solution: Your `walautil` and `droidel` projects might be out of date. Try `git pull; sbt publishLocal` in each directory.
+
+Problem: Hopper fails at runtime with message like: `java.lang.NoSuchMethodError: scala.collection.immutable.$colon$colon.hd$1()Ljava/lang/Object;`.
+Solution: This happens when Hopper is run with the wrong version of Scala; make sure you are using Scala 2.10.
+
