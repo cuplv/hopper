@@ -1,3 +1,7 @@
+import com.github.retronym.SbtOneJar._
+
+oneJarSettings
+
 name := "Hopper"
 
 version := "0.1"

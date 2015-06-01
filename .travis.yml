@@ -16,9 +16,8 @@
    - "wget https://www.dropbox.com/s/qcjzpltjpih3s1z/libz3.so"
    - "wget https://www.dropbox.com/s/lx23mupkw48dke9/libz3java.so"
    - "cd .."
-   - "sbt compile"
+   - "sbt one-jar"
    - "sbt test:compile"
-   - "export LD_LIBRARY_PATH=lib:$LD_LIBRARY_PATH" 
  script: sbt "run -regressions -jumping_execution"
  scala:
    - "2.10.2"

@@ -7,9 +7,9 @@ Hopper is a goal-directed static analysis tool for languages that run on the JVM
 
 Installation
 ------------
-Hopper requires Scala 2.10 (tested with 2.10.2 and 2.10.5) and sbt 0.1 or later.
+Hopper requires [sbt](http://www.scala-sbt.org/download.html) 0.1 or later.
 
-(1) Download [Droidel](https://github.com/cuplv/droidel) and follow the installation instructions. Publish Droidel to your local Maven repository by running `sbt publishLocal` in the droidel/ directory.
+(1) Download [Droidel](https://github.com/cuplv/droidel) and follow its installation instructions. Publish Droidel to your local Maven repository by running `sbt publishLocal` in the droidel/ directory.
 
 (2) Download [Z3](https://github.com/Z3Prover/z3), compile the Java bindings, and copy the produced *.dylib (OSX), *.so (Linux), and *.jar files to hopper/lib:
 
@@ -21,7 +21,9 @@ cp *.jar ../..
 cp *.dylib ../.. || cp *.so ../..
 ```
 
-(3) Build Hopper with `sbt ";compile;copy-resources"` and run with `./hopper.sh`. Note: you'll need to change the `SCALA` environment variable in `hopper.sh` to point at a Scala 2.10.2 runtime.
+(3) In order to compile/run the tests, you'll need a recent Android framework JAR in lib/: `cd lib && wget http://repository.grepcode.com/java/ext/com/google/android/android/4.4.2_r1/android-4.4.2_r1.jar`.
+
+(4) Build Hopper with `sbt one-jar` and run with `./hopper.sh`.
 
 Usage
 -----
