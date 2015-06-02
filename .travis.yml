@@ -18,6 +18,7 @@
    - "cd .."
    - "sbt one-jar"
    - "sbt test:compile"
+   - "export LD_LIBRARY_PATH=lib:$LD_LIBRARY_PATH"
  script: sbt "run -regressions -jumping_execution -droidel_home lib/droidel"
  scala:
    - "2.10.2"
