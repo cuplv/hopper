@@ -288,7 +288,8 @@ object AndroidLeakClientTests extends ClientTests {
         "ContainsKeyRefute", "ContainsKeyNoRefute")
 
       val regressionDir = "target/scala-2.10/test-classes/leaks/"
-      val androidJar = new File("config/android-4.4.2_r1.jar")
+      val androidJar = new File(Options.ANDROID_JAR)
+      assert(androidJar.exists(), s"Couldn't find Android JAR ${androidJar.getAbsolutePath}")
       var testNum = 0
       var successes = 0
       var failures = 0

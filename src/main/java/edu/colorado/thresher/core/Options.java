@@ -126,8 +126,9 @@ public class Options {
   @stringOpt(description = "Path to home directory of droidel", _default = "../droidel")
   public static String DROIDEL_HOME = "../droidel";
 
-  @stringOpt(description = "Usage: -android_jar <path to jar file for version of android libraries>", _default = "config/android-4.4.2_r1.jar")
-  public static String ANDROID_JAR = DROIDEL_HOME + "/stubs/out/droidel_android-4.4.2_r1.jar";
+  @stringOpt(description = "Usage: -android_jar <path to jar file for version of android libraries>",
+             _default = "lib/droidel_android-4.4.2_r1.jar")
+  public static String ANDROID_JAR = "lib/droidel_android-4.4.2_r1.jar";
 
   public static final String DEFAULT_EXCLUSIONS = "exclusions.txt";
 

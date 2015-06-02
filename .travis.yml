@@ -18,7 +18,7 @@
    - "cd .."
    - "sbt one-jar"
    - "sbt test:compile"
- script: sbt "run -regressions -jumping_execution"
+ script: sbt "run -regressions -jumping_execution -droidel_home lib/droidel"
  scala:
    - "2.10.2"
  jdk:

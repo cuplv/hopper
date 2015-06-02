@@ -21,7 +21,7 @@ cp *.jar ../..
 cp *.dylib ../.. || cp *.so ../..
 ```
 
-(3) In order to compile/run the tests, you'll need a recent Android framework JAR in lib/: `cd lib && wget http://repository.grepcode.com/java/ext/com/google/android/android/4.4.2_r1/android-4.4.2_r1.jar`.
+(3) In order to use the Android clients or compile/run the tests, you'll need a Droidel-processed Android framework JAR in lib/: `cp ../droidel/stubs/out/droidel_android-4.4.2_r1.jar lib`.
 
 (4) Build Hopper with `sbt one-jar` and run with `./hopper.sh`.
 
@@ -36,6 +36,10 @@ where `<path_to_bytecodes>` is a path to a JAR or directory containing the Java 
 The primary advantage of Hopper over Thresher is the `-jumping_execution` flag, which enables goal-directed control-flow abstraction. This flag tells Hopper to try to achieve better scalability by "jumping" between relevant code regions rather than strictly following the program's control-flow. For better precision while jumping, use the `-control_feasibility` flag.
 
 For example, to check for null dereferences in the Android app `app.apk`, you should run `./hopper.sh -check_android_derefs -jumping_execution -control_feasibility -app app.apk`. 
+
+Tests
+-----
+To compile/run the regression tests, do `sbt test:compile` and then `./hopper.sh -regressions -jumping_execution`. To run a single test, you can do `./hopper.sh -regressions -test <test_name>`.
 
 About
 -----
