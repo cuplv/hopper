@@ -24,7 +24,7 @@ import edu.colorado.walautil.{IRUtil, Timer, ClassUtil, Util}
 import scala.collection.JavaConversions._
 
 object TransferFunctions {  
-  def DEBUG = Options.SCALA_DEBUG
+  def DEBUG = Options.DEBUG
   // print warning messages about potential unsoundness in the points-to analysis
   private val EMPTY_PT_WARNING = false
   

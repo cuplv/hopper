@@ -27,7 +27,7 @@ class ControlFeasibilityRelevanceRelation(cg : CallGraph, hg : HeapGraph[Instanc
                                           cgTransitiveClosure : java.util.Map[CGNode,OrdinalSet[CGNode]] = null)
   extends RelevanceRelation(cg, hg, hm, cha, cgTransitiveClosure) {
 
-  val DEBUG = Options.SCALA_DEBUG
+  val DEBUG = Options.DEBUG
 
   /** return Some(paths) if we should jump, None if we should not jump */
   override def getPiecewisePaths(p: Path, jmpNum: Int): Option[List[Path]] = {

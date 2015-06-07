@@ -23,12 +23,7 @@ public class HeapGraphWrapper extends BasicHeapGraph {
   // p -> q pairs to ignore
   private final IBinaryNaturalRelation ignoreEdges;
 
-  // WALA encodes p ->{f} q as p -> f -> q. it's not correct to remove edges p
-  // -> f and f -> q. instead, we must say that
-  // if p -> f, then f does not point to q
-  // private final IBinaryNaturalRelation ignoreIfBoth;
-  //private final Edges edges;
-  
+  @SuppressWarnings("unchecked")
   public HeapGraphWrapper(PointerAnalysis pa, CallGraph cg) {
     super(pa, cg);
     this.ignoreEdges = new BasicNaturalRelation();

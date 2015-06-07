@@ -27,7 +27,7 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
     extends DroidelClient(appPath, androidLib, useJPhantom) {
 
   val PARALLEL = Options.PARALLEL
-  val DEBUG = Options.SCALA_DEBUG
+  val DEBUG = Options.DEBUG
 
   val rr = if (PARALLEL) None else Some(makeRR())
   val tf = if (PARALLEL) None else Some(makeTF(getOrCreateRelevanceRelation()))
@@ -271,7 +271,7 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
           } catch {
             case e: Throwable =>
               println(s"Error: $e \n${e.getStackTraceString}")
-              if (Options.SCALA_DEBUG) throw e
+              if (DEBUG) throw e
               else true // soundly assume we got a witness
           }
         qryTimer.stop()

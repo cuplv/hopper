@@ -20,7 +20,7 @@ import edu.colorado.walautil._
 import scala.collection.JavaConversions.{asScalaBuffer, asScalaIterator, asScalaSet, collectionAsScalaIterable, mapAsJavaMap}
 
 object UnstructuredSymbolicExecutor {
-  protected[executor] def DEBUG = Options.SCALA_DEBUG
+  protected[executor] def DEBUG = Options.DEBUG
   protected[executor] def MIN_DEBUG = DEBUG
   private[executor] val TRACE = false
   private[executor] val PRINT_IR = false

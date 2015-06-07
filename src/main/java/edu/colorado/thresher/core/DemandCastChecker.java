@@ -80,6 +80,8 @@ import java.util.Set;
  * Note -- this is adapted from Manu's original demand cast checker
  */
 public class DemandCastChecker {
+
+  @SuppressWarnings("unchecked")
   public static Pair<DemandRefinementPointsTo,PointerAnalysis> makeDemandPointerAnalysis(AnalysisScope scope,
                                                                                          ClassHierarchy cha,
                                                                                          AnalysisOptions options)

@@ -167,7 +167,7 @@ class NullDereferenceClient(appPath : String, libPath : Option[String], mainClas
           } catch {
             case e : Throwable =>
               println(s"Error on access # $count $e \n${e.getStackTraceString}")
-              if (Options.SCALA_DEBUG) throw e
+              if (Options.DEBUG) throw e
               else true // soundly assume we got a witness
           }
         print(s"Deref # $count "); ClassUtil.pp_instr(i, ir); println(s" at source line $srcLine of ${ClassUtil.pretty(n)} can fail? $foundWitness")

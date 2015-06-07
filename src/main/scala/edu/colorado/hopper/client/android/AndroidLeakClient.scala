@@ -129,7 +129,7 @@ class AndroidLeakClient(appPath : String, androidJar : File, libPath : Option[St
   // TODO: this super ugly and should be totally redone
   def refuteFieldErrorForward(srcKey : PointerKey, snkKey : InstanceKey, producedEdges : MSet[PtEdge], 
                           walaRes : WalaAnalysisResults, relRelation : RelevanceRelation, refutedEdges : MSet[PtEdge]) : Boolean = {
-    val hg = walaRes.hg//import walaRes._
+    val hg = walaRes.hg
     var witnessedCount = 0
     val hgWrapper = hg.asInstanceOf[HeapGraphWrapper]
     var errorPath = edu.colorado.thresher.core.AndroidLeakClient.findNewErrorPath(hgWrapper, srcKey, snkKey, cha)
@@ -217,7 +217,7 @@ class AndroidLeakClient(appPath : String, androidJar : File, libPath : Option[St
       } // end of srcIndex < errorPath.size() witness generation loop
       // ended loop without refuting an edge; we have witnessed entire error path
       if (!newPath) {
-        if (Options.SCALA_DEBUG) println("error is real! we have witnessed entire path");
+        if (Options.DEBUG) println("error is real! we have witnessed entire path");
         if (Options.DUMP_WITNESSED_ERR_PATHS) {
             println("<Err Path>")
             errorPath.foreach(println)

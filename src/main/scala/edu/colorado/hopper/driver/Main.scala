@@ -17,7 +17,7 @@ object Main {
     
     if (target == null) println("No analysis targets given...exiting.")
     else if (target.equals(REGRESSION)) {
-      val prevDebug = Options.SCALA_DEBUG
+      val prevDebug = Options.DEBUG
       val clientTests = 
         if (Options.CHECK_ANDROID_LEAKS) List(AndroidLeakClientTests)
         else if (Options.CHECK_CASTS) List(DowncastCheckingClientTests)
@@ -37,7 +37,7 @@ object Main {
           println(s"Running tests for client ${client.getClass.getName()}")
           client.runRegressionTests
           Options.restoreDefaults() // reset default values for option flags, including JUMPING_EXECUTION
-          Options.SCALA_DEBUG = prevDebug
+          Options.DEBUG = prevDebug
         }             
       })
       

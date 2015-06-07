@@ -12,7 +12,7 @@ import edu.colorado.walautil.{CFGUtil, LoopUtil}
 import scala.collection.JavaConversions._
 
 object ArrayBoundsSymbolicExecutor {
-  private val DEBUG = Options.SCALA_DEBUG
+  private val DEBUG = Options.DEBUG
   private val TRACE = false
 }
 

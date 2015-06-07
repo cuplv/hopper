@@ -14,6 +14,7 @@ import java.util.List;
 public class AndroidLeakClient {
   
   // returns error path without weak refs if one can be found, null otherwise
+  @SuppressWarnings("unchecked")
   public static List<Object> findNewErrorPath(HeapGraphWrapper hg, Object srcKey, Object snkKey, IClassHierarchy cha) {
     boolean foundWeakRef;
     for (;;) {
@@ -49,7 +50,7 @@ public class AndroidLeakClient {
         }
       }
       if (!foundWeakRef) {
-        if (Options.SCALA_DEBUG) {
+        if (Options.DEBUG) {
           System.out.println("<FIELD PATH Length: " + path.size());
           for (int i = path.size() - 1; i >= 0; i--)
             System.out.println(path.get(i) + " (" + path.get(i).getClass() + ")");

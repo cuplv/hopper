@@ -10,7 +10,7 @@ import edu.colorado.walautil.ClassUtil
 class AndroidJumpingSymbolicExecutor(tf : TransferFunctions, rr : RelevanceRelation)
   extends DefaultJumpingSymbolicExecutor(tf, rr) {
 
-  val DEBUG = Options.SCALA_DEBUG
+  val DEBUG = Options.DEBUG
   // keep guards from loop conditionals. more precise, but potentially costly
   override val keepLoopConstraints = true
 

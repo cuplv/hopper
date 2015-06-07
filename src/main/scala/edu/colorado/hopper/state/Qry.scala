@@ -17,7 +17,7 @@ import edu.colorado.walautil.{CFGUtil, IRUtil, Util}
 import scala.collection.JavaConversions._
 
 object Qry {
-  private def DEBUG = Options.SCALA_DEBUG  
+  private def DEBUG = Options.DEBUG
   private var qryIdCounter = 0
   private def getFreshQryId = { qryIdCounter += 1; qryIdCounter }
   

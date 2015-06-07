@@ -16,6 +16,8 @@ ivyScala := ivyScala.value map { _.copy(overrideScalaVersion = true) }
 
 scalacOptions ++= Seq("-deprecation", "-feature")
 
+javacOptions += "-Xlint:unchecked"
+
 resolvers += "Local Maven Repository" at "file:///"+Path.userHome.absolutePath+"/.m2/repository"
 
 libraryDependencies ++= Seq(

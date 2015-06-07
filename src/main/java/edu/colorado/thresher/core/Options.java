@@ -28,8 +28,8 @@ public class Options {
     String _default();
   }
 
-  @boolOpt(description = "Print debug info (scala)", _default = false)
-  public static boolean SCALA_DEBUG = false;
+  @boolOpt(description = "Print debug info", _default = false)
+  public static boolean DEBUG = false;
 
   @boolOpt(description = "Print reasons for refutations", _default = false)
   public static boolean PRINT_REFS = false;
