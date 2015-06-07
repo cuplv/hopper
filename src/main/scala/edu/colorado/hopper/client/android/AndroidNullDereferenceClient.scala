@@ -327,10 +327,12 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
       )
 
     val derefsToCheckList = if (PARALLEL) derefsToCheck.par else derefsToCheck
+    var count = 0
     val results =
       derefsToCheckList.map(pair => {
         val (index, node) = pair
-        if (canDerefFail(index, node, hm, 0)) 1 else 0
+        val curCount = if (PARALLEL) -1 else { count += 1; count }
+        if (canDerefFail(index, node, hm, curCount)) 1 else 0
       })
     val (nullDerefs, derefsChecked) = (results.sum, results.size)
     println(s"Found $nullDerefs potential null derefs out of $derefsChecked derefs checked")
