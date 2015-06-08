@@ -676,12 +676,14 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
                       if (Options.PRINT_REFS) println("Refuted by from constraints (parameter binding)!")
                       return false
                     } else {
-                      val interVar = ObjVar(rgnInter)
-                      if (!qry.substitute(interVar, formalObj, hg)) return false
-                      else if (actualEdge.isDefined) {
-                        if (!qry.substitute(interVar, ptActual, hg)) return false
-                      } else if (!tbl.isStringConstant(callUse))
-                        qry.addLocalConstraint(LocalPtEdge(LocalVar(actual), interVar))
+                      qry.intersectAndSubstitute(formalObj, ptActual, hg) match {
+                        case Some(interVar) =>
+                          if (!tbl.isStringConstant(callUse))
+                            qry.addLocalConstraint(LocalPtEdge(LocalVar(actual), interVar))
+                        case None =>
+                          assert(actualEdge.isDefined, "shouldn't get a refutation here if actualEdge is not defined")
+                          return false
+                      }
                     }
                   case (p@PureVar(_), actualEdge) =>
                     assert(!tbl.isConstant(callUse), "Have const " + actual + " ir " + caller.getIR())
@@ -1098,14 +1100,13 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
                                       
           def processGetInternal(qry : Qry, ptY : HeapVar, fld : Fld, ptYf : Val, xEdge : LocalPtEdge, yfEdge : Option[HeapPtEdge]) : Boolean =
             (xEdge.snk, ptYf) match {
-              case (ptX@ObjVar(rgnX), ptYf@ObjVar(rgnPtYf)) => 
+              case (ptX@ObjVar(rgnX), ptYf@ObjVar(rgnPtYf)) =>
                 qry.intersectAndSubstitute(ptX, ptYf, hg) match {
                   case Some(interVar) => if (!yfEdge.isDefined) {
                       assert(interVar != ptX)
                       if (ptY == ptX || ptY == ptYf) qry.addHeapConstraint(PtEdge.make(interVar, fld, interVar))
                       else qry.addHeapConstraint(PtEdge.make(ptY, fld, interVar))
                     } else true
-                    //yfEdge.isDefined || interVar == ptX || qry.addHeapConstraint(PtEdge.make(ptY, fld, interVar))
                   case None => false // refuted
                 }                               
               case (pureX@PureVar(_), p@PureVar(_)) => yfEdge match {
@@ -1143,7 +1144,8 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
             def processCaseSplits(caseSplits : List[(Qry, ObjVar, Option[LocalPtEdge])]) : List[Qry] = {
               val instanceFld = InstanceFld(iFld)
               caseSplits.foldLeft (List.empty[Qry]) ((l, qryTrio) => 
-              if (processGet(qryTrio._1, qryTrio._2, instanceFld, qryTrio._3.get)) qryTrio._1 :: l else l)
+                if (processGet(qryTrio._1, qryTrio._2, instanceFld, qryTrio._3.get)) qryTrio._1 :: l else l
+              )
             }
             
             val y = Var.makeLPK(s.getRef(), n, hm)
