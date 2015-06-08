@@ -24,7 +24,9 @@ import scala.collection.JavaConversions.{asJavaCollection, asScalaBuffer, asScal
 class AndroidLeakClient(appPath : String, androidJar : File, libPath : Option[String], mainClass : String,
                         mainMethod : String, isRegression : Boolean = false)
   extends AndroidClient(appPath, androidJar, libPath, mainClass, mainMethod, isRegression) {
-  
+
+  val DEBUG = Options.DEBUG
+
   // TODO: richer return type!
   def checkAnnotations() : Boolean = {
     val walaRes = makeCallGraphAndPointsToAnalysis
@@ -114,14 +116,13 @@ class AndroidLeakClient(appPath : String, androidJar : File, libPath : Option[St
     val producedEdges = Util.makeSet[PtEdge]
     val refutedEdges = Util.makeSet[PtEdge]
     // TODO: fix this. makes no sense if there are multiple alarms, and we should return something richer
-    //val logger = new Logger()
     errs.foldLeft (false) ((mayFail, pair) => { 
       val (fld, key) = pair
       if (refuteFieldErrorForward(fld, key, producedEdges, walaRes, relRelation, refutedEdges)) {
-        println("successfully refuted error path " + fld + " -> ... -> " + key)
+        if (DEBUG) println("successfully refuted error path " + fld + " -> ... -> " + key)
         mayFail || false
       } else {
-        println("successfully witnessed error path " + fld + " -> ... -> " + key)
+        if (DEBUG) println("successfully witnessed error path " + fld + " -> ... -> " + key)
         mayFail || true
       }})
   }
@@ -134,7 +135,7 @@ class AndroidLeakClient(appPath : String, androidJar : File, libPath : Option[St
     val hgWrapper = hg.asInstanceOf[HeapGraphWrapper]
     var errorPath = edu.colorado.thresher.core.AndroidLeakClient.findNewErrorPath(hgWrapper, srcKey, snkKey, cha)
     if (errorPath == null) {
-      println("Edges refuted on previous error preclude us from finding path! this error infeasible")
+      if (DEBUG) println("Edges refuted on previous error preclude us from finding path! this error infeasible")
       return true
     }
     errorPath = errorPath.reverse
@@ -171,21 +172,23 @@ class AndroidLeakClient(appPath : String, androidJar : File, libPath : Option[St
           if (!producedEdges.contains(witnessMe)) {
             val witnessed = {
               if (refutedEdges.contains(witnessMe)) {
-                println("already refuted edge " + witnessMe)
+                if (DEBUG) println(s"Already refuted edge $witnessMe")
                 false
               } else {
-                println("ATTEMPTING TO REFUTE EDGE " + witnessMe)
-                println("%%%%%%%%%%%%%%%%%Starting on edge " + witnessMe + "%%%%%%%%%%%%%%%%%")
+                if (DEBUG) {
+                  println("ATTEMPTING TO REFUTE EDGE " + witnessMe)
+                  println("%%%%%%%%%%%%%%%%%Starting on edge " + witnessMe + "%%%%%%%%%%%%%%%%%")
+                }
+
                 val start = System.currentTimeMillis()                    
                 val witnessed = generateWitness(witnessMe, walaRes, relRelation)
-                println("Edge took " + ((System.currentTimeMillis() - start) / 1000.0) + " seconds.")
+                if (DEBUG) println("Edge took " + ((System.currentTimeMillis() - start) / 1000.0) + " seconds.")
                 edu.colorado.thresher.core.WALACFGUtil.clearCaches()
                 witnessed
               }
             }
             if (witnessed) {
-              println("Successfully produced " + witnessMe + 
-                  "; done with " + witnessedCount + " of " + errorPath.size())
+              if (DEBUG) println("Successfully produced " + witnessMe + "; done with " + witnessedCount + " of " + errorPath.size())
               witnessedCount += 1
               producedEdges.add(witnessMe)
             } else {
@@ -194,21 +197,21 @@ class AndroidLeakClient(appPath : String, androidJar : File, libPath : Option[St
               refutedEdges.add(witnessMe)
               Util.Assert(fldKey != null)
               hgWrapper.addIgnoreEdge(fldKey, snk)
-              println("Successfully refuted edge " + witnessMe + "; now trying to find error path  without it")
+              if (DEBUG) println("Successfully refuted edge " + witnessMe + "; now trying to find error path  without it")
               errorPath =
                 edu.colorado.thresher.core.AndroidLeakClient.findNewErrorPath(hgWrapper, srcKey, snkKey, cha)
               
               if (errorPath != null) {
-                println("refuted edge, but err path still exists; size " + errorPath.size())
+                if (DEBUG) println("Refuted edge, but err path still exists; size " + errorPath.size())
                 errorPath = errorPath.reverse
                 newPath = true
               } else {
-                println("no path found!")
+                if (DEBUG) println("No path found!")
                 return true
               }
             }
           } else {
-            println("already produced " + witnessMe);
+            if (DEBUG) println("Already produced " + witnessMe);
           }
           fldKey = null;
           snkIndex = srcIndex
@@ -217,7 +220,7 @@ class AndroidLeakClient(appPath : String, androidJar : File, libPath : Option[St
       } // end of srcIndex < errorPath.size() witness generation loop
       // ended loop without refuting an edge; we have witnessed entire error path
       if (!newPath) {
-        if (Options.DEBUG) println("error is real! we have witnessed entire path");
+        if (DEBUG) println("Rrror is real! we have witnessed entire path");
         if (Options.DUMP_WITNESSED_ERR_PATHS) {
             println("<Err Path>")
             errorPath.foreach(println)
