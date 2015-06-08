@@ -326,6 +326,8 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
         } else l
       )
 
+    val checkingTimer = new Timer
+    checkingTimer.start()
     val derefsToCheckList = if (PARALLEL) derefsToCheck.par else derefsToCheck
     var count = 0
     val results =
@@ -336,6 +338,7 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
       })
     val (nullDerefs, derefsChecked) = (results.sum, results.size)
     println(s"Found $nullDerefs potential null derefs out of $derefsChecked derefs checked")
+    checkingTimer.printTimeTaken("Checking all derefs")
     (nullDerefs, derefsChecked)
   }
 }
