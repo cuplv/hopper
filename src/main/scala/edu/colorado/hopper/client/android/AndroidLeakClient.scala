@@ -119,10 +119,10 @@ class AndroidLeakClient(appPath : String, androidJar : File, libPath : Option[St
     errs.foldLeft (false) ((mayFail, pair) => { 
       val (fld, key) = pair
       if (refuteFieldErrorForward(fld, key, producedEdges, walaRes, relRelation, refutedEdges)) {
-        if (DEBUG) println("successfully refuted error path " + fld + " -> ... -> " + key)
+        if (DEBUG) println("Successfully refuted error path " + fld + " -> ... -> " + key)
         mayFail || false
       } else {
-        if (DEBUG) println("successfully witnessed error path " + fld + " -> ... -> " + key)
+        if (DEBUG) println("Successfully witnessed error path " + fld + " -> ... -> " + key)
         mayFail || true
       }})
   }
@@ -211,7 +211,7 @@ class AndroidLeakClient(appPath : String, androidJar : File, libPath : Option[St
               }
             }
           } else {
-            if (DEBUG) println("Already produced " + witnessMe);
+            if (DEBUG) println("Already produced " + witnessMe)
           }
           fldKey = null;
           snkIndex = srcIndex
@@ -220,11 +220,11 @@ class AndroidLeakClient(appPath : String, androidJar : File, libPath : Option[St
       } // end of srcIndex < errorPath.size() witness generation loop
       // ended loop without refuting an edge; we have witnessed entire error path
       if (!newPath) {
-        if (DEBUG) println("Rrror is real! we have witnessed entire path");
-        if (Options.DUMP_WITNESSED_ERR_PATHS) {
-            println("<Err Path>")
+        if (DEBUG) {
+            println("Error may be real; witnessed entire path:")
+            println("<Error Path>")
             errorPath.foreach(println)
-            println("</Err Path>")
+            println("</Error Path>")
         }
         return false
       }      
@@ -246,7 +246,11 @@ class AndroidLeakClient(appPath : String, androidJar : File, libPath : Option[St
     val producers = relRelation.getProducers(witnessMe, emptyQry)
     producers.exists(p => {
       val (node, instr) = p
-      print(s"Starting on producer instr $instrNum of " + producers.size + ": "); ClassUtil.pp_instr(instr, node.getIR()); println
+      if (DEBUG) {
+        print(s"Starting on producer instr $instrNum of " + producers.size + ": ")
+        ClassUtil.pp_instr(instr, node.getIR())
+        println
+      }
       instrNum += 1
       val copy = path.deepCopy
       Path.setupJumpPath(copy, instr, node, hm, hg, walaRes.cha)
