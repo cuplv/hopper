@@ -343,13 +343,13 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
 object AndroidNullDereferenceClientTests extends ClientTests {
 
   override def runRegressionTests() : Unit = {
+    val regressionDir = new File("src/test/java/nulls/")
     val tests =
-      List("InitRefute", "InitNoRefute", "OnCreateRefute", "OnCreateNoRefute", "CbRefute", "CbNoRefute",
-           "OnCreateCalleeRefute", "OnCreateCalleeNoRefute", "DifferentInstanceNoRefute",
-           "UncommonLifecycleCallbackRefute")
+      regressionDir.listFiles()
+        .filter(f => f.getName.endsWith(".java"))
+        .map(f => f.getName.stripSuffix(".java"))
 
     if (Options.TEST == null || Options.TEST.isEmpty || tests.contains(Options.TEST)) {
-      val regressionDir = "src/test/java/nulls/"
       val regressionBinDir = "target/scala-2.10/test-classes/nulls"
       val classesPathPrefix = s"$regressionDir/bin"
       val classesPath = s"$classesPathPrefix/classes"
@@ -363,7 +363,7 @@ object AndroidNullDereferenceClientTests extends ClientTests {
       Options.JUMPING_EXECUTION = true
       Options.CONTROL_FEASIBILITY = true
       val client =
-        new AndroidNullDereferenceClient(appPath = regressionDir, androidLib = androidJar, useJPhantom = false)
+        new AndroidNullDereferenceClient(appPath = regressionDir.getAbsolutePath, androidLib = androidJar, useJPhantom = false)
       var testNum = 0
       val executionTimer = new Timer
 
@@ -390,8 +390,10 @@ object AndroidNullDereferenceClientTests extends ClientTests {
         if (mayFail == expectedResult)
           println(s"Test $test (#$testNum) passed!")
         else {
-          printTestFailureMsg(test, testNum)
-          if (Options.EXIT_ON_FAIL) sys.error("Test failure")
+          if (test.contains("Refute")) {
+            printTestFailureMsg(test, testNum)
+            if (Options.EXIT_ON_FAIL) sys.error("Test failure")
+          } // else, no expected result; don't report anything
         }
 
         println(s"Test took ${executionTimer.time.toInt} seconds.")
