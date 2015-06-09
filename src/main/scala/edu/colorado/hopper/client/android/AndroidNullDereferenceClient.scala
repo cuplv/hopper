@@ -12,7 +12,7 @@ import com.ibm.wala.util.intset.OrdinalSet
 import edu.colorado.droidel.driver.AbsurdityIdentifier
 import edu.colorado.hopper.client.android.AndroidUtil._
 import edu.colorado.hopper.client.{ClientTests, NullDereferenceTransferFunctions}
-import edu.colorado.hopper.executor.DefaultSymbolicExecutor
+import edu.colorado.hopper.executor.{BudgetExceededException, DefaultSymbolicExecutor}
 import edu.colorado.hopper.jumping.{JumpingTransferFunctions, RelevanceRelation}
 import edu.colorado.hopper.solver.{ThreadSafeZ3Solver, Z3Solver}
 import edu.colorado.hopper.state._
@@ -28,6 +28,7 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
 
   val PARALLEL = Options.PARALLEL
   val DEBUG = Options.DEBUG
+  var swallowTimeouts = false
 
   val rr = if (PARALLEL) None else Some(makeRR())
   val tf = if (PARALLEL) None else Some(makeTF(getOrCreateRelevanceRelation()))
@@ -269,6 +270,10 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
           try {
             exec.executeBackward(qry)
           } catch {
+            case BudgetExceededException =>
+              if (!swallowTimeouts)
+                println(s"Exceeded timeout of ${Options.TIMEOUT} seconds. Giving up.")
+              true
             case e: Throwable =>
               println(s"Error: $e \n${e.getStackTraceString}")
               if (DEBUG) throw e
@@ -367,6 +372,7 @@ object AndroidNullDereferenceClientTests extends ClientTests {
       Options.CONTROL_FEASIBILITY = true
       val client =
         new AndroidNullDereferenceClient(appPath = regressionDir.getAbsolutePath, androidLib = androidJar, useJPhantom = false)
+      client.swallowTimeouts = true
       var testNum = 0
       val executionTimer = new Timer
 

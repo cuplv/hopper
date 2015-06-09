@@ -7,7 +7,7 @@ import com.ibm.wala.ipa.callgraph.CGNode
 import com.ibm.wala.ipa.callgraph.propagation._
 import com.ibm.wala.ssa._
 import com.ibm.wala.types.TypeReference
-import edu.colorado.hopper.executor.{DefaultSymbolicExecutor, TransferFunctions}
+import edu.colorado.hopper.executor.{BudgetExceededException, DefaultSymbolicExecutor, TransferFunctions}
 import edu.colorado.hopper.jumping.{DefaultJumpingSymbolicExecutor, JumpingTransferFunctions, RelevanceRelation}
 import edu.colorado.hopper.state._
 import edu.colorado.hopper.util.PtUtil
@@ -165,6 +165,9 @@ class NullDereferenceClient(appPath : String, libPath : Option[String], mainClas
           try {
             exec.executeBackward(qry)
           } catch {
+            case BudgetExceededException =>
+              println(s"Exceeded timeout of ${Options.TIMEOUT} seconds. Giving up.")
+              true
             case e : Throwable =>
               println(s"Error on access # $count $e \n${e.getStackTraceString}")
               if (Options.DEBUG) throw e

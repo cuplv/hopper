@@ -3,12 +3,12 @@ package edu.colorado.hopper.client
 import java.io.File
 
 import com.ibm.wala.classLoader.IBytecodeMethod
-import com.ibm.wala.demandpa.alg.BudgetExceededException
 import com.ibm.wala.ipa.callgraph.propagation.{InstanceKey, LocalPointerKey}
 import com.ibm.wala.ipa.cha.ClassHierarchy
 import com.ibm.wala.ssa.SSACheckCastInstruction
 import com.ibm.wala.types.{ClassLoaderReference, TypeReference}
 import edu.colorado.hopper.client.DowncastCheckingClient._
+import edu.colorado.hopper.executor.BudgetExceededException
 import edu.colorado.hopper.state.{ObjVar, PtEdge, Qry}
 import edu.colorado.thresher.core.{DemandCastChecker, Options}
 import edu.colorado.walautil._
@@ -151,6 +151,9 @@ class DowncastCheckingClient(appPath : String, libPath : Option[String], mainCla
                               // start at line BEFORE cast statement
                               (exec.executeBackward(qry), false)
                             } catch {
+                              case BudgetExceededException =>
+                                println(s"Exceeded timeout of ${Options.TIMEOUT} seconds. Giving up.")
+                                (true, true)
                               case e : Throwable =>
                                 e.printStackTrace()
                                 println("FAILED " + e + "\nThresher failed on cast #" + total)
@@ -263,13 +266,13 @@ object DowncastCheckingClientTests extends ClientTests {
         else Options.SOUND_EXCEPTIONS = false
         new DowncastCheckingClient(path, Util.strToOption(Options.LIB), mainClass, "main", isRegression = true).checkCasts
       } catch {
-        case e : BudgetExceededException =>
+        case BudgetExceededException =>
           println(s"Exceeded budget. Piecewise? ${Options.JUMPING_EXECUTION} $pwTimeoutOk")
           // for piecewise, a timeout is the expected result for some tests
           if (Options.JUMPING_EXECUTION && !pwTimeoutOk.contains(test)) resultsMap(test)
           else {
             printTestFailureMsg(test, testNum)
-            throw e
+            throw BudgetExceededException
           }
         case e : Throwable =>
           printTestFailureMsg(test, testNum)

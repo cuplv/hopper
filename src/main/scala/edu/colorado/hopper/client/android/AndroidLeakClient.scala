@@ -3,7 +3,6 @@ package edu.colorado.hopper.client.android
 import java.io.File
 
 import com.ibm.wala.classLoader.{IClass, IField}
-import com.ibm.wala.demandpa.alg.BudgetExceededException
 import com.ibm.wala.ipa.callgraph.AnalysisScope
 import com.ibm.wala.ipa.callgraph.propagation.{AllocationSiteInNode, ArrayContentsKey, ConcreteTypeKey, InstanceFieldKey, InstanceKey, PointerKey, StaticFieldKey}
 import com.ibm.wala.types.{ClassLoaderReference, TypeReference}
@@ -11,6 +10,7 @@ import com.ibm.wala.types.annotations.Annotation
 import com.ibm.wala.util.graph.Graph
 import com.ibm.wala.util.graph.traverse.DFS
 import edu.colorado.hopper.client.ClientTests
+import edu.colorado.hopper.executor.BudgetExceededException
 import edu.colorado.hopper.jumping.RelevanceRelation
 import edu.colorado.hopper.solver.Z3Solver
 import edu.colorado.hopper.state.{CallStack, Fld, HeapPtEdge, ObjVar, Path, PtEdge, PureConstraint, Qry}
@@ -254,7 +254,13 @@ class AndroidLeakClient(appPath : String, androidJar : File, libPath : Option[St
       instrNum += 1
       val copy = path.deepCopy
       Path.setupJumpPath(copy, instr, node, hm, hg, walaRes.cha)
-      exec.executeBackward(copy.qry)
+      try {
+        exec.executeBackward(copy.qry)
+      } catch {
+        case BudgetExceededException =>
+          println(s"Exceeded timeout of ${Options.TIMEOUT} seconds. Giving up.")
+          true
+      }
     })
   } 
   
@@ -315,12 +321,12 @@ object AndroidLeakClientTests extends ClientTests {
             executionTimer.start
             new AndroidLeakClient(path, androidJar, Util.strToOption(Options.LIB), mainClass, "main", isRegression = true).checkAnnotations
           } catch {
-            case e : BudgetExceededException =>
-              // for piecewise, a timeout is the expected result for some tests
+            case BudgetExceededException =>
+              // for jumping, a timeout is the expected result for some tests
               if (Options.JUMPING_EXECUTION && !pwTimeoutOk.contains(test)) true
               else {
                 printTestFailureMsg(test, testNum)
-                throw e
+                throw BudgetExceededException
               }
             case e : Throwable =>
               printTestFailureMsg(test, testNum)

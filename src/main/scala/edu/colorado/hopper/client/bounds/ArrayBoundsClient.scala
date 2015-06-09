@@ -6,6 +6,7 @@ import com.ibm.wala.ipa.callgraph.CGNode
 import com.ibm.wala.ssa.{SSAArrayReferenceInstruction, SSANewInstruction}
 import com.ibm.wala.types.TypeReference
 import edu.colorado.hopper.client.{Client, ClientTests}
+import edu.colorado.hopper.executor.BudgetExceededException
 import edu.colorado.hopper.jumping.{JumpingTransferFunctions, RelevanceRelation}
 import edu.colorado.hopper.state.{Fld, IntVal, ObjVar, PtEdge, Pure, Qry, Var}
 import edu.colorado.hopper.util._
@@ -142,6 +143,9 @@ class ArrayBoundsClient(appPath : String, libPath : Option[String], mainClass : 
                 try {
                   exec.executeBackward(qry)
                 } catch {
+                  case BudgetExceededException =>
+                    println(s"Exceeded timeout of ${Options.TIMEOUT} seconds. Giving up.")
+                    true
                   case e : Throwable =>
                     println(s"Error on access # $total $e \n${e.getStackTraceString}")
                     throw e

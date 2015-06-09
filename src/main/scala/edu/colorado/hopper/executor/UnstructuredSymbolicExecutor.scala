@@ -34,6 +34,8 @@ object UnstructuredSymbolicExecutor {
 class DefaultSymbolicExecutor(override val tf : TransferFunctions,
                               override val keepLoopConstraints : Boolean = false) extends UnstructuredSymbolicExecutor {}
 
+object BudgetExceededException extends Exception
+
 trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
   val tf : TransferFunctions
   val timekeeper : Timer = new Timer
@@ -42,8 +44,7 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
   val keepLoopConstraints : Boolean
   
   object WitnessFoundException extends Exception 
-  object BudgetExceededException extends Exception
-  
+
   def cg : CallGraph = tf.cg
   def cha : IClassHierarchy = tf.cha
   
@@ -779,7 +780,7 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
     }
   
   def checkTimeout() : Unit = if (timekeeper.curTimeSeconds > Options.TIMEOUT) {
-    println(s"TIMEOUT: budget ${Options.TIMEOUT} exceeded: took ${timekeeper.curTimeSeconds}")
+    if (DEBUG) println(s"TIMEOUT: budget ${Options.TIMEOUT} exceeded: took ${timekeeper.curTimeSeconds}")
     throw BudgetExceededException
   }
   
@@ -816,10 +817,7 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
     } catch {
       case WitnessFoundException =>
         println("Possible witness found, can't refute.")
-        null // TODO: this is a hack. find something reasonable to do here
-      case BudgetExceededException =>
-        println("Exceeded timeout of " + Options.TIMEOUT + " seconds. Giving up.")
-        null // TODO: this is a hack. find something reasonable to do here
+        null
     } finally {
       qry.dispose
       cleanup(oldInvMaps)
