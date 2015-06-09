@@ -77,12 +77,10 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
       val clinitEntry = p.node.getIR().getControlFlowGraph().entry()
       val paths = executeBackwardUntilWitnessFound(List(p), path => path.blk != clinitEntry || path.index > -1, failPaths)
       if (paths.isEmpty) failPaths
-      //else if (paths.size == 1 && paths(0) == p)
       // compare heap.pure constraints instead of call stacks because there are block/index matching issues
       // that cause us to fail to recognize when two paths are (in fact) equal
       else if (paths.size == 1 && paths(0).qry.heapConstraints == p.qry.heapConstraints &&
-                                  paths(0).qry.pureConstraints == p.qry.pureConstraints) 
-        //if (p.initializeStaticFieldsToDefaultValues) p :: failPaths else failPaths
+                                  paths(0).qry.pureConstraints == p.qry.pureConstraints)
         if (p.initializeStaticFieldsToDefaultValues) {
           if (p.foundWitness) throw WitnessFoundException
           else failPaths // this case happens when we have a constraint that was never consumed
@@ -217,7 +215,6 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
           if (DEBUG && paths.size > 1) println("Have " + paths.size + " paths")
           paths.foreach(p => p.setIndex(index - 1)) // update index on every path
           if (Options.SOUND_EXCEPTIONS && instr.isPEI) {
-            // return (pathsNotToExecute, pathsToExecute) pair
             def partitionExceptionalAndNormalPaths(thrownExceptionTypes : Iterable[IClass]) : (List[Path],List[Path]) = {
               // split paths into exceptional and non-exceptional ones. don't execute the exceptional ones. if the
               // instruction can throw an exception that explains the exceptional path, mark the path as non-exceptional
@@ -402,11 +399,7 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
         return (passPaths, failPaths)
     )
 
-    val isLoopBlk = loopHeader.isDefined/*loopHeader match {
-      case Some(loopHeader) => loopHeader == p.blk
-      case None => false
-    }*/
-
+    val isLoopBlk = loopHeader.isDefined
     val instrPaths = executeBlkInstrs(p, isLoopBlk)
     if (instrPaths.isEmpty) (passPaths, failPaths)
     else forkToPredecessorBlocks(instrPaths, startBlk, loopHeader, ir, passPaths, failPaths, test)
@@ -487,7 +480,7 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
         if (predList.isEmpty) (passPaths, failPaths)
         else {
           val domInfo = getDominators(prunedCFG)
-          val loopHeader = None//LoopUtil.findRelatedLoopHeader(startBlk, ir)
+          val loopHeader = None
           val forkMap = getForkMap(blk, predList, instrPaths, phis, domInfo, ir, loopHeader)
           if (!forkMap.isEmpty) {
             if (DEBUG) checkPathMap(forkMap)
@@ -551,21 +544,7 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
         forkPathMap + (pred -> {
           val newP = p.deepCopy
           if (phis.forall(phi => newP.executePhi(phi, phiIndex, tf)) && extraCheck(pred, newP)) {
-            newP.setBlk(pred)          
-            /*loopHeader match {
-              case Some(loopHeader) =>
-                newP.dropLoopProduceableConstraints(loopHeader)
-                //if (loopInvMap.pathEntailsInv((newP.node, pred, loopHeader), newP)) {
-                if (loopInvMap.pathEntailsInv((pred, newP.callStack.stack.map(f => f.node)), newP)) {
-                  //println("refuted by loopInvMap")
-                  paths 
-                } else {
-                  //println("LoopInvMap doesn't entail " + newP)
-                  newP :: paths
-                }
-              case None =>                
-                newP :: paths                
-            }*/
+            newP.setBlk(pred)
             newP :: paths
           } else paths // refuted by executing phi
         })
@@ -664,7 +643,6 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
     val matched = switchInstr.getUse(0)
     val casesAndLabels = switchInstr.getCasesAndLabels
     val indices = casesAndLabels.indices
-    //val default = cfg.getBlockForInstruction(switchInstr.getDefault()).getNumber() -> List.empty[SSAConditionalBranchInstruction]
     // meaning of casesAndLabels: case switched == casesAndLabels[i] : jump to block casesAndLabels[i + 1]  
     // list of (ConditionalInstr, target Block) pairs corresponding to the switch cases
     indices.foldLeft (Map.empty[Int,List[SSAConditionalBranchInstruction]]) ((map, index) =>  
@@ -686,43 +664,38 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
       paths
     } else {
        if (TRACE) logMethodAndTime("handleSwitch")
-     // if (paths.toSet.size == 1) println("switch: got reduction to 1 from " + paths.size)//List(paths.head) // switch not relevant -- continue on single path
-      //else {
-        val defaultNum = cfg.getBlockForInstruction(switch.getDefault()).getNumber()
-        if (DEBUG) {
-          val pSet = paths.toSet
-          if (paths.size != pSet.size) println("got reduction to " + pSet.size + " down from " + paths.size + " by switching to set")
-        }
-        val switchMap = getSwitchMap(switch, paths.head.node.getIR())
-        paths.foldLeft (List.empty[Path]) ((lst, p) => {
-          val lastBlkNum = cfg.getNumber(p.lastBlk)
-          if (lastBlkNum == defaultNum) {
-            val copy = p.deepCopy
-            // if we came from default block, need to add negation of all other cases
-            if (switchMap.values.flatten.forall(cond => copy.addConstraintFromSwitch(cond, tf, negated = true))) copy :: lst
-            else lst // refuted by adding switch constraint
-          } else {
-            assert (switchMap.containsKey(lastBlkNum),
-                    s"switchMap $switchMap does not have an entry for $lastBlkNum ir ${p.node.getIR()}")
-            // otherwise, fork a case for each possible value that could have sent us to this block
-            switchMap(lastBlkNum).foldLeft (lst) ((lst, cond) => {
-              val copy = p.deepCopy
-              if (copy.addConstraintFromSwitch(cond, tf)) copy :: lst
-              else lst // refuted by adding switch constraint
-            })
-          }
-        })
-    //}
+       val defaultNum = cfg.getBlockForInstruction(switch.getDefault()).getNumber()
+       if (DEBUG) {
+         val pSet = paths.toSet
+         if (paths.size != pSet.size) println("got reduction to " + pSet.size + " down from " + paths.size + " by switching to set")
+       }
+       val switchMap = getSwitchMap(switch, paths.head.node.getIR())
+       paths.foldLeft (List.empty[Path]) ((lst, p) => {
+       val lastBlkNum = cfg.getNumber(p.lastBlk)
+       if (lastBlkNum == defaultNum) {
+         val copy = p.deepCopy
+         // if we came from default block, need to add negation of all other cases
+         if (switchMap.values.flatten.forall(cond => copy.addConstraintFromSwitch(cond, tf, negated = true))) copy :: lst
+         else lst // refuted by adding switch constraint
+       } else {
+         assert (switchMap.containsKey(lastBlkNum),
+                  s"switchMap $switchMap does not have an entry for $lastBlkNum ir ${p.node.getIR()}")
+         // otherwise, fork a case for each possible value that could have sent us to this block
+         switchMap(lastBlkNum).foldLeft (lst) ((lst, cond) => {
+           val copy = p.deepCopy
+           if (copy.addConstraintFromSwitch(cond, tf)) copy :: lst
+           else lst // refuted by adding switch constraint
+         })
+       }
+    })
   }
     
   /** merge all paths in @param joinPaths that have reached block @param join, adding path conditions if appropriate
    *  @return paths that have been pushed through the conditional branch instruction in @param join, but no further */
   def mergeAtJoin(joinPaths : List[Path], join : WalaBlock, cfg : SSACFG) : List[Path] = {
     if (DEBUG) println("merging at join " + join + " with " + joinPaths.size + " paths")
-    //if (joinPaths.isEmpty) failPaths
     joinPaths.foreach(p =>
-      assert(p.blk == join, " path " + p + " has current block " + p.blk + " should have " + join + " ir " + joinPaths.head.node.getIR()))      
-    
+      assert(p.blk == join, " path " + p + " has current block " + p.blk + " should have " + join + " ir " + joinPaths.head.node.getIR()))
     if (joinPaths.isEmpty) joinPaths
     else {
       if (CFGUtil.endsWithSwitchInstr(join)) {      
@@ -731,19 +704,10 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
         val joined = handleSwitch(joinPaths, switch, join, cfg)
         val preSwitchIndex = join.asInstanceOf[SSACFG#BasicBlock].getAllInstructions().size - 2          
         joined.foreach(p => p.setIndex(preSwitchIndex)) // set to instruction before the switch
-        //MinSet.make(joined).toList // this is quadratic in the size of joined. potentially very bad
         joined
       } else {
         
         def mergeRedundantPaths(paths : List[Path]) : List[Path] = {
-           /*if (DEBUG) {
-           val set = paths.toSet
-           val minset = MinSet.make(paths)
-           if (set.size < paths.size || minset.size < paths.size) {
-             println("original " + paths.size + " set " + set.size + " minset " + minset.size)
-           }
-          }*/
-          
           // MinSet.make() is worst-case quadratic and uses an SMT solver to check logical implication. it *really* helps prune 
           // redundant paths when the size of combined is small, but is absurdly expensive when the size of combined is large. 
           // we try to trade off appropriately here, but this could certainly be evaluated and tuned better
@@ -771,11 +735,9 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
     // TODO: implement implication merging in then and else path via MinPathSet
     (thenPaths.isEmpty, elsePaths.isEmpty) match {
       case (false, false) => // feasible paths on both sides
-        //println("feasible paths on both sides")
         // get paths common to both sides; don't need to add path constraints for these
         val sharedPaths = thenPaths.intersect(elsePaths)
         val sharedPathsSet = sharedPaths.toSet
-        //println("SHARED PATHS: "); sharedPathsSet.foreach(println)
         // add path constraints to then and else branches  
         def joinPaths(paths : List[Path], branchPaths : List[Path], trueCond : Boolean) : List[Path] =
           branchPaths.foldLeft (paths) ((paths, path) => 
@@ -845,12 +807,12 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
     if (PRINT_IR) println("starting in " + qry.node.getIR())
     timekeeper.start
     val oldInvMaps = if (SAVE_INVARIANT_MAPS) Some(this.cloneInvariantMaps) else None
-    val result = try {             
+    try {
       val startPath = List(new Path(qry))
       test match {
         case Some(test) => executeBackwardWhile(startPath, test)
         case None => executeBackwardWhile(startPath, Util.RET_TRUE)
-      }      
+      }
     } catch {
       case WitnessFoundException =>
         println("Possible witness found, can't refute.")
@@ -858,13 +820,9 @@ trait UnstructuredSymbolicExecutor extends SymbolicExecutor {
       case BudgetExceededException =>
         println("Exceeded timeout of " + Options.TIMEOUT + " seconds. Giving up.")
         null // TODO: this is a hack. find something reasonable to do here
-      case e : Throwable =>
-        qry.dispose
-        cleanup(oldInvMaps)
-        throw e
+    } finally {
+      qry.dispose
+      cleanup(oldInvMaps)
     }
-    qry.dispose
-    cleanup(oldInvMaps)
-    result
   }
 }
