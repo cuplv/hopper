@@ -47,7 +47,7 @@ The core functionality of Hopper is an engine for *refuting* queries written in 
 
 Hopper has several built-in clients (as described above) but writing your own clients is meant to be easy: just extend the `Client` class and write a checker that takes a program as input and emits separation logic formulae representing your client.
 
-For more on Hopper and its predecessor tool Thresher, see our PLDI '13 [paper](https://www.cs.colorado.edu/~sabl4745/papers/pldi13-thresher.pdf) or the Thresher [project page](http://pl.cs.colorado.edu/projects/thresher/).
+For more on Hopper and its predecessor tool Thresher, see our OOPSLA '15 [paper](http://www.cs.colorado.edu/~sabl4745/papers/feas.pdf), our PLDI '13 [paper](https://www.cs.colorado.edu/~sabl4745/papers/pldi13-thresher.pdf) or the Thresher [project page](http://pl.cs.colorado.edu/projects/thresher/).
 
 Bugs found
 ----------
