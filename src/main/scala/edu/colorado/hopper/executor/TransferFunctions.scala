@@ -1682,7 +1682,7 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
                   val clazz = cha.lookupClass(t)
                   edge.snk match {
                     case ObjVar(rgn) => 
-                       val ok = rgn.contains(new ConcreteTypeKey(clazz)) // check y.class == v
+                       val ok = !clazz.isInterface && rgn.contains(new ConcreteTypeKey(clazz)) // check y.class == v
                        if (!ok && Options.PRINT_REFS) println("Refuted by loadMetadata instruction! ")                         
                        else qry.removeLocalConstraint(edge)                              
                        ok
@@ -1854,8 +1854,12 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
                         qry.removeLocalConstraint(e)
                       case None => ()
                     }
-                    val typeKeys = rgnY.foldLeft (Set.empty[InstanceKey]) ((keys, instanceKey) =>
-                      keys + new ConcreteTypeKey(instanceKey.getConcreteType))
+                    val typeKeys =
+                      rgnY.foldLeft (Set.empty[InstanceKey]) ((keys, instanceKey) => {
+                         val concreteType = instanceKey.getConcreteType
+                         if (concreteType.isInterface) keys
+                         else keys + new ConcreteTypeKey(concreteType)
+                       })
                     // add x -> {ConcreteTypeKey(z) for z in types(pt(y))} constraint. technically, this is a type error
                     // since the type of x is java.lang.Class however, this is just a hack to create a constraint that
                     // says typeof(x) \in typesof(pt(y)) without creating new constraint forms. the SSALoadMetadata
