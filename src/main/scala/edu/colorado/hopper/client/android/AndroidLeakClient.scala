@@ -23,12 +23,12 @@ import scala.collection.JavaConversions.{asJavaCollection, asScalaBuffer, asScal
 
 class AndroidLeakClient(appPath : String, androidJar : File, libPath : Option[String], mainClass : String,
                         mainMethod : String, isRegression : Boolean = false)
-  extends AndroidClient(appPath, androidJar, libPath, mainClass, mainMethod, isRegression) {
+  extends AndroidClient[Boolean](appPath, androidJar, libPath, mainClass, mainMethod, isRegression) {
 
   val DEBUG = Options.DEBUG
 
   // TODO: richer return type!
-  def checkAnnotations() : Boolean = {
+  override def check : Boolean = {
     val walaRes = makeCallGraphAndPointsToAnalysis
     
     val cha = walaRes.cha
@@ -319,7 +319,8 @@ object AndroidLeakClientTests extends ClientTests {
             val path = regressionDir + test
             Options.INDEX_SENSITIVITY = test.contains("IndexSensitive")
             executionTimer.start
-            new AndroidLeakClient(path, androidJar, Util.strToOption(Options.LIB), mainClass, "main", isRegression = true).checkAnnotations
+            new AndroidLeakClient(path, androidJar, Util.strToOption(Options.LIB), mainClass, "main", isRegression = true)
+              .check
           } catch {
             case BudgetExceededException =>
               // for jumping, a timeout is the expected result for some tests

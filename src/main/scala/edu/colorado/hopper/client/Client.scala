@@ -33,13 +33,16 @@ class WrappedWalaAnalysisResults(override val cg : CallGraph, pa : PointerAnalys
   override val hg = new HeapGraphWrapper(pa, cg).asInstanceOf[HeapGraph[InstanceKey]]
 }
 
-abstract class Client(appPath : String, libPath : Option[String], mainClass : String, mainMethod : String,
+abstract class Client[T](appPath : String, libPath : Option[String], mainClass : String, mainMethod : String,
                       isRegression : Boolean = false) {
 
   lazy protected val analysisScope = makeAnalysisScope()
   lazy protected val cha = ClassHierarchy.make(analysisScope)
 
   def makeAnalysisCache : AnalysisCache = new AnalysisCache
+
+  // do the actual work of the analysis
+  def check : T
 
   def makeCallGraphAndPointsToAnalysis : WalaAnalysisResults = {
     if (DEBUG) println(s"Class hierarchy size is ${cha.getNumberOfClasses()}")

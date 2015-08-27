@@ -34,7 +34,7 @@ class CastCheckingResults(val numSafe : Int, val numMightFail : Int, val numThre
 }
 
 class DowncastCheckingClient(appPath : String, libPath : Option[String], mainClass : String, mainMethod : String, 
-    isRegression : Boolean = false) extends Client(appPath, libPath, mainClass, mainMethod, isRegression) {
+    isRegression : Boolean = false) extends Client[CastCheckingResults](appPath, libPath, mainClass, mainMethod, isRegression) {
 
   def parseCastList(fileName : String) : Set[String] = 
     if (new File(fileName).exists()) {
@@ -48,7 +48,7 @@ class DowncastCheckingClient(appPath : String, libPath : Option[String], mainCla
       Set.empty[String]
     }   
  
-  def checkCasts() : CastCheckingResults = {
+  override def check : CastCheckingResults = {
     val walaRes = makeCallGraphAndPointsToAnalysis
     import walaRes._
     
@@ -264,7 +264,7 @@ object DowncastCheckingClientTests extends ClientTests {
         if (Options.JUMPING_EXECUTION) Options.PRIM_ARRAY_SENSITIVITY = true
         if (exceptionTests.contains(test)) Options.SOUND_EXCEPTIONS = true
         else Options.SOUND_EXCEPTIONS = false
-        new DowncastCheckingClient(path, Util.strToOption(Options.LIB), mainClass, "main", isRegression = true).checkCasts
+        new DowncastCheckingClient(path, Util.strToOption(Options.LIB), mainClass, "main", isRegression = true).check
       } catch {
         case BudgetExceededException =>
           println(s"Exceeded budget. Piecewise? ${Options.JUMPING_EXECUTION} $pwTimeoutOk")

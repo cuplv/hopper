@@ -22,7 +22,7 @@ import scala.xml.XML
 /* specialized null dereference client that only checks for null derefs on fields/locals assigned to null literals at
  * some point during program execution */
 class NullDereferenceClient(appPath : String, libPath : Option[String], mainClass : String, mainMethod : String, 
-    isRegression : Boolean = false) extends Client(appPath, libPath, mainClass, mainMethod, isRegression) {
+    isRegression : Boolean = false) extends Client[(Int,Int)](appPath, libPath, mainClass, mainMethod, isRegression) {
 
    // if true, report derefs as safe if they are guarded by an appropriate catch block
    val suppressCaughtExceptions = false
@@ -47,7 +47,7 @@ class NullDereferenceClient(appPath : String, libPath : Option[String], mainClas
       Set.empty[Int]
     }  
   
-  def checkNullDerefs() : (Int, Int) = {
+  override def check : (Int, Int) = {
     // for dacapo only
     val proveSetFile = s"out_${Options.APP.substring(Options.APP.lastIndexOf('/') + 1)}.txt"
     println(proveSetFile)

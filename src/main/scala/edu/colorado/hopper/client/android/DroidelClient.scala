@@ -5,12 +5,13 @@ import java.io.File
 import edu.colorado.droidel.constants.DroidelConstants
 import edu.colorado.droidel.driver.{AndroidAppTransformer, AndroidCGBuilder}
 import edu.colorado.droidel.preprocessor.ApkDecoder
+import edu.colorado.hopper.client.Client
 import edu.colorado.thresher.core.Options
 import edu.colorado.walautil.Timer
 
 /** Base client for apps to be preocessed with Droidel */
-abstract class DroidelClient(appPath : String, androidLib : File, useJPhantom : Boolean = true,
-                             appBinSuffix : String = DroidelConstants.BIN_SUFFIX) {
+abstract class DroidelClient[T](appPath : String, androidLib : File, useJPhantom : Boolean = true,
+                             appBinSuffix : String = DroidelConstants.BIN_SUFFIX) extends Client[T](appPath, None, "", "") {
 
   val appTransformer = {
     val appFile = new File(appPath)

@@ -2,7 +2,7 @@ package edu.colorado.hopper.driver
 
 import java.io.File
 
-import edu.colorado.hopper.client.{AssertionCheckingClient, AssertionCheckingClientTests, DowncastCheckingClient, DowncastCheckingClientTests, NullDereferenceClient}
+import edu.colorado.hopper.client._
 import edu.colorado.hopper.client.android._
 import edu.colorado.hopper.client.bounds.{ArrayBoundsClient, ArrayBoundsClientTests}
 import edu.colorado.walautil.Util
@@ -49,26 +49,25 @@ object Main {
         println("Running piecewise tests")
         runTests(runPiecewise = true)
       }
-    } else if (Options.CHECK_CASTS) {
-      Options.PRINT_REFS = false
-      Options.EXIT_ON_FAIL = false
-      new DowncastCheckingClient(Options.APP, Util.strToOption(Options.LIB), Options.MAIN_CLASS, Options.MAIN_METHOD)
-      .checkCasts()
-    } else if (Options.CHECK_ANDROID_LEAKS)
-      new AndroidLeakClient(Options.APP, new File(Options.ANDROID_JAR), Util.strToOption(Options.LIB), "Landroid/app/Activity", Options.MAIN_METHOD)
-      .checkAnnotations
-    else if (Options.CHECK_ARRAY_BOUNDS) 
-      new ArrayBoundsClient(Options.APP, Util.strToOption(Options.LIB), Options.MAIN_CLASS, Options.MAIN_METHOD)
-      .checkArrayBounds
-    else if (Options.CHECK_ASSERTS) 
-      new AssertionCheckingClient(Options.APP, Util.strToOption(Options.LIB), Options.MAIN_CLASS, Options.MAIN_METHOD)
-      .checkAssertions(Options.APP)
-    else if (Options.CHECK_NULLS)
-      new NullDereferenceClient(Options.APP, Util.strToOption(Options.LIB), Options.MAIN_CLASS, Options.MAIN_METHOD)
-      .checkNullDerefs
-    else if (Options.CHECK_ANDROID_DEREFS)
-      new AndroidNullDereferenceClient(Options.APP, new File(Options.ANDROID_JAR))
-      .checkNullDerefs()
-    else println("No clients given. Exiting.")
+    } else {
+      val client : Client[_] =
+        if (Options.CHECK_CASTS) {
+          Options.PRINT_REFS = false
+          Options.EXIT_ON_FAIL = false
+          new DowncastCheckingClient(Options.APP, Util.strToOption(Options.LIB), Options.MAIN_CLASS, Options.MAIN_METHOD)
+        } else if (Options.CHECK_ANDROID_LEAKS)
+          new AndroidLeakClient(Options.APP, new File(Options.ANDROID_JAR), Util.strToOption(Options.LIB),
+            "Landroid/app/Activity", Options.MAIN_METHOD)
+        else if (Options.CHECK_ARRAY_BOUNDS)
+          new ArrayBoundsClient(Options.APP, Util.strToOption(Options.LIB), Options.MAIN_CLASS, Options.MAIN_METHOD)
+        else if (Options.CHECK_ASSERTS)
+          new AssertionCheckingClient(Options.APP, Util.strToOption(Options.LIB), Options.MAIN_CLASS, Options.MAIN_METHOD)
+        else if (Options.CHECK_NULLS)
+          new NullDereferenceClient(Options.APP, Util.strToOption(Options.LIB), Options.MAIN_CLASS, Options.MAIN_METHOD)
+        else if (Options.CHECK_ANDROID_DEREFS)
+          new AndroidNullDereferenceClient(Options.APP, new File(Options.ANDROID_JAR))
+        else sys.error("No clients given. Exiting.")
+      client.check
+    }
   }         
 }

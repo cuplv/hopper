@@ -42,7 +42,7 @@ case class JavaLangAssertion(i : SSANewInstruction, n : CGNode) extends Assertio
 case class CustomAssertion(i : SSAInvokeInstruction, useNum : Int, n : CGNode) extends Assertion
 
 class AssertionCheckingClient(appPath : String, libPath : Option[String], mainClass : String, mainMethod : String, 
-    isRegression : Boolean = false) extends Client(appPath, libPath, mainClass, mainMethod, isRegression) {
+    isRegression : Boolean = false) extends Client[Iterable[String]](appPath, libPath, mainClass, mainMethod, isRegression) {
   
   // TODO: get queries from Java-defined assertions also by looking for "throw java/lang/AssertionError"
   type MethodSignature = String
@@ -88,7 +88,7 @@ class AssertionCheckingClient(appPath : String, libPath : Option[String], mainCl
     } else asserts)
   }
   
-  def checkAssertions(projectName : String) : Iterable[String] = {
+  override def check : Iterable[String] = {
     val walaRes = makeCallGraphAndPointsToAnalysis
     
     val asserts = collectAssertions(walaRes.cg)
@@ -216,7 +216,8 @@ object AssertionCheckingClientTests extends ClientTests {
          //val path = regressionDir + test
          Options.INDEX_SENSITIVITY = test.contains("IndexSensitive")
          val synthesizedClasses = 
-           new AssertionCheckingClient(path, Util.strToOption(Options.LIB), mainClass, mainMethod, isRegression = true).checkAssertions(test)
+           new AssertionCheckingClient(path, Util.strToOption(Options.LIB), mainClass, mainMethod, isRegression = true)
+             .check
          // tests with NoTest contain assertions that cannot fail, so no code should be synthesized
          if (test.contains("NoTest")) {
            assert(synthesizedClasses.isEmpty)

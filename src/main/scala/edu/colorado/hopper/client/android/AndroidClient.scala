@@ -7,11 +7,11 @@ import com.ibm.wala.classLoader.{IClass, IMethod}
 import com.ibm.wala.ipa.callgraph.{AnalysisCache, AnalysisOptions, AnalysisScope, CallGraphBuilder}
 import com.ibm.wala.ipa.cha.IClassHierarchy
 import edu.colorado.hopper.client.Client
-import edu.colorado.thresher.core.{FakeMapContextSelector, Options}
+import edu.colorado.thresher.core.FakeMapContextSelector
 
-abstract class AndroidClient(appPath : String, androidJar : File, libPath : Option[String], mainClass : String,
+abstract class AndroidClient[T](appPath : String, androidJar : File, libPath : Option[String], mainClass : String,
                              mainMethod : String, isRegression : Boolean = false)
-  extends Client(appPath, libPath, mainClass, mainMethod, isRegression) {
+  extends Client[T](appPath, libPath, mainClass, mainMethod, isRegression) {
   
   // TODO: this is a hack. need complete list of methods. can also check is method is override
   def isAndroidFrameworkCallback(m : IMethod, cha : IClassHierarchy) : Boolean = (m.isPublic() || m.isProtected()) && {

@@ -18,7 +18,7 @@ import scala.io.Source
 
 class ArrayBoundsClient(appPath : String, libPath : Option[String], mainClass : String, mainMethod : String, 
                         isRegression : Boolean = false)
-  extends Client(appPath, libPath, mainClass, mainMethod, isRegression) {
+  extends Client[(Int,Int)](appPath, libPath, mainClass, mainMethod, isRegression) {
 
   // if true, report accesses as safe if they are guarded by an appropriate catch block
   val suppressCaughtExceptions = false
@@ -43,7 +43,7 @@ class ArrayBoundsClient(appPath : String, libPath : Option[String], mainClass : 
       Set.empty[Int]
     } 
   
-  def checkArrayBounds() : (Int, Int) = {
+  override def check : (Int, Int) = {
     // for dacapo only
     val proveSetFile = s"out_${Options.APP.substring(Options.APP.lastIndexOf('/') + 1)}.txt"
     val proveSet = parseProveList(proveSetFile)
@@ -200,7 +200,7 @@ object ArrayBoundsClientTests extends ClientTests {
           if (!Options.JUMPING_EXECUTION && test.contains("Piecewise")) Options.JUMPING_EXECUTION = true
           if (Options.JUMPING_EXECUTION) Options.PRIM_ARRAY_SENSITIVITY = true
           new ArrayBoundsClient(path, Util.strToOption(Options.LIB), mainClass, "main", isRegression = true)
-          .checkArrayBounds()
+          .check
         } catch {      
           case e : Throwable =>
             printTestFailureMsg(test, testNum)

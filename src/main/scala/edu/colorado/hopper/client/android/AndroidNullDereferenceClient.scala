@@ -24,7 +24,7 @@ import scala.collection.JavaConversions._
 import scala.sys.process._
 
 class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhantom : Boolean = true)
-    extends DroidelClient(appPath, androidLib, useJPhantom) {
+    extends DroidelClient[(Int,Int)](appPath, androidLib, useJPhantom) {
 
   val PARALLEL = Options.PARALLEL
   val DEBUG = Options.DEBUG
@@ -292,7 +292,7 @@ class AndroidNullDereferenceClient(appPath : String, androidLib : File, useJPhan
     }
   }
 
-  def checkNullDerefs() : (Int,Int) = {
+  override def check : (Int,Int) = {
     import walaRes._
     if (DEBUG) {
       val id = new AbsurdityIdentifier("")
@@ -383,7 +383,7 @@ object AndroidNullDereferenceClientTests extends ClientTests {
         val (mayFailCount, derefsChecked) = {
           try {
             executionTimer.start
-            client.checkNullDerefs()
+            client.check
           } catch {
             case e : Throwable =>
               printTestFailureMsg(test, testNum)
