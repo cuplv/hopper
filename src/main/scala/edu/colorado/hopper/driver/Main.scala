@@ -66,6 +66,8 @@ object Main {
           new NullDereferenceClient(Options.APP, Util.strToOption(Options.LIB), Options.MAIN_CLASS, Options.MAIN_METHOD)
         else if (Options.CHECK_ANDROID_DEREFS)
           new AndroidNullDereferenceClient(Options.APP, new File(Options.ANDROID_JAR))
+        else if (Options.CHECK_DIV_BY_ZERO)
+          new DivideByZeroClient(Options.APP, Util.strToOption(Options.LIB), Options.MAIN_CLASS, Options.MAIN_METHOD)
         else sys.error("No clients given. Exiting.")
       client.check
     }
