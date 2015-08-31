@@ -14,14 +14,16 @@ Hopper requires [sbt](http://www.scala-sbt.org/download.html) 0.1 or later.
 (2) Download [Z3](https://github.com/Z3Prover/z3), compile the Java bindings, and copy the produced *.dylib (OSX), *.so (Linux), and *.jar files to hopper/lib:
 
 ```
+mkdir lib; cd lib
 git clone https://github.com/Z3Prover/z3.git; cd z3
 python scripts/mk_make.py --java; cd build
 make
 cp *.jar ../..
 cp *.dylib ../.. || cp *.so ../..
+cd ../..
 ```
 
-(3) In order to use the Android clients or compile/run the tests, you'll need a Droidel-processed Android framework JAR in lib/: `cp ../droidel/stubs/out/droidel_android-4.4.2_r1.jar lib`.
+(3) In order to use the Android clients or compile/run the tests, you'll need a Droidel-processed Android framework JAR in lib/: `cp ../droidel/stubs/out/droidel_android-4.4.2_r1.jar lib` (assuming `droidel` and `hopper` are sibling directories).
 
 (4) Build Hopper with `sbt one-jar` and run with `./hopper.sh`.
 
@@ -74,6 +76,8 @@ Troubleshooting
 Problem: Hopper compilation fails with missing dependency from `walautil` or `droidel`.
 Solution: Your `walautil` and `droidel` projects might be out of date. Try `git pull; sbt publishLocal` in each directory.
 
-Problem: Hopper fails at runtime with message like: `java.lang.NoSuchMethodError: scala.collection.immutable.$colon$colon.hd$1()Ljava/lang/Object;`.
+Problem: Hopper fails at runtime with a message like: `java.lang.NoSuchMethodError: scala.collection.immutable.$colon$colon.hd$1()Ljava/lang/Object;`.
 Solution: This happens when Hopper is run with the wrong version of Scala; make sure you are using Scala 2.10.
 
+Problem: Hopper fails at runtime with a message like: `java.lang.UnsupportedClassVersionError: edu/colorado/walautil/cg/ImprovedZeroXContainerCFABuilder : Unsupported major.minor version 52.0`.
+Solution: This happens when Hopper and `walautil` are built using different JDK versions. You may need to rebuild `walautil` and `sbt publishLocal` again.
