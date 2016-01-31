@@ -60,6 +60,8 @@ object Main {
             "Landroid/app/Activity", Options.MAIN_METHOD)
         else if (Options.CHECK_ARRAY_BOUNDS)
           new ArrayBoundsClient(Options.APP, Util.strToOption(Options.LIB), Options.MAIN_CLASS, Options.MAIN_METHOD)
+        else if (Options.CHECK_CONSTANT_FLOW)
+          new AndroidConstantFlowClient(Options.APP, new File(Options.ANDROID_JAR))
         else if (Options.CHECK_ASSERTS)
           new AssertionCheckingClient(Options.APP, Util.strToOption(Options.LIB), Options.MAIN_CLASS, Options.MAIN_METHOD)
         else if (Options.CHECK_NULLS)

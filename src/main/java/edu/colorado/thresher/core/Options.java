@@ -76,6 +76,9 @@ public class Options {
   @boolOpt(description = "Check divison by zero", _default = false)
   public static boolean CHECK_DIV_BY_ZERO = false;
 
+  @boolOpt(description = "Check for constant values flowing to sensitive method calls", _default = false)
+  public static boolean CHECK_CONSTANT_FLOW = false;
+
   // should we use Manu's demand cast checker to easily prove the safety of casts requiring context-sensitivity?
   @boolOpt(description = "Filter cast checking results using demand cast checker", _default = false)
   public static boolean USE_DEMAND_CAST_CHECKER = false;

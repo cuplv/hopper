@@ -137,7 +137,7 @@ sealed case class CharVal(override val v : Char) extends PureVal(v) {
   override def <=(p : PureVal) : Boolean = v <= p.asInstanceOf[CharVal].v 
 }
 
-sealed case class StringVal(override val v : String) extends PureVal(v)
+sealed case class StringVal(override val v : String) extends PureVal(v) //TODO(benno) Add support for containment/regex matching by overloading comparison operators?
 
 sealed case class PureVar(val typ : TypeReference) extends PureExpr with Val {
   val id : Int = Var.getFreshPureVarId

@@ -5,6 +5,7 @@ import com.ibm.wala.classLoader.IField
 import com.ibm.wala.ipa.callgraph.propagation._
 import com.ibm.wala.ipa.callgraph.{CGNode, ContextKey}
 import com.ibm.wala.ipa.cha.IClassHierarchy
+import com.ibm.wala.shrikeBT.IConditionalBranchInstruction
 import com.ibm.wala.ssa.{ISSABasicBlock, SSAGetInstruction, SSAInstruction}
 import com.microsoft.z3.AST
 import edu.colorado.hopper.solver.{ModelSolver, Solver, UnknownSMTResult, Z3Solver}
@@ -145,7 +146,14 @@ class Qry(val heapConstraints : MSet[HeapPtEdge], val pureConstraints : MSet[Pur
   def node : CGNode = callStack.top.node
   def blk : ISSABasicBlock = callStack.top.blk
   def index : Int = callStack.top.index
-    
+
+  val stringPureConstraints : MSet[PureConstraint] = Util.makeSet[PureConstraint]
+  pureConstraints.filter { _.isStringConstraint }.foreach{ pc =>
+    pureConstraints       -= pc
+    stringPureConstraints += pc
+  }
+
+
   def curInstr : Option[SSAInstruction] = callStack.top.curInstr
   // warning: expensive
   def curSourceLine : Int = curInstr match {
@@ -176,7 +184,11 @@ class Qry(val heapConstraints : MSet[HeapPtEdge], val pureConstraints : MSet[Pur
     localConstraints -= e
   }
   
-  def removePureConstraint(p : PureConstraint) : Unit = pureConstraints -= p
+  def removePureConstraint(p : PureConstraint) : Unit =
+    if(p.isStringConstraint)
+      stringPureConstraints -= p
+    else
+      pureConstraints -= p
   
   def addHeapConstraint(e : HeapPtEdge) : Boolean = if (heapConstraints.contains(e)) true else {
     
@@ -257,12 +269,8 @@ class Qry(val heapConstraints : MSet[HeapPtEdge], val pureConstraints : MSet[Pur
   }
     
   def addPureConstraint(p : PureConstraint) : Boolean = {
-    if (p.isStringConstraint) p match {
-      case PureAtomicConstraint(p@PureVar(_), _, _) => 
-        // TODO: string constraints unsupported for now. just add != null constraint
-        val neqNullConstraint = Pure.makeNeNullConstraint(p)         
-        if (pureConstraints.add(neqNullConstraint)) solver.mkAssertWithAssumption(id.toString, neqNullConstraint)          
-      case p => sys.error("Unexpected pure atomic constraint " + p)
+    if (p.isStringConstraint) {
+      stringPureConstraints += p
     } else if (p.isBitwiseConstraint || p.isFloatConstraint || p.isLongConstraint || p.isDoubleConstraint) p match {
       case PureAtomicConstraint(p@PureVar(_), _, _) => 
         // TODO: bitvector, long, and float ops unsuppored for now. drop related constraints
@@ -276,9 +284,20 @@ class Qry(val heapConstraints : MSet[HeapPtEdge], val pureConstraints : MSet[Pur
     }   
 
     try {
-      val res = checkPureConstraintsSAT
+      val stringRes = !p.isStringConstraint || checkStringPureConstraintsSAT
+      val res = solver.checkSATWithAssumptions(assumes)
       if (!res && Options.PRINT_REFS) println(s"Refuted by pure constraint! ${this.id}")
-      res
+      if (!stringRes && Options.PRINT_REFS) {
+        stringPureConstraintPermutations flatMap stringPureExprEquivClasses flatMap { equiv_class =>
+          val lits = equiv_class.filter{_.isInstanceOf[StringVal]}.map{_.asInstanceOf[StringVal].v}
+          if(lits.size > 1 && (lits contains "__MUSE_CONSTANT_SEARCH__"))
+            lits.filterNot{_ == "__MUSE_CONSTANT_SEARCH__"}
+          else
+            Nil
+        } foreach {s => println(s"__MUSE_CONSTANT_SEARCH__ Constant found : $s")}
+
+      }
+      res && stringRes
     } catch {
       case e : UnknownSMTResult =>
         // SMT solver can't handle this constraint; just drop it and assume SAT
@@ -286,8 +305,46 @@ class Qry(val heapConstraints : MSet[HeapPtEdge], val pureConstraints : MSet[Pur
         true
     }
   }
-  
-  def checkPureConstraintsSAT : Boolean = solver.checkSATWithAssumptions(assumes)
+
+  //partition all pure expressions from constraints set into equivalence classes
+  def stringPureExprEquivClasses(constraints : Set[PureAtomicConstraint]) : Set[Set[PureExpr]] = {
+    require(constraints.forall { constraint => constraint.op == IConditionalBranchInstruction.Operator.EQ })
+    constraints.foldLeft(Util.makeISet[Set[PureExpr]]) { case (acc: Set[Set[PureExpr]], PureAtomicConstraint(lhs,_,rhs)) =>
+      acc.partition { eq_class => (eq_class contains lhs) || (eq_class contains rhs) } match {
+        case (matches, nonmatches) => nonmatches + (matches.flatten ++ Set(lhs, rhs))
+      }
+    }
+  }
+
+  def stringPureConstraintPermutations = {
+    val atomics      = Util.makeSet[PureAtomicConstraint]
+    val disjunctives = Util.makeSet[PureDisjunctiveConstraint]
+    stringPureConstraints.foreach {
+      case a : PureAtomicConstraint => atomics += a
+      case d : PureDisjunctiveConstraint => disjunctives += d
+    }
+
+    disjunctives.foldLeft(Set[Set[PureAtomicConstraint]](atomics.toSet))
+      {(acc,disj) => for (term <- disj.terms ; a <- acc) yield a + term}
+  }
+
+  def checkStringPureConstraintsSAT : Boolean = {
+    // Implementing a (very)^100000 rudimentary string domain model checker here.
+    // propositions are CNF formulae whose atomics are statements of string equality.
+
+    // Strategy is to take all permutations of choices from each conjunct, and check that there exists at least one satisfiable choice.
+    // We're comfortable taking this naive approach because we expect to have very few string pure constraints at any given point
+
+    def satisfiable(constraints : Set[PureAtomicConstraint]) : Boolean = {
+      //Ensure no equivalence class holds two string literals.
+      stringPureExprEquivClasses(constraints).forall{ eq_class => eq_class.count{_.isInstanceOf[StringVal]} <= 1 }
+    }
+
+    stringPureConstraintPermutations exists satisfiable
+  }
+
+
+  def checkPureConstraintsSAT : Boolean = solver.checkSATWithAssumptions(assumes) && checkStringPureConstraintsSAT
 
   // add tmpConstraint, check SAT, (implicitly) remove tmp constraint, return result of SAT check
   def checkTmpPureConstraint(tmpConstraint : PureConstraint) : Boolean =
