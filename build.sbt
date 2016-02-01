@@ -21,8 +21,9 @@ javacOptions += "-Xlint:unchecked"
 resolvers += "Local Maven Repository" at "file:///"+Path.userHome.absolutePath+"/.m2/repository"
 
 libraryDependencies ++= Seq(
-        "University of Colorado Boulder" %% "walautil" % "0.1-SNAPSHOT",
-        "University of Colorado Boulder" %% "droidel" % "0.1-SNAPSHOT",
+	"org.json4s" %% "json4s-native" % "3.3.0",
+	"University of Colorado Boulder" %% "walautil" % "0.1-SNAPSHOT",
+  "University of Colorado Boulder" %% "droidel" % "0.1-SNAPSHOT",
 	"com.ibm.wala" % "com.ibm.wala.shrike" % "1.3.7",
 	"com.ibm.wala" % "com.ibm.wala.util" % "1.3.7",
 	"com.ibm.wala" % "com.ibm.wala.core" % "1.3.7",

@@ -7,6 +7,8 @@ import edu.colorado.hopper.client.android._
 import edu.colorado.hopper.client.bounds.{ArrayBoundsClient, ArrayBoundsClientTests}
 import edu.colorado.walautil.Util
 import edu.colorado.thresher.core.Options
+import org.json4s._
+import org.json4s.native.JsonMethods
 
 object Main {
   
@@ -60,8 +62,16 @@ object Main {
             "Landroid/app/Activity", Options.MAIN_METHOD)
         else if (Options.CHECK_ARRAY_BOUNDS)
           new ArrayBoundsClient(Options.APP, Util.strToOption(Options.LIB), Options.MAIN_CLASS, Options.MAIN_METHOD)
-        else if (Options.CHECK_CONSTANT_FLOW)
-          new AndroidConstantFlowClient(Options.APP, new File(Options.ANDROID_JAR))
+        else if (Options.CHECK_CONSTANT_FLOW){
+          val json_in = JsonMethods.parse(Options.JSON_BUG_SPEC)
+          val user   = (json_in \\ "user_name").asInstanceOf[JString].s
+          val repo   = (json_in \\ "repo_name").asInstanceOf[JString].s
+          val parent = (json_in \\ "parent_hash").asInstanceOf[JString].s
+          val child  = (json_in \\ "child_hash").toOption map {_.asInstanceOf[JString].s}
+          val alarms = (json_in \\ "alarms").asInstanceOf[JArray].arr
+            .map{jval => ((jval \\ "filename").asInstanceOf[JString].s, (jval \\ "location").asInstanceOf[JInt].num.toInt)}
+          //TODO(benno) construct app path from json info
+          new AndroidConstantFlowClient(Options.APP, new File(Options.ANDROID_JAR), Options.MUSE_BUG_TYPE, alarms)}
         else if (Options.CHECK_ASSERTS)
           new AssertionCheckingClient(Options.APP, Util.strToOption(Options.LIB), Options.MAIN_CLASS, Options.MAIN_METHOD)
         else if (Options.CHECK_NULLS)

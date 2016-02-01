@@ -79,6 +79,13 @@ public class Options {
   @boolOpt(description = "Check for constant values flowing to sensitive method calls", _default = false)
   public static boolean CHECK_CONSTANT_FLOW = false;
 
+  @stringOpt(description = "JSON alarm list from Scanr for MUSE Hackathon Feb. '16", _default = "")
+  public static String JSON_BUG_SPEC = "";
+
+  @intOpt(description = "MUSE challenge problem bug to search for; 1 <= n <= 6", _default = -1)
+  public static int MUSE_BUG_TYPE= -1;
+
+
   // should we use Manu's demand cast checker to easily prove the safety of casts requiring context-sensitivity?
   @boolOpt(description = "Filter cast checking results using demand cast checker", _default = false)
   public static boolean USE_DEMAND_CAST_CHECKER = false;
