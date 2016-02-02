@@ -26,6 +26,7 @@ sealed trait PureConstraint {
   def isFloatConstraint : Boolean
   def isLongConstraint : Boolean
   def isDoubleConstraint : Boolean
+  def isByteArrayConstraint : Boolean
   def getVars(s : Set[PureVar] = Set.empty) : Set[PureVar]
 }
 
@@ -37,6 +38,7 @@ sealed case class PureAtomicConstraint(val lhs : PureExpr, val op : CmpOp, val r
   override def isFloatConstraint : Boolean = lhs.isFloatExpr || rhs.isFloatExpr
   override def isLongConstraint : Boolean = lhs.isLongExpr || rhs.isLongExpr
   override def isDoubleConstraint : Boolean = lhs.isDoubleExpr || rhs.isDoubleExpr
+  override def isByteArrayConstraint : Boolean = lhs.isByteArrayExpr || rhs.isByteArrayExpr
   override def getVars(s : Set[PureVar]) : Set[PureVar] = lhs.getVars(rhs.getVars(s))
   
   override def clone : PureConstraint = this
@@ -55,6 +57,7 @@ sealed case class PureDisjunctiveConstraint(val terms : Set[PureAtomicConstraint
   override def isFloatConstraint : Boolean = terms.exists(p => p.isFloatConstraint)
   override def isLongConstraint : Boolean = terms.exists(p => p.isLongConstraint)
   override def isDoubleConstraint : Boolean = terms.exists(p => p.isDoubleConstraint)
+  override def isByteArrayConstraint : Boolean = terms.exists(p => p.isByteArrayConstraint)
   override def getVars(s : Set[PureVar]) : Set[PureVar] = terms.foldLeft (Set.empty[PureVar]) ((s, t) => t.getVars(s))
   
   override def clone : PureConstraint = this
@@ -73,6 +76,7 @@ sealed abstract class PureExpr {
   def isFloatExpr : Boolean = false
   def isLongExpr : Boolean = false
   def isDoubleExpr : Boolean = false
+  def isByteArrayExpr : Boolean = false
   def getVars(s : Set[PureVar] = Set.empty) : Set[PureVar]
   
   override def clone : PureExpr = this
@@ -86,7 +90,8 @@ sealed abstract class PureVal(val v : Any) extends PureExpr {
   def <(p : PureVal) : Boolean = sys.error("LT for arbitrary PureVal")
   def >=(p : PureVal) : Boolean = sys.error("GE for arbitrary PureVal")
   def <=(p : PureVal) : Boolean = sys.error("LE for arbitrary PureVal")
-  override def isStringExpr : Boolean = this.isInstanceOf[StringVal]
+  override def isStringExpr  : Boolean = this.isInstanceOf[StringVal]
+  override def isByteArrayExpr : Boolean = this.isInstanceOf[ByteArrayVal]
   override def getVars(s : Set[PureVar] = Set.empty) : Set[PureVar] = s
   
   override def hashCode : Int = Util.makeHash(List(v))
@@ -138,6 +143,7 @@ sealed case class CharVal(override val v : Char) extends PureVal(v) {
 }
 
 sealed case class StringVal(override val v : String) extends PureVal(v) //TODO(benno) Add support for containment/regex matching by overloading comparison operators?
+sealed case class ByteArrayVal(override val v : Array[Byte]) extends PureVal(v)
 
 sealed case class PureVar(val typ : TypeReference) extends PureExpr with Val {
   val id : Int = Var.getFreshPureVarId

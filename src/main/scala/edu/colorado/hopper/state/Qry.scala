@@ -148,9 +148,15 @@ class Qry(val heapConstraints : MSet[HeapPtEdge], val pureConstraints : MSet[Pur
   def index : Int = callStack.top.index
 
   val stringPureConstraints : MSet[PureConstraint] = Util.makeSet[PureConstraint]
-  pureConstraints.filter { _.isStringConstraint }.foreach{ pc =>
-    pureConstraints       -= pc
-    stringPureConstraints += pc
+  val byteArrayPureConstraints : MSet[PureConstraint] = Util.makeSet[PureConstraint]
+  pureConstraints.foreach{
+    case pc if pc.isStringConstraint =>
+      pureConstraints       -= pc
+      stringPureConstraints += pc
+    case pc if pc.isByteArrayConstraint =>
+      pureConstraints          -= pc
+      byteArrayPureConstraints += pc
+    case _ => /* NO OP */
   }
 
 
@@ -271,6 +277,8 @@ class Qry(val heapConstraints : MSet[HeapPtEdge], val pureConstraints : MSet[Pur
   def addPureConstraint(p : PureConstraint) : Boolean = {
     if (p.isStringConstraint) {
       stringPureConstraints += p
+    } else if (p.isByteArrayConstraint) {
+      byteArrayPureConstraints += p
     } else if (p.isBitwiseConstraint || p.isFloatConstraint || p.isLongConstraint || p.isDoubleConstraint) p match {
       case PureAtomicConstraint(p@PureVar(_), _, _) => 
         // TODO: bitvector, long, and float ops unsuppored for now. drop related constraints

@@ -102,15 +102,14 @@ object TransferFunctions {
 class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm : HeapModel, val cha : IClassHierarchy) {
   val hm = new DelegatingExtendedHeapModel(_hm)
 
-  val modRef : java.util.Map[CGNode,OrdinalSet[PointerKey]] =
-    if (Options.JUMPING_EXECUTION) null else {
-      val timer = new Timer()
-      timer.start()
-      println("Computing mod/ref")
-      val res = ModRef.make().computeMod(cg, hg.getPointerAnalysis)
-      timer.printTimeTaken("Computing mod/ref")
-      res
-    }
+  val modRef : java.util.Map[CGNode,OrdinalSet[PointerKey]] = {
+    val timer = new Timer()
+    timer.start()
+    println("Computing mod/ref")
+    val res = ModRef.make().computeMod(cg, hg.getPointerAnalysis)
+    timer.printTimeTaken("Computing mod/ref")
+    res
+  }
 
   /** look up the lhs of @param s in @param localConstraints, @return matching rhs var and edge if we find it */
   protected def getConstraintPtForDef(s : SSAInstruction, localConstraints : MSet[LocalPtEdge], n : CGNode) : Option[(ObjVar,LocalPtEdge)] =
@@ -945,7 +944,33 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
       }
 
     case s : SSAArrayStoreInstruction => // x[i] = y
-      
+      val symTab = n.getIR.getSymbolTable
+      val arrayPure = getConstraintEdge(Var.makeLPK(s.getArrayRef, n, hm),qry.localConstraints) flatMap {
+        case LocalPtEdge(_,p@PureVar(_)) => Some(p)
+        case _ => None
+      }
+      qry.byteArrayPureConstraints.foreach{bapc =>
+        bapc.getVars().foreach {
+          case v if Some(v) == arrayPure && symTab.isConstant(s.getValue) && symTab.isConstant(s.getIndex) => //Constant write into constrained Array<Byte>
+            //First, find all constant writes into that array from this CGNode
+            val const_writes =
+              n.getIR.iterateAllInstructions
+                .filter {
+                case i: SSAArrayStoreInstruction => i.getArrayRef == s.getArrayRef && symTab.isConstant(i.getValue) && symTab.isConstant(i.getIndex)
+                case _ => false
+              }
+                .asInstanceOf[List[SSAArrayStoreInstruction]]
+                .map { s => (symTab.getConstantValue(s.getIndex).asInstanceOf[Int] -> symTab.getConstantValue(s.getValue).asInstanceOf[Byte]) }.toMap
+            //Then, build an output string, print it, and stop backwards symbolic execution.
+            val byteArrayConstString =
+              (0 to const_writes.keys.max).map { k =>
+                const_writes.getOrElse(k, null)
+              }.mkString("{", ", ", "}")
+            println(s"__MUSE_CONSTANT_SEARCH__ Constant found: $byteArrayConstString")
+            return(Nil)
+          case _ => //write is either non-constant or into non-constrained array
+        }
+      }
       def handleArrEdge(qry : Qry, arrEdge : ArrayPtEdge, l : List[Qry]) : List[Qry] = {
         val yUse = s.getValue
         val y = Var.makeLPK(yUse, n, hm)  

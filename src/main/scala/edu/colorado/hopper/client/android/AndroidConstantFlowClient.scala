@@ -2,9 +2,10 @@ package edu.colorado.hopper.client.android
 
 import java.io.File
 import com.ibm.wala.ipa.callgraph.CGNode
-import com.ibm.wala.ssa.{SSAInstruction, SSAInvokeInstruction}
+import com.ibm.wala.ssa.SSAInvokeInstruction
 import edu.colorado.hopper.state._
 import edu.colorado.thresher.core.Options
+import edu.colorado.hopper.jumping.JumpingTransferFunctions
 import scala.collection.JavaConversions._
 
 class AndroidConstantFlowClient(appPath : String,
@@ -12,10 +13,16 @@ class AndroidConstantFlowClient(appPath : String,
                                 alarms : List[(Int,Int,Int)], // elements are (iindex,nodeID,bugType)
                                 useJPhantom : Boolean = false)
                                extends DroidelClient[Unit](appPath, androidLib, useJPhantom){
-  lazy val exec = makeSymbolicExecutor(walaRes)
+  lazy val exec = {
+    val rr = new AndroidRelevanceRelation(appTransformer, walaRes.cg, walaRes.hg, walaRes.hm, walaRes.cha)
+    val tf = new JumpingTransferFunctions(walaRes.cg, walaRes.hg, walaRes.hm, walaRes.cha, rr)
+    new AndroidJumpingSymbolicExecutor(tf,rr)
+
+  }
 
   def check : Unit = {
     Options.JUMPING_EXECUTION = true
+    Options.CONTROL_FEASIBILITY = true
     Options.PRINT_REFS = true
     alarms.foreach { case (iindex,nodeID,bugType) =>
       println(s"__MUSE_CONSTANT_SEARCH__ Checking alarm {iindex : $iindex, cg_node_id : $nodeID, bugType : $bugType}")
@@ -41,10 +48,10 @@ class AndroidConstantFlowClient(appPath : String,
       val enc_mode_pure = Pure.makePureVar(enc_mode_lpk)
       val qry = Qry.make(List(PtEdge.make(enc_mode_lpk, enc_mode_pure)), i, node, walaRes.hm)
       qry.addPureConstraint(Pure.makeEqConstraint(enc_mode_pure, new StringVal("__MUSE_CONSTANT_SEARCH__")))
-      if (exec.executeBackward(qry)) // ONLY OCCURS IN CASE OF TIMEOUT
-        println("__MUSE_CONSTANT_SEARCH__ Search timed out")
+      if (exec.executeBackward(qry)) // Only occurs in case of (1) timeout or (2) hopper soundly dropping difficult constraints
+        println("__MUSE_CONSTANT_SEARCH__ Search incomplete")
       else
-        println("__MUSE_CONSTANT_SEARCH__ Search completed")
+        println("__MUSE_CONSTANT_SEARCH__ Search complete")
     }
   }
   private def checkBug2(node : CGNode, i : SSAInvokeInstruction) : Unit = {???}
