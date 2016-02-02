@@ -966,7 +966,7 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
               (0 to const_writes.keys.max).map { k =>
                 const_writes.getOrElse(k, null)
               }.mkString("{", ", ", "}")
-            println(s"__MUSE_CONSTANT_SEARCH__ Constant found: $byteArrayConstString")
+            println(s"__MUSE_CONSTANT_SEARCH__ Constant found: {{$byteArrayConstString}}")
             return(Nil)
           case _ => //write is either non-constant or into non-constrained array
         }

@@ -302,7 +302,7 @@ class Qry(val heapConstraints : MSet[HeapPtEdge], val pureConstraints : MSet[Pur
             lits.filterNot{_ == "__MUSE_CONSTANT_SEARCH__"}
           else
             Nil
-        } foreach {s => println(s"__MUSE_CONSTANT_SEARCH__ Constant found : $s")}
+        } foreach {s => println(s"__MUSE_CONSTANT_SEARCH__ Constant found: {{$s}}")}
 
       }
       res && stringRes

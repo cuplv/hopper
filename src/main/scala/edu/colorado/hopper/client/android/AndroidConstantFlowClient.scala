@@ -41,9 +41,10 @@ class AndroidConstantFlowClient(appPath : String,
   private def checkBug1(node : CGNode, i : SSAInvokeInstruction) : Unit = {
     require(i.getDeclaredTarget.getName.toString == "getInstance" && i.getDeclaredTarget.getDeclaringClass.getName.getClassName.toString == "Cipher")
     val encryption_mode = i.getUse(0)
-    if (node.getIR.getSymbolTable.isStringConstant(encryption_mode))
-      println(s"__MUSE_CONSTANT_SEARCH__ Constant found : ${node.getIR.getSymbolTable.getStringValue(encryption_mode)}")
-    else {
+    if (node.getIR.getSymbolTable.isStringConstant(encryption_mode)){
+      println(s"__MUSE_CONSTANT_SEARCH__ Constant found: {{${node.getIR.getSymbolTable.getStringValue(encryption_mode)}}}")
+      println("__MUSE_CONSTANT_SEARCH__ Search complete")
+    } else {
       val enc_mode_lpk = Var.makeLPK(encryption_mode, node, walaRes.hm)
       val enc_mode_pure = Pure.makePureVar(enc_mode_lpk)
       val qry = Qry.make(List(PtEdge.make(enc_mode_lpk, enc_mode_pure)), i, node, walaRes.hm)
