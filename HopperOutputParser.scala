@@ -1,3 +1,4 @@
+package edu.colorado.hopper
 import org.json4s._
 
 import scala.collection.mutable
@@ -49,7 +50,6 @@ object HopperOutputParser {
               currentAlarm = Some(Alarm(regex_match.group(1).toInt, regex_match.group(2).toInt, regex_match.group(3).toInt))
             case None =>
               sys.error(s"Can't process input [$ln] without a current alarm")
-              sys.
           }
       }
     }
