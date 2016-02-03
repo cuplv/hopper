@@ -3,7 +3,7 @@ import org.json4s._
 
 import scala.collection.mutable
 
-object HopperOutputParser {
+object MUSEOutputParser {
 
   case class Alarm(iindex: Int, cg_node_id: Int, bug_type: Int) {
     override def toString = "{\"iindex\" : " + iindex + ", \"cg_node_id\" : " + cg_node_id + ", \"bug_type\" : " + bug_type + "}"
