@@ -61,9 +61,15 @@ object MUSEOutputParser {
 
     println(JArray(inputAlarms.filter{inputAlarm =>
       results.exists{ outputAlarm =>
-        (inputAlarm \\ "iindex").asInstanceOf[JInt].num.toInt == outputAlarm._1.iindex &&
-        (inputAlarm \\ "cg_node_id").asInstanceOf[JInt].num.toInt == outputAlarm._1.cg_node_id &&
-        (inputAlarm \\ "bugType").asInstanceOf[JInt].num.toInt == outputAlarm._1.bug_type
+        ((inputAlarm \\ "iindex").asInstanceOf[JInt].num.toInt == outputAlarm._1.iindex) &&
+        ((inputAlarm \\ "cg_node_id").asInstanceOf[JInt].num.toInt == outputAlarm._1.cg_node_id) &&
+        ((inputAlarm \\ "bugType").asInstanceOf[JInt].num.toInt == outputAlarm._1.bug_type) &&
+          (outputAlarm match {
+            case (Alarm(_,_,1),(exhaustive,consts)) => !exhaustive || consts.exists {c => """^(AES|DES|DESede|RSA|(.*/ECB/.*))$""".r.findAllMatchIn(c).nonEmpty}
+            case (Alarm(_,_,2),(_,_)) => true // Not handling bug type 2 - would require too much modification/extension to Hopper
+            case (Alarm(_,_,5),(exhaustive,_)) => exhaustive // bug 5 is an easy case - classic Hopper local constraint problem.
+            case (Alarm(_,_,_),(exhaustive,consts)) => !exhaustive || consts.nonEmpty // Byte Vector bug conditions
+          })
       }
     }))
   }
