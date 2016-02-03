@@ -10,8 +10,8 @@ object HopperOutputParser {
   }
 
   def main(args: Array[String]): Unit = {
-    val alarmStartRegex = """__MUSE_CONSTANT_SEARCH__ Checking alarm {iindex : (\d*), cg_node_id : (\d*), bugType : (\d)}""".r
-    val alarmStopRegex = """__MUSE_CONSTANT_SEARCH__ Done checking alarm {iindex : (\d*), cg_node_id : (\d*), bugType : (\d)}""".r
+    val alarmStartRegex = """__MUSE_CONSTANT_SEARCH__ Checking alarm \{iindex : (\d*), cg_node_id : (\d*), bugType : (\d)\}""".r
+    val alarmStopRegex = """__MUSE_CONSTANT_SEARCH__ Done checking alarm \{iindex : (\d*), cg_node_id : (\d*), bugType : (\d)\}""".r
 
     val results: mutable.Map[Alarm, (Boolean, Set[String])] = mutable.Map.empty[Alarm, (Boolean, Set[String])]
                                                                 .withDefaultValue((false,Set()))
@@ -32,7 +32,7 @@ object HopperOutputParser {
               } else if (ln contains "Search complete") {
                 results(alarm) = (true, results(alarm)._2)
               } else if (ln contains "Constant found:"){
-                """{{(.*)}}""".r.findFirstMatchIn(ln) match {
+                """\{\{(.*)\}\}""".r.findFirstMatchIn(ln) match {
                   case Some(regex_match) =>
                     val curr_result = results(alarm)
                     results(alarm) = (curr_result._1, curr_result._2 + regex_match.group(1))
@@ -59,12 +59,12 @@ object HopperOutputParser {
 
     val inputAlarms = org.json4s.native.parseJson(args(0)) \\ "alarms"
 
-    JArray(inputAlarms.filter{inputAlarm =>
+    println(JArray(inputAlarms.filter{inputAlarm =>
       results.exists{ outputAlarm =>
         (inputAlarm \\ "iindex").asInstanceOf[JInt].num.toInt == outputAlarm._1.iindex &&
         (inputAlarm \\ "cg_node_id").asInstanceOf[JInt].num.toInt == outputAlarm._1.cg_node_id &&
         (inputAlarm \\ "bugType").asInstanceOf[JInt].num.toInt == outputAlarm._1.bug_type
       }
-    })
+    }))
   }
 }
