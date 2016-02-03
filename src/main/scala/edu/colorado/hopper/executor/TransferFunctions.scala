@@ -951,7 +951,7 @@ class TransferFunctions(val cg : CallGraph, val hg : HeapGraph[InstanceKey], _hm
       }
       qry.byteArrayPureConstraints.foreach{bapc =>
         bapc.getVars().foreach {
-          case v if Some(v) == arrayPure && symTab.isConstant(s.getValue) && symTab.isConstant(s.getIndex) => //Constant write into constrained Array<Byte>
+          case v if Some(v.id) == arrayPure.map(_.id) && symTab.isConstant(s.getValue) && symTab.isConstant(s.getIndex) => //Constant write into constrained Array<Byte>
             //First, find all constant writes into that array from this CGNode
             val const_writes =
               n.getIR.iterateAllInstructions

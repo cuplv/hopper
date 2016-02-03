@@ -55,11 +55,50 @@ class AndroidConstantFlowClient(appPath : String,
         println("__MUSE_CONSTANT_SEARCH__ Search complete")
     }
   }
-  private def checkBug2(node : CGNode, i : SSAInvokeInstruction) : Unit = {???}
-  private def checkBug3(node : CGNode, i : SSAInvokeInstruction) : Unit = {???}
+  private def checkBug2(node : CGNode, i : SSAInvokeInstruction) : Unit = {
+    require(i.getDeclaredTarget.getName.toString == "init" && i.getDeclaredTarget.getDeclaringClass.getName.getClassName.toString.contains("Cipher"))
+    //NOTE(benno) this bug type from the hackathon was specified incorrectly in our document
+    // It requires constraints:
+    //  - on the non-primitive/non-built-into-java type of an argument to the invocation site
+    //  - that the first argument be from a static field
+    // These would require significant Hopper extensions, so I'm punting on them.
+  }
+  private def checkBug3(node : CGNode, i : SSAInvokeInstruction) : Unit = {
+    require(i.getDeclaredTarget.getName.toString.contains("<init>") && i.getDeclaredTarget.getDeclaringClass.getName.getClassName.toString.contains("SecretKeySpec"))
+    //TODO(benno) need apps to run on....
+  }
   private def checkBug4(node : CGNode, i : SSAInvokeInstruction) : Unit = {???}
-  private def checkBug5(node : CGNode, i : SSAInvokeInstruction) : Unit = {???}
-  private def checkBug6(node : CGNode, i : SSAInvokeInstruction) : Unit = {???}
+
+  private def checkBug5(node : CGNode, i : SSAInvokeInstruction) : Unit = {
+    require(i.getDeclaredTarget.getName.toString.contains("<init>") && i.getDeclaredTarget.getDeclaringClass.getName.getClassName.toString.contains("PBE"))
+    val iter = i.getUse(2)
+    val iter_lpk = Var.makeLPK(iter,node,walaRes.hm)
+    val iter_pure = Pure.makePureVar(iter_lpk)
+    val qry = Qry.make(List(PtEdge.make(iter_lpk,iter_pure)),i,node,walaRes.hm)
+    qry.addPureConstraint(Pure.makeLtConstraint(iter_pure,new IntVal(1000)))
+    if (exec.executeBackward(qry)){
+      println("__MUSE_CONSTANT_SEARCH__ Bug 5 witnessed")
+    } else {
+      println("__MUSE_CONSTANT_SEARCH__ Bug 5 refuted")
+    }
+
+  }
+  private def checkBug6(node : CGNode, i : SSAInvokeInstruction) : Unit = {
+    require((i.getDeclaredTarget.getName.toString.contains("<init>") &&
+             i.getDeclaredTarget.getDeclaringClass.getName.getClassName.toString == "SecureRandom")
+            ||
+            (i.getDeclaredTarget.getName.toString.contains("SecureRandom") &&
+             i.getDeclaredTarget.getDeclaringClass.getName.getClassName.toString == "setSeed"))
+    val arg = i.getUse(0)
+    val arg_lpk = Var.makeLPK(arg,node,walaRes.hm)
+    val arg_pure = Pure.makePureVar(arg_lpk)
+    val qry = Qry.make(List(PtEdge.make(arg_lpk,arg_pure)),i,node,walaRes.hm)
+    qry.addPureConstraint(Pure.makeEqConstraint(arg_pure,new ByteArrayVal(null)))
+    if (exec.executeBackward(qry)) // Only occurs in case of (1) timeout or (2) hopper soundly dropping difficult constraints
+      println("__MUSE_CONSTANT_SEARCH__ Search incomplete")
+    else
+      println("__MUSE_CONSTANT_SEARCH__ Search complete")
+  }
 
 
   def getAlarmSite(iindex : Int, nodeID : Int) : (CGNode, SSAInvokeInstruction) = {
