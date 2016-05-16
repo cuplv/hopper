@@ -21,6 +21,8 @@ make
 cp *.jar ../..
 cp *.dylib ../.. || cp *.so ../..
 cd ../..
+otool -L libz3java.dylib #this should show "libz3.dylib" with some version info behind it
+install_name_tool -change libz3.dylib `pwd`/libz3.dylib libz3java.dylib
 ```
 
 (3) In order to use the Android clients or compile/run the tests, you'll need a Droidel-processed Android framework JAR in lib/: `cp ../droidel/stubs/out/droidel_android-4.4.2_r1.jar lib` (assuming `droidel` and `hopper` are sibling directories).
